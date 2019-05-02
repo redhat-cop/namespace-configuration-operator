@@ -1,0 +1,52 @@
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: forbid-privileged-pods
+spec:
+  privileged: false 
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+  - '*'
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: forbid-privileged-pods
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - forbid-privileged-pods
+---  
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: unprivileged-pods
+spec:
+  selector:
+    matchLabels:
+      unprivileged-pods: "true"
+  resources: 
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: unprivileged-pods
+  - apiVersion: authorization.openshift.io/v1
+    kind: RoleBinding
+    metadata:
+      name: unprivileged-pods-rb
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: forbid-privileged-pods
+    subjects:
+    - kind: ServiceAccount
+      name: unprivileged-pods    

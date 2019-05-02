@@ -1,0 +1,29 @@
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: company-ca
+spec:
+  selector:
+    matchLabels:
+      company_ca_bundle: "true"
+  resources:
+  - apiVersion: v1
+    kind: Configmap
+    metadata:
+      name: company-ca 
+    data:
+      ca.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM2akNDQWRLZ0F3SUJBZ0lCQVRBTkJna3Foa2lHOXcwQkFRc0ZBREFtTVNRd0lnWURWUVFEREJ0dmNHVnUKYzJocFpuUXRjMmxuYm1WeVFERTFOREl5T1RjNU5Ua3dIaGNOTVRneE1URTFNVFl3TlRVNFdoY05Nak14TVRFMApNVFl3TlRVNVdqQW1NU1F3SWdZRFZRUUREQnR2Y0dWdWMyaHBablF0YzJsbmJtVnlRREUxTkRJeU9UYzVOVGt3CmdnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUNlS1hNcFJNUW1xYnhURGpwV3VSc3kKcHVVbVcyQjRrWmtSZkRZN25KMEY5U0I4VFFHb1JWUGlhMVhBN05wMkdKeTBPK0x5YnNoZkNGbXhDSHBwVXZvTwpRcitjUzMzT3Y0aUhRaFJ1VlVuZ3ZqdFU4dlhYMTR1VkYxWXAzWUZaazRiV3RhTUJGS2FnVm51NmN4cktVU0o3CkVWTHBGTk5QQlRvbTBqdWI0QkIyb21TQjhhRGtRaU1hZmc1MDVYTVBTa3ZOaG15VFFSSlhrQUVFR0NOT3hXT2IKUVkyNlpMSDQ2WnJWRis0cWlnUEQvZnhoNDBPcFpMMjFjQnBhUjEvTFN2aTE3cDREZW9wMlFGbzlzMUJZVnVwZAp0N284amEzNVduSHFmMXp5SGh3S1Fqb0hyL0hlZmFUUkFQYlBFVEwrNEU5cUJiQzBEVG83YVgvcEJ0aG9DL01wCkFnTUJBQUdqSXpBaE1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZIUk1CQWY4RUJUQURBUUgvTUEwR0NTcUcKU0liM0RRRUJDd1VBQTRJQkFRQXU3QmpyTzBXMG5ia0FLeFJPLzN1Q2pLcnBYdXRiWVRWQmk5S3JkWktXY21QQgpkNWt4ZWJlSTBNam5SQ29ndEVXcFhGNFF2dEZrMnV6eXhiSmR2VGcxMDVZVmdtS1JFWktvakJnblE0OEVXK1IzCm9EZ3lPbjNCbVJxUGVId1Y5RTNFc1NUcXFrank4dFBvLzlWeWlMT0VNcUV3TWc2d3ZuL2lzRWhOUDJub3lZOFkKV1FsVWlTcHN2VFhBRFlpT3BrT096NVBzM0lubjR2K0lteHAzQ1dXVGt3MGNkQVhReGZXVXAyUU5TZFJpdk5laApoTnBmZkNia2JrdGtYOThMelNSY25DdWVjbVNPNTZtU3QrbldKSEpZVDV5YzZtWkVQY3BlbUJwanowUUg0QzlHCmlSUFlIVWRGQzBUb0JiZUoxWER0RUtIdHZBQWgzNHgrUjN3VzhBbncKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  - apiVersion: settings.k8s.io/v1alpha1
+    kind: PodPreset
+    metadata:
+      name: company-ca
+    spec:
+      selector:
+      volumeMounts:
+        - mountPath: /company-ca
+          name: company-ca
+          readOnly: true
+      volumes:
+        - name: company-ca
+          secret:
+            name: company-ca

@@ -1,0 +1,35 @@
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: small-size
+spec:
+  selector:
+    matchLabels:
+      size: small  
+  resources:
+  - apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: small-size  
+    spec:
+      hard:
+        requests.cpu: "4" 
+        requests.memory: "2Gi" 
+---
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: large-size
+spec:
+  selector:
+    matchLabels:
+      size: large  
+  resources:
+  - apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: large-size
+    spec:
+      hard:
+        requests.cpu: "8" 
+        requests.memory: "4Gi" 

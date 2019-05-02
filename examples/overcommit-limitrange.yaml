@@ -1,0 +1,19 @@
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: overcommit-limitrange
+spec:
+  selector:
+    matchLabels:
+      overcommit: "limited"  
+  resources:    
+  - apiVersion: "v1"
+    kind: "LimitRange"
+    metadata:
+      name: "overcommit-limits" 
+    spec:
+      limits:
+        - type: "Container" 
+          maxLimitRequestRatio:
+            cpu: 100
+            memory: 1
