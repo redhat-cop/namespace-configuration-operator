@@ -31,6 +31,7 @@ import (
 )
 
 const operatorLabel = "namespace-controller-operator.redhat-cop.io/owner"
+const finalizer = "namespaceconfig-controller"
 
 var log = logf.Log.WithName("controller_namespaceconfig")
 
@@ -136,25 +137,43 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	//namespaces selected by this instance
 	namespaces, err := r.getSelectedNamespaces(instance)
 	if err != nil {
 		log.Error(err, "unable to retrieve the list of selected namespaces", "selector", instance.Spec.Selector)
 		return reconcile.Result{}, err
 	}
-
+	// object defined by this instance
 	objects, err := getObjects(instance)
-	selector, err := metav1.LabelSelectorAsSelector(&instance.Spec.Selector)
-	if err != nil {
-		log.Error(err, "unable to create selector from label selector", "selector", &instance.Spec.Selector)
+
+	if util.IsBeingDeleted(instance) {
+		if !util.HasFinalizer(instance, finalizer) {
+			return reconcile.Result{}, nil
+		} else {
+			resources, _, err := r.getKnowTypes()
+			if err == nil {
+				labeledObjects := r.findAllLabeledObjects(resources, instance.GetNamespace()+"/"+instance.GetName())
+				for _, obj := range labeledObjects {
+					r.deleteObject(obj)
+				}
+				return reconcile.Result{}, nil
+			}
+		}
+	}
+
+	if !util.HasFinalizer(instance, finalizer) {
+		util.AddFinalizer(instance, finalizer)
+		err := r.GetClient().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
+	// know types in this cluster
 	resources, _, err := r.getKnowTypes()
 	if err == nil {
-		labeledObjects := r.findAllLabeledObjects(resources, selector)
+		// object owned by this instance (will include legit and illegit ones)
+		labeledObjects := r.findAllLabeledObjects(resources, instance.GetNamespace()+"/"+instance.GetName())
 		r.deleteObjectsOnControlledNamespaces(labeledObjects, objects, namespaces)
 		r.deleteObjectsOnUncontrolledNamespaces(labeledObjects, namespaces)
-
 	} else {
 		log.Error(err, "unable to retrive known types, ignoring delete phase ...")
 	}
@@ -340,7 +359,7 @@ func isNamespaceInSet(namespaces []corev1.Namespace, namespace string) bool {
 	return false
 }
 
-func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIResource, selector labels.Selector) []unstructured.Unstructured {
+func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIResource, selector string) []unstructured.Unstructured {
 	objs := []unstructured.Unstructured{}
 	for _, res := range resources {
 		resIntf, err := r.getDynamicClientOnType(res)
@@ -349,7 +368,7 @@ func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIR
 			continue
 		}
 		unstructs, err := resIntf.List(metav1.ListOptions{
-			LabelSelector: selector.String(),
+			LabelSelector: selector,
 		})
 		if err != nil {
 			log.Error(err, "unable to list resources ignoring...", "resource", res)

@@ -2,12 +2,12 @@
 
 
 [[projects]]
-  digest = "1:7822ce8f5713343d4fe56fe04f39b999213a4318c08dbe7d5eb1743fbbcf9e6e"
+  digest = "1:75a1e28db58f0ddf4016b7ce798d6d9e3b0aab01b7a9921972a68e95f2eec352"
   name = "cloud.google.com/go"
   packages = ["compute/metadata"]
   pruneopts = "NT"
-  revision = "fcb9a2d5f791d07be64506ab54434de65989d370"
-  version = "v0.37.4"
+  revision = "8c41231e01b2085512d98153bcffb847ff9b4b9f"
+  version = "v0.38.0"
 
 [[projects]]
   digest = "1:6974cb842e66a4600006200e47a067278ea5671d4f7114be67c01a3af5affa7d"
@@ -269,7 +269,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:36e1d8cbdf6853c7abf45742d49d38948e8d5d02b7c18ebf0dd07c59b233ec23"
+  digest = "1:9a5bc236a3cedd8b498ddb13caf32038590ac03fe6304a597d46c32f36da9410"
   name = "github.com/gophercloud/gophercloud"
   packages = [
     ".",
@@ -281,7 +281,7 @@
     "pagination",
   ]
   pruneopts = "NT"
-  revision = "60507118a582789eaa9c8dcefc1374c7f5431b9b"
+  revision = "e0311c0920d47879e99ac9826142bc097eacd5b7"
 
 [[projects]]
   branch = "master"
@@ -403,7 +403,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:675b8a8c71bfe6e7e97c9d2d4f86c85d810a6cfcf5f843b94b13d9aa3720745e"
+  digest = "1:ba4b6043d6d1629acd451befb1fc3a41b169a275406e7f52bc4bfe00a8afedc3"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sutil",
@@ -414,7 +414,7 @@
     "version",
   ]
   pruneopts = "NT"
-  revision = "51d28df214440d97031368d7d700a2805161015d"
+  revision = "077a4a6961d49579fb5924236b0541f905c03620"
 
 [[projects]]
   digest = "1:93b1d84c5fa6d1ea52f4114c37714cddd84d5b78f151b62bb101128dd51399bf"
@@ -490,11 +490,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1e1a476fec3e08b7ccb2f42229f72f8ca76a16877b2add45093ccdd3a20aaa2d"
+  digest = "1:91cf094b4ea04f71937657d55aeaa57d5757ccc49d6e4bda946987bb6c5a2eb0"
   name = "github.com/redhat-cop/operator-utils"
   packages = ["pkg/util"]
   pruneopts = "NT"
-  revision = "8997fa7eca8adbc9fccb59123599ee621b653e8f"
+  revision = "98e877f7b781c57e5c671dfd6be6e2880b701d49"
 
 [[projects]]
   digest = "1:a4644e85e1f29f9825a4e61dcdd8244fe7c4db02eead3f508d5a5bdf7924dbbd"
@@ -555,12 +555,12 @@
   version = "v0.19.3"
 
 [[projects]]
-  digest = "1:22f696cee54865fb8e9ff91df7b633f6b8f22037a8015253c6b6a71ca82219c7"
+  digest = "1:cc9d86ec4e6e3bdf87e3a421273bfeed003cf8e21351c0302fe8b0eb7b10efe6"
   name = "go.uber.org/atomic"
   packages = ["."]
   pruneopts = "NT"
-  revision = "1ea20fb1cbb1cc08cbd0d913a96dead89aa18289"
-  version = "v1.3.2"
+  revision = "df976f2515e274675050de7b3f42545de80594fd"
+  version = "v1.4.0"
 
 [[projects]]
   digest = "1:58ca93bdf81bac106ded02226b5395a0595d5346cdc4caa8d9c1f3a5f8f9976e"
@@ -571,7 +571,7 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:572fa4496563920f3e3107a2294cf2621d6cc4ffd03403fb6397b1bab9fa082a"
+  digest = "1:80f7b1f444dbbe5b64a5174c6726af3243a4770fb19daaae9613c4d615a9684a"
   name = "go.uber.org/zap"
   packages = [
     ".",
@@ -582,8 +582,8 @@
     "zapcore",
   ]
   pruneopts = "NT"
-  revision = "ff33455a0e382e8a81d14dd7c922020b6b5e7982"
-  version = "v1.9.1"
+  revision = "27376062155ad36be76b0f12cf1572a221d3a48c"
+  version = "v1.10.0"
 
 [[projects]]
   branch = "master"
@@ -595,7 +595,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:940590250ff6229f11678ea802c15e75768bf39b6440d24025bc5bede1f40367"
+  digest = "1:b3e378db43a6d90784db94cede299a66d1d109a8b4244a079f7c988a8058fffd"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -608,7 +608,7 @@
     "trace",
   ]
   pruneopts = "NT"
-  revision = "4829fb13d2c62012c17688fa7f629f371014946d"
+  revision = "9ce7a6920f093fc0b908c4a5f66ae049110f417e"
 
 [[projects]]
   branch = "master"
@@ -634,14 +634,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6b6dcecf1cf3271a2b8902cab8e2fd119b68eebaacf4eb06e709def6d51bbac7"
+  digest = "1:a64674ecb5ee410753e0e84e438b8c8022fb516895a9595805da35ddd6bcb4e9"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "NT"
-  revision = "2cc0cad0ac78f3ede1f4d2b6ca16ea3038641af4"
+  revision = "a43fa875dd822b81eb6d2ad538bc1f4caba169bd"
 
 [[projects]]
   digest = "1:348fa8283a7c60b5b71ce04d27b37f7c0fce552d4d0b463b5b3ebbd1840d3f1a"
@@ -679,7 +679,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:10bc5604a6f43dde4d6609ddf58820f77f1c0f99a4b6bb559a6c2a98abc3505f"
+  digest = "1:c3bdb8cc1861627b4bce908ff6a5eaaaccc9f7aaca14b693e2184db574e41e4d"
   name = "golang.org/x/tools"
   packages = [
     "go/ast/astutil",
@@ -695,7 +695,7 @@
     "internal/semver",
   ]
   pruneopts = "NT"
-  revision = "550556f78a900afacb9e8b22219f5e5b5c6106db"
+  revision = "23463209683dad3f2b9cc7f7c2663e1847c59017"
 
 [[projects]]
   digest = "1:81d407dcb2347a544350b7fb394e0eb065a34c75dc235fd4c6061ea72024a485"
@@ -726,7 +726,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:08676f4e20fd831dae5113b3aa175595e83275956128a090bc19b1c88987e6b7"
+  digest = "1:e1b8ee648569a7b7166ee847f7c5eff99e6bcb4a206f859dc865fcb6f25274ab"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/httpbody",
@@ -734,7 +734,7 @@
     "protobuf/field_mask",
   ]
   pruneopts = "NT"
-  revision = "357c62f0e4bbba7e6cc403ae09edcf3e2b9028fe"
+  revision = "54afdca5d873f7b529e2ce3def1a99df16feda90"
 
 [[projects]]
   digest = "1:5761833c144990cd4ce4136a99284f5323116c9c063a1953f0bda38483a9c3cb"
@@ -1120,9 +1120,15 @@
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
+    "k8s.io/apimachinery/pkg/types",
+    "k8s.io/client-go/discovery",
+    "k8s.io/client-go/dynamic",
     "k8s.io/client-go/plugin/pkg/client/auth",
+    "k8s.io/client-go/rest",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/conversion-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
@@ -1142,6 +1148,7 @@
     "sigs.k8s.io/controller-runtime/pkg/runtime/signals",
     "sigs.k8s.io/controller-runtime/pkg/source",
     "sigs.k8s.io/controller-tools/pkg/crd/generator",
+    "sigs.k8s.io/yaml",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

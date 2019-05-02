@@ -346,3 +346,34 @@ oc adm policy add-cluster-role-to-user forbid-privileged-pods -n namespace-confi
 oc new-project special-pod
 oc label namespace special-pod unprivileged-pods=true
 ``` 
+
+## Deploying the Operator
+
+This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommeded.
+
+```shell
+oc apply -f deploy/crds/redhat-cop_v1alpha1_namespaceconfig_crd.yaml
+oc new-project namespace-configuration-operator
+```
+
+Deploy the cluster resources. Given that a number of elevated permissions are required to resources at a cluster scope the account you are currently logged in must have elevated rights.
+
+```shell
+oc apply -f deploy
+```
+
+## Local Development
+
+Execute the following steps to develop the functionality locally. It is recommended that development be done using a cluster with `cluster-admin` permissions.
+
+Clone the repository, then resolve all depdendencies using `dep`:
+
+```shell
+dep ensure
+```
+
+Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), run the operator locally:
+
+```shell
+operator-sdk up local --namespace ""
+```
