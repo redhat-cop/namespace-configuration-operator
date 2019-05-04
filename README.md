@@ -1,12 +1,14 @@
-# Namespace Configuration Controller
+# Namespace Configuration Operator
 
-The namespace configuration controller helps keeping a namespace's configuration aligned with one of more policies specified as a CRD.
+[![Build Status](https://travis-ci.org/redhat-cop/namespace-configuration-operator.svg?branch=master)](https://travis-ci.org/redhat-cop/namespace-configuration-operator) [![Docker Repository on Quay](https://quay.io/repository/redhat-cop/namespace-configuration-operator/status "Docker Repository on Quay")](https://quay.io/repository/redhat-cop/namespace-configuration-operator)
 
-The NamespaceConfig CR allow specifying one or more objects that will be created in the selected namespaces:
+The namespace configuration operator helps keeping a namespace's configuration aligned with one of more policies specified as a CRs.
 
-Dev teams may of may not be granted permissions to create these objects. In case they haven't the namespace configuration controller can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
+The `NamespaceConfig` CR allows specifying one or more objects that will be created in the selected namespaces.
 
-A NamespaceConfig CRD looks as follows:
+Dev teams may of may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
+
+A `NamespaceConfig` CRD looks as follows:
 
 ```yaml
 apiVersion: redhat-cop.redhat.io/v1alpha1
