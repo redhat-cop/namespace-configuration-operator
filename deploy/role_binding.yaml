@@ -1,4 +1,4 @@
-kind: RoleBinding
+kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: namespace-configuration-operator
@@ -6,6 +6,18 @@ subjects:
 - kind: ServiceAccount
   name: namespace-configuration-operator
 roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: namespace-configuration-operator
+subjects: 
+- kind: ServiceAccount
+  name: namespace-configuration-operator
+roleRef:
   kind: Role
   name: namespace-configuration-operator
-  apiGroup: rbac.authorization.k8s.io
+  apiGroup: rbac.authorization.k8s.io 

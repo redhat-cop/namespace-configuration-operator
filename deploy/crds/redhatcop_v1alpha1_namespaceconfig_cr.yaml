@@ -1,0 +1,7 @@
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: example-namespaceconfig
+spec:
+  # Add fields here
+  size: 3

@@ -1,63 +1,15 @@
 # Namespace Configuration Controller
 
 The namespace configuration controller helps keeping a namespace's configuration aligned with one of more policies specified as a CRD.
-Currently the following objects are part of the namespace configuration:
 
-- ConfigMaps         
-- PodPresets         
-- Quotas              
-- LimitRanges        
-- RoleBindings        
-- ClusterRoleBindings 
-- ServiceAccounts
+The NamespaceConfig CR allow specifying one or more objects that will be created in the selected namespaces:
 
-Dev teams may of may not be granted permissions to create these objects. In case they haven't the namespace configuration controller can be a way to create namespace configuration policy and govern the way namespace are configured.
+Dev teams may of may not be granted permissions to create these objects. In case they haven't the namespace configuration controller can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
 
 A NamespaceConfig CRD looks as follows:
 
-```
-apiVersion: namespaceconfig.raffaelespazzoli.systems/v1alpha1
-kind: NamespaceConfig
-metadata:
-  name: example-namespaceconfig
-spec:
-  selector:
-    matchLabels:
-      namespaceconfig: "true"
-    matchExpressions:
-     - {key: namespaceconfig, operator: In, values: ["true"]}  
-  networkpolicies: []
-  configmaps: []         
-  podpresets: []         
-  quotas: []              
-  limitranges: []        
-  rolebindings: []        
-  clusterrolebindings: [] 
-  serviceaccounts: []
-```
-
-The selector will select the namespaces to which this configuration should be applied.
-In this example all the managed ojects types have a empty array.
-You can add your API object instance there. The namespace field should not be specified and if it exists it will be overwrittent with the namespace name of the namespace to which the configuration is being applied.
-
-## Installation
-Run the following to installe the controller:
-```
-oc new-project namespace-configuration-controller
-oc apply -f deploy/namespace-configuration-controller.yaml
-```
-
-
-## Configuration Examples
-
-Here is a list of use cases in which the Namespace Configuration Controller can be useful
-
-### T-Shirt Sized Quotas
-
-during the provisionin gof ne projects to dev teams some organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
-
-```
-apiVersion: namespaceconfig.raffaelespazzoli.systems/v1alpha1
+```yaml
+apiVersion: redhat-cop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: small-size
@@ -65,17 +17,51 @@ spec:
   selector:
     matchLabels:
       size: small  
-  quotas:
+  resources:
   - apiVersion: v1
     kind: ResourceQuota
     metadata:
       name: small-size  
     spec:
       hard:
-        requests.cpu: "4" 
-        requests.memory: "2Gi" 
+        requests.cpu: "4"
+        requests.memory: "2Gi"
+  - other resources
+```
+
+The selector will select the namespaces to which this configuration should be applied.
+In this example a quota object is created.
+
+The namespace field of defined resources should not be specified and if it exists it will be overwritten with the namespace name of the namespace to which the configuration is being applied.
+
+## Configuration Examples
+
+Here is a list of use cases in which the Namespace Configuration Controller can be useful
+
+### T-Shirt Sized Quotas
+
+During the provisioning of the projects to dev teams some, organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
+
+```yaml
+apiVersion: redhat-cop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: small-size
+spec:
+  selector:
+    matchLabels:
+      size: small  
+  resources:
+  - apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: small-size  
+    spec:
+      hard:
+        requests.cpu: "4"
+        requests.memory: "2Gi"
 ---
-apiVersion: namespaceconfig.raffaelespazzoli.systems/v1alpha1
+apiVersion: redhat-cop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: large-size
@@ -83,20 +69,22 @@ spec:
   selector:
     matchLabels:
       size: large  
-  quotas:
+  resources:
   - apiVersion: v1
     kind: ResourceQuota
     metadata:
       name: large-size
     spec:
       hard:
-        requests.cpu: "8" 
-        requests.memory: "4Gi" 
+        requests.cpu: "8"
+        requests.memory: "4Gi"  
 ```
 
 We can test the above configuration as follows:
-```
-oc apply -f examples/tshirt-quotas.yaml
+
+```yaml
+oc new-project test-namespace-config
+oc apply -f examples/tshirt-quotas.yaml -n test-namespace-config
 oc new-project large-project
 oc label namespace large-project size=large
 oc new-project small-project
@@ -352,7 +340,7 @@ oc label namespace special-pod unprivileged-pods=true
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommeded.
 
 ```shell
-oc apply -f deploy/crds/redhat-cop_v1alpha1_namespaceconfig_crd.yaml
+oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
 oc new-project namespace-configuration-operator
 ```
 

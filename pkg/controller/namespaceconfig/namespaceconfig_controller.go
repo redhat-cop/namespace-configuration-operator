@@ -3,6 +3,7 @@ package namespaceconfig
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -30,8 +31,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const operatorLabel = "namespace-controller-operator.redhat-cop.io/owner"
-const finalizer = "namespaceconfig-controller"
+const operatorLabel = "namespace-config-operator.redhat-cop.io_owner"
+const finalizer = "namespace-config-operator"
 
 var log = logf.Log.WithName("controller_namespaceconfig")
 
@@ -143,27 +144,40 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		log.Error(err, "unable to retrieve the list of selected namespaces", "selector", instance.Spec.Selector)
 		return reconcile.Result{}, err
 	}
+	ownerLabelValue := instance.GetNamespace() + "-" + instance.GetName()
+	ownerSelector := operatorLabel + "=" + ownerLabelValue
 	// object defined by this instance
 	objects, err := getObjects(instance)
 
 	if util.IsBeingDeleted(instance) {
 		if !util.HasFinalizer(instance, finalizer) {
 			return reconcile.Result{}, nil
-		} else {
-			resources, _, err := r.getKnowTypes()
-			if err == nil {
-				labeledObjects := r.findAllLabeledObjects(resources, instance.GetNamespace()+"/"+instance.GetName())
-				for _, obj := range labeledObjects {
-					r.deleteObject(obj)
-				}
-				return reconcile.Result{}, nil
+		}
+		resources, _, err := r.getKnowTypes()
+		if err == nil {
+			//log.Info("known types", "known types", resources)
+			labeledObjects := r.findAllLabeledObjects(resources, ownerSelector)
+			//log.Info("deleting labeled objects", "objs", labeledObjects)
+			for _, obj := range labeledObjects {
+				r.deleteObject(obj)
 			}
+			util.RemoveFinalizer(instance, finalizer)
+			err := r.GetClient().Update(context.TODO(), instance)
+			if err != nil {
+				log.Error(err, "unable to update instance", "instance", instance)
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
 		}
 	}
 
 	if !util.HasFinalizer(instance, finalizer) {
 		util.AddFinalizer(instance, finalizer)
 		err := r.GetClient().Update(context.TODO(), instance)
+		if err != nil {
+			log.Error(err, "unable to update instance", "instance", instance)
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, err
 	}
 
@@ -171,7 +185,7 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 	resources, _, err := r.getKnowTypes()
 	if err == nil {
 		// object owned by this instance (will include legit and illegit ones)
-		labeledObjects := r.findAllLabeledObjects(resources, instance.GetNamespace()+"/"+instance.GetName())
+		labeledObjects := r.findAllLabeledObjects(resources, ownerSelector)
 		r.deleteObjectsOnControlledNamespaces(labeledObjects, objects, namespaces)
 		r.deleteObjectsOnUncontrolledNamespaces(labeledObjects, namespaces)
 	} else {
@@ -180,7 +194,7 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 
 	var err1 *multierror.Error
 	for _, ns := range namespaces {
-		err := r.applyConfigToNamespace(objects, ns, instance.GetNamespace()+"/"+instance.GetName())
+		err := r.applyConfigToNamespace(objects, ns, ownerLabelValue)
 		if err != nil {
 			err1 = multierror.Append(err1, err)
 		}
@@ -193,7 +207,7 @@ func getObjects(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]unstructu
 	for _, raw := range namespaceconfig.Spec.Resources {
 		bb, err := yaml.YAMLToJSON(raw.Raw)
 		if err != nil {
-			log.Error(err, "Error trasnfoming yaml to json", "raw", raw.Raw)
+			log.Error(err, "Error transforming yaml to json", "raw", raw.Raw)
 			return []unstructured.Unstructured{}, err
 		}
 		obj := unstructured.Unstructured{}
@@ -232,6 +246,9 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 		namespacedObjIntf := objIntf.Namespace(namespace.GetName())
 
 		labels := obj.GetLabels()
+		if labels == nil {
+			labels = map[string]string{}
+		}
 		labels[operatorLabel] = label
 		obj.SetLabels(labels)
 		err = createOrUpdate(&namespacedObjIntf, &obj)
@@ -244,10 +261,10 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 
 func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
 
-	obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{}, "")
+	obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
 
 	if apierrors.IsNotFound(err) {
-		_, err = (*client).Create(obj, metav1.CreateOptions{}, "")
+		_, err = (*client).Create(obj, metav1.CreateOptions{})
 		if err != nil {
 			log.Error(err, "unable to create object", "object", obj)
 		}
@@ -255,7 +272,7 @@ func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstruc
 	}
 	if err == nil {
 		obj.SetResourceVersion(obj2.GetResourceVersion())
-		_, err = (*client).Update(obj, metav1.UpdateOptions{}, "")
+		_, err = (*client).Update(obj, metav1.UpdateOptions{})
 		if err != nil {
 			log.Error(err, "unable to update object", "object", obj)
 		}
@@ -331,13 +348,13 @@ func getObjectsInNamespace(existingObjects []unstructured.Unstructured, namespac
 func (r *ReconcileNamespaceConfig) deleteObject(obj unstructured.Unstructured) {
 	objIntf, err := r.getDynamicClientOnUnstructured(obj)
 	if err != nil {
-		log.Error(err, "unable to get dynamic client on obj, ingoring...", "obj", obj)
+		log.Error(err, "unable to get dynamic client on obj, ignoring...", "obj", obj)
 		return
 	}
 	namespacedObjIntf := objIntf.Namespace(obj.GetNamespace())
 	err = namespacedObjIntf.Delete(obj.GetName(), &metav1.DeleteOptions{})
 	if err != nil {
-		log.Error(err, "unable to delete obj, ingoring...", "obj", obj)
+		log.Error(err, "unable to delete obj, ignoring...", "obj", obj)
 		return
 	}
 }
@@ -367,11 +384,15 @@ func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIR
 			log.Error(err, "unable to get dynamic client on type, ignoring...", "resource", res)
 			continue
 		}
+		//log.Info("listing", "reource", res, "label selector", selector)
 		unstructs, err := resIntf.List(metav1.ListOptions{
 			LabelSelector: selector,
 		})
+		//log.Info("found", "objs", unstructs)
 		if err != nil {
-			log.Error(err, "unable to list resources ignoring...", "resource", res)
+			if !apierrors.IsNotFound(err) {
+				log.Error(err, "unable to list resources ignoring...", "resource", res)
+			}
 			continue
 		}
 		objs = append(objs, unstructs.Items...)
@@ -386,7 +407,18 @@ func (r *ReconcileNamespaceConfig) getKnowTypes() (namespaced []metav1.APIResour
 		return namespaced, clusterLevel, err
 	}
 	for _, resList := range resListArray {
+		gv, err := schema.ParseGroupVersion(resList.GroupVersion)
+		if err != nil {
+			log.Error(err, "unable to parse groupversion from, ignoring...", "groupversion", resList.GroupVersion)
+			continue
+		}
 		for _, res := range resList.APIResources {
+			if strings.Contains(res.Name, "/") {
+				//ignoring subresources
+				continue
+			}
+			res.Group = gv.Group
+			res.Version = gv.Version
 			if res.Namespaced {
 				namespaced = append(namespaced, res)
 			} else {
@@ -401,7 +433,7 @@ func (r *ReconcileNamespaceConfig) getDynamicClientOnType(resource metav1.APIRes
 	return r.getDynamicClientOnGVR(schema.GroupVersionResource{
 		Group:    resource.Group,
 		Version:  resource.Version,
-		Resource: resource.Kind,
+		Resource: resource.Name,
 	})
 }
 
@@ -416,10 +448,30 @@ func (r *ReconcileNamespaceConfig) getDynamicClientOnGVR(gkv schema.GroupVersion
 }
 
 func (r *ReconcileNamespaceConfig) getDynamicClientOnUnstructured(obj unstructured.Unstructured) (dynamic.NamespaceableResourceInterface, error) {
+	apiRes, err := r.getAPIReourceForUnstructured(obj)
+	if err != nil {
+		log.Error(err, "unable to get apiresource from unstructured", "unstructured", obj)
+		return nil, err
+	}
+	return r.getDynamicClientOnType(apiRes)
+}
+
+func (r *ReconcileNamespaceConfig) getAPIReourceForUnstructured(obj unstructured.Unstructured) (metav1.APIResource, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	return r.getDynamicClientOnGVR(schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: gvk.Kind,
-	})
+	res := metav1.APIResource{}
+	resList, err := r.DiscoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+	if err != nil {
+		log.Error(err, "unable to retrieve resouce list for:", "groupversion", gvk.GroupVersion().String())
+		return res, err
+	}
+	for _, resource := range resList.APIResources {
+		if resource.Kind == gvk.Kind && !strings.Contains(resource.Name, "/") {
+			res = resource
+			res.Group = gvk.Group
+			res.Version = gvk.Version
+			break
+		}
+	}
+	return res, nil
+
 }
