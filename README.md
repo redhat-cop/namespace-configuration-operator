@@ -300,6 +300,19 @@ oc new-project special-pod
 oc label namespace special-pod unprivileged-pods=true
 ```
 
+## Cleaning up
+
+To clean up the previous example you can run the following:
+
+```shell
+oc delete -f examples/special-pod.yaml -n test-namespace-config
+oc delete -f examples/serviceaccount-permissions.yaml -n test-namespace-config
+oc delete -f examples/overcommit-limitrange.yaml -n test-namespace-config
+oc delete -f examples/multitenant-networkpolicy.yaml -n test-namespace-config
+oc delete -f examples/tshirt-quotas.yaml -n test-namespace-config
+oc delete project special-pod special-sa overcommit-project multitenant-project small-project large-project test-namespace-config
+```
+
 ## Deploying the Operator
 
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
