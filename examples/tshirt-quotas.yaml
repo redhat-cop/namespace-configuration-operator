@@ -1,4 +1,4 @@
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: small-size
@@ -16,7 +16,7 @@ spec:
         requests.cpu: "4" 
         requests.memory: "2Gi" 
 ---
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: large-size

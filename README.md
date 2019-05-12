@@ -11,7 +11,7 @@ Dev teams may of may not be granted permissions to create these objects. In case
 A `NamespaceConfig` CRD looks as follows:
 
 ```yaml
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: small-size
@@ -50,7 +50,7 @@ oc new-project test-namespace-config
 During the provisioning of the projects to dev teams some, organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
 
 ```yaml
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: small-size
@@ -68,7 +68,7 @@ spec:
         requests.cpu: "4"
         requests.memory: "2Gi"
 ---
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: large-size
@@ -104,7 +104,7 @@ In most cases isolating one project from other projects is a good way to start. 
 The configuration would look as follows:
 
 ```yaml
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: multitenant
@@ -150,7 +150,7 @@ That said limit range can still be useful to define the ratio between request an
 Here is how it can be done:
 
 ```yaml
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: overcommit-limitrange
@@ -184,7 +184,7 @@ oc label namespace overcommit-project overcommit=limited
 Another scenario is an application needs to talk to the master API and needs to specific permissions to do that. As an example, we are creating a service account with the `registry-viewer` and `registry-editor` accounts. Here is what we can do:
 
 ```yaml
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: special-sa
@@ -266,7 +266,7 @@ rules:
   resourceNames:
   - forbid-privileged-pods
 ---  
-apiVersion: redhat-cop.redhat.io/v1alpha1
+apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: unprivileged-pods
