@@ -524,7 +524,6 @@ func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv
 	} else {
 		retryInterval = status.LastUpdate.Sub(lastUpdate).Round(time.Second)
 	}
-	log.Info("data", "lastUpdate", lastUpdate, "retryInterval", retryInterval, "requeAfter", time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))))
 	return reconcile.Result{
 		RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))),
 		Requeue:      true,
