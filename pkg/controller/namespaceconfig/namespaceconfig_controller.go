@@ -3,6 +3,7 @@ package namespaceconfig
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/operator-framework/operator-sdk/pkg/predicate"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -69,7 +71,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource NamespaceConfig
-	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -499,6 +501,8 @@ func (r *ReconcileNamespaceConfig) getAPIReourceForUnstructured(obj unstructured
 }
 
 func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
+
+	lastUpdate := instance.Status.LastUpdate.Time
 	r.recorder.Event(instance, "Warning", "ProcessingError", issue.Error())
 	status := redhatcopv1alpha1.NamespaceConfigStatus{
 		LastUpdate: metav1.Now(),
@@ -518,10 +522,11 @@ func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv
 	if instance.Status.LastUpdate.IsZero() {
 		retryInterval = time.Second
 	} else {
-		retryInterval = status.LastUpdate.Sub(instance.Status.LastUpdate.Time).Round(time.Second)
+		retryInterval = status.LastUpdate.Sub(lastUpdate).Round(time.Second)
 	}
+	log.Info("data", "lastUpdate", lastUpdate, "retryInterval", retryInterval, "requeAfter", time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))))
 	return reconcile.Result{
-		RequeueAfter: time.Duration(retryInterval.Seconds() * 2),
+		RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))),
 		Requeue:      true,
 	}, nil
 }
