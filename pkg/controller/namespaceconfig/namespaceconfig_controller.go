@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	multierror "github.com/hashicorp/go-multierror"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	multierror "github.com/hashicorp/go-multierror"
-	"github.com/operator-framework/operator-sdk/pkg/predicate"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -71,7 +73,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource NamespaceConfig
-	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
+	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{}, resourceGenerationOrFinalizerChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -169,7 +171,6 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 	ownerSelector := operatorLabel + "=" + ownerLabelValue
 	// object defined by this instance
 	objects, err := getObjects(instance)
-
 	if util.IsBeingDeleted(instance) {
 		if !util.HasFinalizer(instance, finalizer) {
 			return reconcile.Result{}, nil
@@ -191,7 +192,6 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 			return reconcile.Result{}, nil
 		}
 	}
-
 	if !util.HasFinalizer(instance, finalizer) {
 		util.AddFinalizer(instance, finalizer)
 		err := r.GetClient().Update(context.TODO(), instance)
@@ -201,7 +201,6 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		}
 		return reconcile.Result{}, nil
 	}
-
 	// know types in this cluster
 	resources, _, err := r.getKnowTypes()
 	if err == nil {
@@ -212,7 +211,6 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 	} else {
 		log.Error(err, "unable to retrive known types, ignoring delete phase ...")
 	}
-
 	var err1 *multierror.Error
 	for _, ns := range namespaces {
 		err := r.applyConfigToNamespace(objects, ns, ownerLabelValue)
@@ -501,8 +499,8 @@ func (r *ReconcileNamespaceConfig) getAPIReourceForUnstructured(obj unstructured
 }
 
 func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
-
 	lastUpdate := instance.Status.LastUpdate.Time
+	lastStatus := instance.Status.Status
 	r.recorder.Event(instance, "Warning", "ProcessingError", issue.Error())
 	status := redhatcopv1alpha1.NamespaceConfigStatus{
 		LastUpdate: metav1.Now(),
@@ -519,7 +517,7 @@ func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv
 		}, nil
 	}
 	var retryInterval time.Duration
-	if instance.Status.LastUpdate.IsZero() {
+	if instance.Status.LastUpdate.IsZero() || lastStatus == "Success" {
 		retryInterval = time.Second
 	} else {
 		retryInterval = status.LastUpdate.Sub(lastUpdate).Round(time.Second)
@@ -546,4 +544,32 @@ func (r *ReconcileNamespaceConfig) manageSuccess(instance *redhatcopv1alpha1.Nam
 		}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+type resourceGenerationOrFinalizerChangedPredicate struct {
+	predicate.Funcs
+}
+
+// Update implements default UpdateEvent filter for validating resource version change
+func (resourceGenerationOrFinalizerChangedPredicate) Update(e event.UpdateEvent) bool {
+	if e.MetaOld == nil {
+		log.Error(nil, "UpdateEvent has no old metadata", "event", e)
+		return false
+	}
+	if e.ObjectOld == nil {
+		log.Error(nil, "GenericEvent has no old runtime object to update", "event", e)
+		return false
+	}
+	if e.ObjectNew == nil {
+		log.Error(nil, "GenericEvent has no new runtime object for update", "event", e)
+		return false
+	}
+	if e.MetaNew == nil {
+		log.Error(nil, "UpdateEvent has no new metadata", "event", e)
+		return false
+	}
+	if e.MetaNew.GetGeneration() == e.MetaOld.GetGeneration() && reflect.DeepEqual(e.MetaNew.GetFinalizers(), e.MetaOld.GetFinalizers()) {
+		return false
+	}
+	return true
 }
