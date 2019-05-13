@@ -3,24 +3,28 @@ package namespaceconfig
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"k8s.io/client-go/dynamic"
-
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/record"
 
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/operator-framework/operator-sdk/pkg/predicate"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -54,6 +58,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme()),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
 		Config:          *mgr.GetConfig(),
+		recorder:        mgr.GetRecorder("namespaceconfiguration-controller"),
 	}
 }
 
@@ -66,7 +71,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource NamespaceConfig
-	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -111,6 +116,7 @@ type ReconcileNamespaceConfig struct {
 	util.ReconcilerBase
 	discovery.DiscoveryClient
 	rest.Config
+	recorder record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a NamespaceConfig object and makes changes based on the state read
@@ -138,11 +144,26 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	// if isNotValid(instance) {
+	// 	//record event
+	// 	//update status
+	// 	//return with time
+	// }
+
+	// if !isInitliazed(instance) {
+	// 	err := r.GetClient().Update(context.TODO(), instance)
+	// 	if err != nil {
+	// 		log.Error(err, "unable to update instance", "instance", instance)
+	// 		return reconcile.Result{}, err
+	// 	}
+	// 	return reconcile.Result{}, nil
+	// }
+
 	//namespaces selected by this instance
 	namespaces, err := r.getSelectedNamespaces(instance)
 	if err != nil {
 		log.Error(err, "unable to retrieve the list of selected namespaces", "selector", instance.Spec.Selector)
-		return reconcile.Result{}, err
+		return r.manageError(err, instance)
 	}
 	ownerLabelValue := instance.GetNamespace() + "-" + instance.GetName()
 	ownerSelector := operatorLabel + "=" + ownerLabelValue
@@ -165,7 +186,7 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 			err := r.GetClient().Update(context.TODO(), instance)
 			if err != nil {
 				log.Error(err, "unable to update instance", "instance", instance)
-				return reconcile.Result{}, err
+				return r.manageError(err, instance)
 			}
 			return reconcile.Result{}, nil
 		}
@@ -176,9 +197,9 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		err := r.GetClient().Update(context.TODO(), instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return reconcile.Result{}, err
+			return r.manageError(err, instance)
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{}, nil
 	}
 
 	// know types in this cluster
@@ -199,7 +220,10 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 			err1 = multierror.Append(err1, err)
 		}
 	}
-	return reconcile.Result{}, err1.ErrorOrNil()
+	if err1.ErrorOrNil() != nil {
+		return r.manageError(err1.ErrorOrNil(), instance)
+	}
+	return r.manageSuccess(instance)
 }
 
 func getObjects(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]unstructured.Unstructured, error) {
@@ -474,4 +498,52 @@ func (r *ReconcileNamespaceConfig) getAPIReourceForUnstructured(obj unstructured
 	}
 	return res, nil
 
+}
+
+func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
+
+	lastUpdate := instance.Status.LastUpdate.Time
+	r.recorder.Event(instance, "Warning", "ProcessingError", issue.Error())
+	status := redhatcopv1alpha1.NamespaceConfigStatus{
+		LastUpdate: metav1.Now(),
+		Reason:     issue.Error(),
+		Status:     "Failure",
+	}
+	instance.Status = status
+	err := r.GetClient().Status().Update(context.Background(), instance)
+	if err != nil {
+		log.Error(err, "unable to update status")
+		return reconcile.Result{
+			RequeueAfter: time.Second,
+			Requeue:      true,
+		}, nil
+	}
+	var retryInterval time.Duration
+	if instance.Status.LastUpdate.IsZero() {
+		retryInterval = time.Second
+	} else {
+		retryInterval = status.LastUpdate.Sub(lastUpdate).Round(time.Second)
+	}
+	return reconcile.Result{
+		RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))),
+		Requeue:      true,
+	}, nil
+}
+
+func (r *ReconcileNamespaceConfig) manageSuccess(instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
+	status := redhatcopv1alpha1.NamespaceConfigStatus{
+		LastUpdate: metav1.Now(),
+		Reason:     "",
+		Status:     "Success",
+	}
+	instance.Status = status
+	err := r.GetClient().Status().Update(context.Background(), instance)
+	if err != nil {
+		log.Error(err, "unable to update status")
+		return reconcile.Result{
+			RequeueAfter: time.Second,
+			Requeue:      true,
+		}, nil
+	}
+	return reconcile.Result{}, nil
 }
