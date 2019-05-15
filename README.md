@@ -325,7 +325,7 @@ oc new-project namespace-configuration-operator
 Deploy the cluster resources. Given that a number of elevated permissions are required to resources at a cluster scope the account you are currently logged in must have elevated rights.
 
 ```shell
-oc apply -f deploy
+oc apply -f deploy -n namespace-configuration-operator
 ```
 
 ## Local Development
