@@ -1,0 +1,103 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[{"apiVersion":"redhatcop.redhat.io/v1alpha1","kind":"NamespaceConfig","metadata":{"name":"example-namespaceconfig"},"spec":{"size":3}}]'
+    capabilities: Basic Install
+  name: namespace-configuration-operator.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - kind: NamespaceConfig
+      name: namespaceconfigs.redhatcop.redhat.io
+      version: v1alpha1
+  description: Placeholder description
+  displayName: Namespace Configuration Operator
+  install:
+    spec:
+      deployments:
+      - name: namespace-configuration-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              name: namespace-configuration-operator
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                name: namespace-configuration-operator
+            spec:
+              containers:
+              - command:
+                - namespace-configuration-operator
+                env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: OPERATOR_NAME
+                  value: namespace-configuration-operator
+                image: REPLACE_IMAGE
+                imagePullPolicy: Always
+                name: namespace-configuration-operator
+                resources: {}
+              serviceAccountName: namespace-configuration-operator
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - pods
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - '*'
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          - deployments
+          verbs:
+          - get
+          - list
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - get
+          - create
+        - apiGroups:
+          - apps
+          resourceNames:
+          - cert-utils-operator
+          resources:
+          - deployments/finalizers
+          verbs:
+          - update
+        serviceAccountName: namespace-configuration-operator
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  maturity: alpha
+  provider: {}
+  version: 0.0.1
