@@ -57,10 +57,8 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 	return &ReconcileNamespaceConfig{
-		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme()),
+		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetRecorder("namespaceconfiguration-controller")),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
-		Config:          *mgr.GetConfig(),
-		recorder:        mgr.GetRecorder("namespaceconfiguration-controller"),
 	}
 }
 
