@@ -286,9 +286,6 @@ func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstruc
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			_, err = (*client).Update(obj, metav1.UpdateOptions{})
-			if err != nil {
-				return err
-			}
 		}
 	}
 	return err
