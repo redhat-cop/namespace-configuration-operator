@@ -285,6 +285,12 @@ func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstruc
 	_, err := (*client).Create(obj, metav1.CreateOptions{})
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
+			// We need to update
+			obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			obj.SetResourceVersion(obj2.GetResourceVersion())
 			_, err = (*client).Update(obj, metav1.UpdateOptions{})
 		}
 	}
