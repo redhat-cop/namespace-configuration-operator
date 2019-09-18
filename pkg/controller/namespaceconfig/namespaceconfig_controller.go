@@ -282,28 +282,16 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 }
 
 func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
-
-	obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
-
-	if apierrors.IsNotFound(err) {
-		_, err = (*client).Create(obj, metav1.CreateOptions{})
-		if err != nil {
-			log.Error(err, "unable to create object", "object", obj)
+	_, err := (*client).Create(obj, metav1.CreateOptions{})
+	if err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			_, err = (*client).Update(obj, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
 		}
-		return err
 	}
-	if err == nil {
-		obj.SetResourceVersion(obj2.GetResourceVersion())
-		_, err = (*client).Update(obj, metav1.UpdateOptions{})
-		if err != nil {
-			log.Error(err, "unable to update object", "object", obj)
-		}
-		return err
-
-	}
-	log.Error(err, "unable to lookup object", "object", obj)
 	return err
-
 }
 
 func findApplicableNameSpaceConfigs(namespace corev1.Namespace, c *client.Client) ([]redhatcopv1alpha1.NamespaceConfig, error) {
