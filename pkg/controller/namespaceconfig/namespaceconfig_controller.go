@@ -8,29 +8,24 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	multierror "github.com/hashicorp/go-multierror"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
+	mutil "github.com/redhat-cop/namespace-configuration-operator/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -39,6 +34,8 @@ import (
 
 const operatorLabel = "namespace-config-operator.redhat-cop.io_owner"
 const finalizer = "namespace-config-operator"
+
+var managedObjects = map[string]mutil.StoppableManager{}
 
 var log = logf.Log.WithName("controller_namespaceconfig")
 
@@ -59,6 +56,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileNamespaceConfig{
 		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetRecorder("namespaceconfiguration-controller")),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
+		Manager:         mgr,
 	}
 }
 
@@ -115,8 +113,11 @@ var _ reconcile.Reconciler = &ReconcileNamespaceConfig{}
 type ReconcileNamespaceConfig struct {
 	util.ReconcilerBase
 	discovery.DiscoveryClient
-	rest.Config
-	recorder record.EventRecorder
+	Manager manager.Manager
+}
+
+func (r *ReconcileNamespaceConfig) GetManager() *manager.Manager {
+	return &r.Manager
 }
 
 // Reconcile reads that state of the cluster for a NamespaceConfig object and makes changes based on the state read
@@ -258,27 +259,22 @@ func (r *ReconcileNamespaceConfig) getSelectedNamespaces(namespaceconfig *redhat
 
 func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Unstructured, namespace corev1.Namespace, label string) error {
 	for _, obj := range objs {
-		objIntf, err := r.getDynamicClientOnUnstructured(obj)
-		if err != nil {
-			log.Error(err, "unable to get dynamic client on object", "object", obj)
-			return err
-		}
-		namespacedObjIntf := objIntf.Namespace(namespace.GetName())
-
 		labels := obj.GetLabels()
 		if labels == nil {
 			labels = map[string]string{}
 		}
 		labels[operatorLabel] = label
 		obj.SetLabels(labels)
-		err = createOrUpdate(&namespacedObjIntf, &obj)
+		err := r.CreateOrUpdateResource(nil, namespace.GetName(), &obj)
 		if err != nil {
 			return err
 		}
+		r.addManagedObject(&obj)
 	}
 	return nil
 }
 
+<<<<<<< HEAD
 func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
 	_, err := (*client).Create(obj, metav1.CreateOptions{})
 	if err != nil {
@@ -294,6 +290,28 @@ func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstruc
 	}
 	return err
 }
+=======
+// func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
+// 	obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
+// 	if apierrors.IsNotFound(err) {
+// 		_, err = (*client).Create(obj, metav1.CreateOptions{})
+// 		if err != nil {
+// 			log.Error(err, "unable to create object", "object", obj)
+// 		}
+// 		return err
+// 	}
+// 	if err == nil {
+// 		obj.SetResourceVersion(obj2.GetResourceVersion())
+// 		_, err = (*client).Update(obj, metav1.UpdateOptions{})
+// 		if err != nil {
+// 			log.Error(err, "unable to update object", "object", obj)
+// 		}
+// 		return err
+// 	}
+// 	log.Error(err, "unable to lookup object", "object", obj)
+// 	return err
+// }
+>>>>>>> refactored to use new support for unstructured
 
 func findApplicableNameSpaceConfigs(namespace corev1.Namespace, c *client.Client) ([]redhatcopv1alpha1.NamespaceConfig, error) {
 	//find all the namespaceconfig
@@ -357,13 +375,8 @@ func getObjectsInNamespace(existingObjects []unstructured.Unstructured, namespac
 }
 
 func (r *ReconcileNamespaceConfig) deleteObject(obj unstructured.Unstructured) {
-	objIntf, err := r.getDynamicClientOnUnstructured(obj)
-	if err != nil {
-		log.Error(err, "unable to get dynamic client on obj, ignoring...", "obj", obj)
-		return
-	}
-	namespacedObjIntf := objIntf.Namespace(obj.GetNamespace())
-	err = namespacedObjIntf.Delete(obj.GetName(), &metav1.DeleteOptions{})
+	r.removeManagedObject(&obj)
+	err := r.DeleteResource(&obj)
 	if err != nil {
 		log.Error(err, "unable to delete obj, ignoring...", "obj", obj)
 		return
@@ -390,7 +403,7 @@ func isNamespaceInSet(namespaces []corev1.Namespace, namespace string) bool {
 func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIResource, selector string) []unstructured.Unstructured {
 	objs := []unstructured.Unstructured{}
 	for _, res := range resources {
-		resIntf, err := r.getDynamicClientOnType(res)
+		resIntf, err := r.GetDynamicClientOnAPIResource(res)
 		if err != nil {
 			log.Error(err, "unable to get dynamic client on type, ignoring...", "resource", res)
 			continue
@@ -440,57 +453,10 @@ func (r *ReconcileNamespaceConfig) getKnowTypes() (namespaced []metav1.APIResour
 	return namespaced, clusterLevel, nil
 }
 
-func (r *ReconcileNamespaceConfig) getDynamicClientOnType(resource metav1.APIResource) (dynamic.NamespaceableResourceInterface, error) {
-	return r.getDynamicClientOnGVR(schema.GroupVersionResource{
-		Group:    resource.Group,
-		Version:  resource.Version,
-		Resource: resource.Name,
-	})
-}
-
-func (r *ReconcileNamespaceConfig) getDynamicClientOnGVR(gkv schema.GroupVersionResource) (dynamic.NamespaceableResourceInterface, error) {
-	intf, err := dynamic.NewForConfig(&r.Config)
-	if err != nil {
-		log.Error(err, "unable to get dynamic client")
-		return nil, err
-	}
-	res := intf.Resource(gkv)
-	return res, nil
-}
-
-func (r *ReconcileNamespaceConfig) getDynamicClientOnUnstructured(obj unstructured.Unstructured) (dynamic.NamespaceableResourceInterface, error) {
-	apiRes, err := r.getAPIReourceForUnstructured(obj)
-	if err != nil {
-		log.Error(err, "unable to get apiresource from unstructured", "unstructured", obj)
-		return nil, err
-	}
-	return r.getDynamicClientOnType(apiRes)
-}
-
-func (r *ReconcileNamespaceConfig) getAPIReourceForUnstructured(obj unstructured.Unstructured) (metav1.APIResource, error) {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	res := metav1.APIResource{}
-	resList, err := r.DiscoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
-	if err != nil {
-		log.Error(err, "unable to retrieve resouce list for:", "groupversion", gvk.GroupVersion().String())
-		return res, err
-	}
-	for _, resource := range resList.APIResources {
-		if resource.Kind == gvk.Kind && !strings.Contains(resource.Name, "/") {
-			res = resource
-			res.Group = gvk.Group
-			res.Version = gvk.Version
-			break
-		}
-	}
-	return res, nil
-
-}
-
 func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
 	lastUpdate := instance.Status.LastUpdate.Time
 	lastStatus := instance.Status.Status
-	r.recorder.Event(instance, "Warning", "ProcessingError", issue.Error())
+	r.GetRecorder().Event(instance, "Warning", "ProcessingError", issue.Error())
 	status := redhatcopv1alpha1.NamespaceConfigStatus{
 		LastUpdate: metav1.Now(),
 		Reason:     issue.Error(),
@@ -562,3 +528,37 @@ func (resourceGenerationOrFinalizerChangedPredicate) Update(e event.UpdateEvent)
 	}
 	return true
 }
+
+func (r *ReconcileNamespaceConfig) addManagedObject(object *unstructured.Unstructured) error {
+	log.Info("adding managed object for", "object", object)
+	moold, ok := managedObjects[mutil.GetKeyFromObject(object)]
+	if ok {
+		moold.Stop()
+	}
+	sm, err := mutil.NewStoppableManager(*r.GetManager())
+	if err != nil {
+		return err
+	}
+	_, err = mutil.NewLockedObjectReconciler(sm.Manager, *object)
+	if err != nil {
+		return err
+	}
+	managedObjects[mutil.GetKeyFromObject(object)] = sm
+	sm.Start()
+	return nil
+}
+
+func (r *ReconcileNamespaceConfig) removeManagedObject(object *unstructured.Unstructured) error {
+	log.Info("removing managed object for", "object", object)
+	sm, ok := managedObjects[mutil.GetKeyFromObject(object)]
+	if !ok {
+		return nil
+	}
+	sm.Stop()
+	delete(managedObjects, mutil.GetKeyFromObject(object))
+	return nil
+}
+
+// func (r *ReconcileNamespaceConfig) newManagedObject(object *unstructured.Unstructured) (*mutil.ManagedObject, error) {
+// 	return mutil.NewManagedObject(r.GetRestConfig(), *object, time.Minute)
+// }

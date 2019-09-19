@@ -1,18 +1,22 @@
 module github.com/redhat-cop/namespace-configuration-operator
 
 require (
+	github.com/NYTimes/gziphandler v1.0.1 // indirect
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-multierror v1.0.0
+	github.com/kubernetes-sigs/federation-v2 v0.0.10 // indirect
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190820010559-640171cc31c8
-	github.com/redhat-cop/cert-utils-operator v0.0.3
-	github.com/redhat-cop/operator-utils v0.0.0-20190827162636-51e6b0c32776
+	github.com/pkg/errors v0.8.1
+	github.com/redhat-cop/operator-utils v0.0.0-20190918003210-ef655deaf0df
 	github.com/spf13/pflag v1.0.3
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
 	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/cluster-registry v0.0.6 // indirect
 	k8s.io/kube-openapi v0.0.0-20190603182131-db7b694dc208
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
+	sigs.k8s.io/kubefed v0.0.10
 	sigs.k8s.io/yaml v1.1.0
 )
 

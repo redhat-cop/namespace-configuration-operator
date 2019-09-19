@@ -332,14 +332,19 @@ oc apply -f deploy -n namespace-configuration-operator
 
 Execute the following steps to develop the functionality locally. It is recommended that development be done using a cluster with `cluster-admin` permissions.
 
-Clone the repository, then resolve all dependencies using `dep`:
+```shell
+go mod download
+```
+
+optionally:
 
 ```shell
-dep ensure
+go mod vendor
 ```
 
 Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), run the operator locally:
 
 ```shell
-operator-sdk up local
+oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
+operator-sdk up local --namespace ""
 ```
