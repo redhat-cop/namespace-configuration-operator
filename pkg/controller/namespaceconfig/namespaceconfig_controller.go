@@ -273,7 +273,8 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 		}
 		labels[operatorLabel] = label
 		obj.SetLabels(labels)
-		err = createOrUpdate(&namespacedObjIntf, &obj)
+		obj2 := obj.DeepCopy()
+		err = createOrUpdate(&namespacedObjIntf, obj2)
 		if err != nil {
 			return err
 		}
@@ -286,7 +287,8 @@ func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstruc
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			// We need to update
-			obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
+			var obj2 *unstructured.Unstructured
+			obj2, err = (*client).Get(obj.GetName(), metav1.GetOptions{})
 			if err != nil {
 				return err
 			}
