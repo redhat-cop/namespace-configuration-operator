@@ -59,6 +59,9 @@ func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstruct
 	}
 	// Watch for changes to the object
 	informer, err := NewNamedInstanceGenericSharedIndexInformer(mgr.GetConfig(), &object, time.Minute)
+	if err != nil {
+		return &LockedObjectReconciler{}, err
+	}
 	err = controller.Watch(&source.Informer{Informer: informer},
 		&handler.EnqueueRequestForObject{},
 		resourceModifiedPredicate{})

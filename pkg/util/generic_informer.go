@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -56,6 +55,14 @@ func NewNamedInstanceGenericSharedIndexInformer(config *rest.Config, obj runtime
 	if err != nil {
 		return nil, err
 	}
+
+	res, err := client.Get().Namespace(namespace).Resource(mapping.Resource.Resource).Do().Get()
+	log.Info("result", "res", res)
+	if err != nil {
+		log.Info("err", "error", err.Error())
+	}
+
+	log.Info("creating list watcher for ", "api version", client.APIVersion(), "resource", mapping.Resource.Resource, "namespace", namespace)
 
 	// listGVK := gvk.GroupVersion().WithKind(gvk.Kind + "List")
 	// listObj, err := scheme.Scheme.New(listGVK)
