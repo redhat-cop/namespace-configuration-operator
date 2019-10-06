@@ -17,74 +17,101 @@ limitations under the License.
 package util
 
 import (
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	toolscache "k8s.io/client-go/tools/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/kubefed/pkg/client/generic/scheme"
 )
 
-func NewNamedInstanceGenericSharedIndexInformer(config *rest.Config, obj runtime.Object, defaultEventHandlerResyncPeriod time.Duration) (toolscache.SharedIndexInformer, error) {
-	metaobj, ok := obj.(metav1.Object)
+func NewNamedInstanceGenericSharedIndexInformer(config *rest.Config, obj runtime.Unstructured, defaultEventHandlerResyncPeriod time.Duration) (cache.SharedIndexInformer, error) {
+
+	lw, err := NewGenericListerWatcher(config, obj)
+	if err != nil {
+		return nil, err
+	}
+	return cache.NewSharedIndexInformer(lw, obj, defaultEventHandlerResyncPeriod, cache.Indexers{}), nil
+}
+
+type GenericListerWatcher struct {
+	unstructured      unstructured.Unstructured
+	resourceInterface dynamic.ResourceInterface
+	name              string
+}
+
+func (glw *GenericListerWatcher) List(opts metav1.ListOptions) (runtime.Object, error) {
+	log.Info("list function called")
+	return glw.resourceInterface.List(opts)
+}
+
+func (glw *GenericListerWatcher) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+	log.Info("watch function called")
+	opts.Watch = true
+	return glw.resourceInterface.Watch(opts)
+}
+
+func NewGenericListerWatcher(config *rest.Config, obj runtime.Unstructured) (*GenericListerWatcher, error) {
+	unstructured, ok := obj.(*unstructured.Unstructured)
 	if !ok {
-		return nil, errors.New("unable to convert runtime object to meta object")
+		return nil, errors.New("unable to convert unstructured runtime object to unstructured object")
 	}
-	namespace := metaobj.GetNamespace()
-	//name := metaobj.GetName()
-	gvk, err := apiutil.GVKForObject(obj, scheme.Scheme)
+	client, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
-	mapper, err := apiutil.NewDiscoveryRESTMapper(config)
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not create RESTMapper from config")
-	}
-
-	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	rvk, err := getGVR(unstructured, config)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := apiutil.RESTClientForGVK(gvk, config, scheme.Codecs)
+	resourceInterface := client.Resource(rvk).Namespace(unstructured.GetNamespace())
+
+	res, err := resourceInterface.List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := client.Get().Namespace(namespace).Resource(mapping.Resource.Resource).Do().Get()
-	log.Info("result", "res", res)
+	log.Info("res", "res", res)
+
+	return &GenericListerWatcher{
+		resourceInterface: resourceInterface,
+		name:              unstructured.GetName(),
+		unstructured:      *unstructured.DeepCopy(),
+	}, nil
+}
+
+func getGVR(obj *unstructured.Unstructured, config *rest.Config) (schema.GroupVersionResource, error) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	res := metav1.APIResource{}
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		log.Info("err", "error", err.Error())
+		return schema.GroupVersionResource{}, err
 	}
-
-	log.Info("creating list watcher for ", "api version", client.APIVersion(), "resource", mapping.Resource.Resource, "namespace", namespace)
-
-	// listGVK := gvk.GroupVersion().WithKind(gvk.Kind + "List")
-	// listObj, err := scheme.Scheme.New(listGVK)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	lw := cache.NewListWatchFromClient(client, mapping.Resource.Resource, namespace, nil)
-	// lw := cache.ListWatch{
-	// 	ListFunc: func(opts metav1.ListOptions) (pkgruntime.Object, error) {
-	// 		log.Info("list function called")
-	// 		res := listObj.DeepCopyObject()
-	// 		isNamespaceScoped := namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-	// 		err := client.Get().Name(name).NamespaceIfScoped(namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, scheme.ParameterCodec).Do().Into(res)
-	// 		return res, err
-	// 	},
-	// 	WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-	// 		// Watch needs to be set to true separately
-	// 		log.Info("list function called")
-	// 		opts.Watch = true
-	// 		isNamespaceScoped := namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-	// 		return client.Get().Name(name).NamespaceIfScoped(namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, scheme.ParameterCodec).Watch()
-	// 	},
-	// }
-	return toolscache.NewSharedIndexInformer(lw, obj, defaultEventHandlerResyncPeriod, toolscache.Indexers{}), nil
+	resList, err := discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+	if err != nil {
+		log.Error(err, "unable to retrieve resouce list for:", "groupversion", gvk.GroupVersion().String())
+		return schema.GroupVersionResource{}, err
+	}
+	for _, resource := range resList.APIResources {
+		if resource.Kind == gvk.Kind && !strings.Contains(resource.Name, "/") {
+			res = resource
+			res.Group = gvk.Group
+			res.Version = gvk.Version
+			break
+		}
+	}
+	return schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: res.Name,
+	}, nil
 }
