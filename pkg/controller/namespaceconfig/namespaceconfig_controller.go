@@ -277,45 +277,6 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 	return nil
 }
 
-<<<<<<< HEAD
-func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
-	_, err := (*client).Create(obj, metav1.CreateOptions{})
-	if err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			// We need to update
-			obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			obj.SetResourceVersion(obj2.GetResourceVersion())
-			_, err = (*client).Update(obj, metav1.UpdateOptions{})
-		}
-	}
-	return err
-}
-=======
-// func createOrUpdate(client *dynamic.ResourceInterface, obj *unstructured.Unstructured) error {
-// 	obj2, err := (*client).Get(obj.GetName(), metav1.GetOptions{})
-// 	if apierrors.IsNotFound(err) {
-// 		_, err = (*client).Create(obj, metav1.CreateOptions{})
-// 		if err != nil {
-// 			log.Error(err, "unable to create object", "object", obj)
-// 		}
-// 		return err
-// 	}
-// 	if err == nil {
-// 		obj.SetResourceVersion(obj2.GetResourceVersion())
-// 		_, err = (*client).Update(obj, metav1.UpdateOptions{})
-// 		if err != nil {
-// 			log.Error(err, "unable to update object", "object", obj)
-// 		}
-// 		return err
-// 	}
-// 	log.Error(err, "unable to lookup object", "object", obj)
-// 	return err
-// }
->>>>>>> refactored to use new support for unstructured
-
 func findApplicableNameSpaceConfigs(namespace corev1.Namespace, c *client.Client) ([]redhatcopv1alpha1.NamespaceConfig, error) {
 	//find all the namespaceconfig
 	result := []redhatcopv1alpha1.NamespaceConfig{}
