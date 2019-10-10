@@ -22,7 +22,8 @@ import (
 
 // NewReconciler returns a new reconcile.Reconciler
 func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstructured) (reconcile.Reconciler, error) {
-	_, ok := object.UnstructuredContent()["spec"]
+	value, ok := object.UnstructuredContent()["spec"]
+	log.Info("NewLockedObjectReconciler called on", "type", object.GetObjectKind().GroupVersionKind().String(), "result", ok, "value", value)
 	if !ok {
 		switch object.GetObjectKind().GroupVersionKind() {
 		case (&corev1.Secret{}).GetObjectKind().GroupVersionKind():
@@ -37,8 +38,12 @@ func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstruct
 			break
 		case (&rbacv1.ClusterRole{}).GetObjectKind().GroupVersionKind():
 			break
+		case (&corev1.ServiceAccount{}).GetObjectKind().GroupVersionKind():
+			break
 		default:
-			return &LockedObjectReconciler{}, errors.New("non-standard resources (without the spec field) are not supported")
+			err := errors.New("non-standard resources (without the spec field) are not supported")
+			log.Error(err, "non-standard resources (without the spec field) are not supported", "type", object.GetObjectKind().GroupVersionKind())
+			return &LockedObjectReconciler{}, err
 		}
 	}
 
@@ -108,6 +113,8 @@ func (lor *LockedObjectReconciler) Reconcile(request reconcile.Request) (reconci
 			return lor.roleBindingSpecialHandling(instance)
 		case (&rbacv1.ClusterRole{}).GetObjectKind().GroupVersionKind():
 			return lor.roleSpecialHandling(instance)
+		case (&corev1.ServiceAccount{}).GetObjectKind().GroupVersionKind():
+			return lor.serviceAccountSpecialHandling(instance)
 		default:
 			return reconcile.Result{}, errors.New("non-standard resources (without the spec field) are not supported")
 		}
@@ -137,7 +144,7 @@ type resourceModifiedPredicate struct {
 
 // Update implements default UpdateEvent filter for validating resource version change
 func (p *resourceModifiedPredicate) Update(e event.UpdateEvent) bool {
-	log.Info("update called for", "event", e)
+	//log.Info("update called for", "event", e)
 	if e.MetaNew.GetNamespace() == p.namespace && e.MetaNew.GetName() == p.name {
 		// log.Info("type", "type", reflect.TypeOf(e.ObjectNew).String())
 		// old, ok := e.ObjectOld.(*unstructured.Unstructured)
@@ -155,13 +162,13 @@ func (p *resourceModifiedPredicate) Update(e event.UpdateEvent) bool {
 }
 
 func (p *resourceModifiedPredicate) Create(e event.CreateEvent) bool {
-	log.Info("create called for", "event", e)
+	//log.Info("create called for", "event", e)
 	//log.Info("type", "type", reflect.TypeOf(e.Object).String())
 	return false
 }
 
 func (p *resourceModifiedPredicate) Delete(e event.DeleteEvent) bool {
-	log.Info("delete called for", "event", e)
+	//log.Info("delete called for", "event", e)
 	if e.Meta.GetNamespace() == p.namespace && e.Meta.GetName() == p.name {
 		return true
 	}
@@ -219,11 +226,11 @@ func (lor *LockedObjectReconciler) roleSpecialHandling(instance *unstructured.Un
 
 func (lor *LockedObjectReconciler) roleBindingSpecialHandling(instance *unstructured.Unstructured) (reconcile.Result, error) {
 	tobeupdated := false
-	if reflect.DeepEqual(instance.UnstructuredContent()["roleref"], lor.Object.UnstructuredContent()["roleref"]) {
-		instance.UnstructuredContent()["roleref"] = lor.Object.UnstructuredContent()["roleref"]
-		tobeupdated = true
-	}
-	if reflect.DeepEqual(instance.UnstructuredContent()["subjects"], lor.Object.UnstructuredContent()["subjects"]) {
+	// if reflect.DeepEqual(instance.UnstructuredContent()["roleref"], lor.Object.UnstructuredContent()["roleref"]) {
+	// 	instance.UnstructuredContent()["roleref"] = lor.Object.UnstructuredContent()["roleref"]
+	// 	tobeupdated = true
+	// }
+	if !reflect.DeepEqual(instance.UnstructuredContent()["subjects"], lor.Object.UnstructuredContent()["subjects"]) {
 		instance.UnstructuredContent()["subjects"] = lor.Object.UnstructuredContent()["subjects"]
 		tobeupdated = true
 	}
@@ -233,5 +240,10 @@ func (lor *LockedObjectReconciler) roleBindingSpecialHandling(instance *unstruct
 			return reconcile.Result{}, err
 		}
 	}
+	return reconcile.Result{}, nil
+}
+
+func (lor *LockedObjectReconciler) serviceAccountSpecialHandling(instance *unstructured.Unstructured) (reconcile.Result, error) {
+	//service accounts are essentially read only
 	return reconcile.Result{}, nil
 }

@@ -269,7 +269,10 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 		if err != nil {
 			return err
 		}
-		r.addManagedObject(&obj)
+		err = r.addManagedObject(&obj)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -537,10 +540,12 @@ func (r *ReconcileNamespaceConfig) addManagedObject(object *unstructured.Unstruc
 	}
 	sm, err := mutil.NewStoppableManager(*r.GetManager())
 	if err != nil {
+		log.Error(err, "unable to create new manager")
 		return err
 	}
 	_, err = mutil.NewLockedObjectReconciler(sm.Manager, *object)
 	if err != nil {
+		log.Error(err, "unable to create new NewLockedObjectReconciler on", "object", object)
 		return err
 	}
 	managedObjects[mutil.GetKeyFromObject(object)] = sm
