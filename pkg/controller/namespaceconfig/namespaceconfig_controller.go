@@ -339,13 +339,34 @@ func getObjectsInNamespace(existingObjects []unstructured.Unstructured, namespac
 }
 
 func (r *ReconcileNamespaceConfig) deleteObject(obj unstructured.Unstructured) {
-	r.removeManagedObject(&obj)
-	err := r.DeleteResource(&obj)
+	log.Info("removing", "object", obj)
+	err := r.removeManagedObject(&obj)
+	if err != nil {
+		log.Error(err, "unable to renmove obj, ignoring...", "obj", obj)
+		return
+	}
+	log.Info("deleting", "object", obj)
+	err = r.DeleteResource(&obj)
 	if err != nil {
 		log.Error(err, "unable to delete obj, ignoring...", "obj", obj)
 		return
 	}
 }
+
+// DeleteResource deletes an existing resource. It doesn't fail if the resource does not exist
+// func (r *ReconcileNamespaceConfig) DeleteResource(obj metav1.Object) error {
+// 	runtimeObj, ok := (obj).(runtime.Object)
+// 	if !ok {
+// 		return fmt.Errorf("is not a %T a runtime.Object", obj)
+// 	}
+
+// 	err := r.GetClient().Delete(context.TODO(), runtimeObj)
+// 	if err != nil && !apierrors.IsNotFound(err) {
+// 		log.Error(err, "unable to delete object ", "object", runtimeObj)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func (r *ReconcileNamespaceConfig) deleteObjectsOnUncontrolledNamespaces(objects []unstructured.Unstructured, namespaces []corev1.Namespace) {
 	for _, obj := range objects {

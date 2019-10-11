@@ -5,8 +5,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/redhat-cop/operator-utils/pkg/util"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,27 +18,46 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+//workaround to weird secret behavior
+var serviceAccountGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Kind:    "ServiceAccount",
+}
+var secretGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Kind:    "Secret",
+}
+var configmapGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Kind:    "ConfigMap",
+}
+var roleGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Group:   "rbac.authorization.k8s.io",
+	Kind:    "Role",
+}
+var roleBindingGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Group:   "rbac.authorization.k8s.io",
+	Kind:    "RoleBinding",
+}
+
+type LockedObjectReconciler struct {
+	Object unstructured.Unstructured
+	util.ReconcilerBase
+}
+
 // NewReconciler returns a new reconcile.Reconciler
 func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstructured) (reconcile.Reconciler, error) {
 	value, ok := object.UnstructuredContent()["spec"]
 	log.Info("NewLockedObjectReconciler called on", "type", object.GetObjectKind().GroupVersionKind().String(), "result", ok, "value", value)
+
 	if !ok {
-		switch object.GetObjectKind().GroupVersionKind() {
-		case (&corev1.Secret{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&corev1.ConfigMap{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&rbacv1.RoleBinding{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&rbacv1.Role{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&rbacv1.ClusterRoleBinding{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&rbacv1.ClusterRole{}).GetObjectKind().GroupVersionKind():
-			break
-		case (&corev1.ServiceAccount{}).GetObjectKind().GroupVersionKind():
-			break
-		default:
+		if !reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), secretGVK) &&
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), configmapGVK) &&
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), roleGVK) &&
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), roleBindingGVK) &&
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), serviceAccountGVK) {
 			err := errors.New("non-standard resources (without the spec field) are not supported")
 			log.Error(err, "non-standard resources (without the spec field) are not supported", "type", object.GetObjectKind().GroupVersionKind())
 			return &LockedObjectReconciler{}, err
@@ -100,24 +117,23 @@ func (lor *LockedObjectReconciler) Reconcile(request reconcile.Request) (reconci
 
 	_, ok := instance.UnstructuredContent()["spec"]
 	if !ok {
-		switch instance.GetObjectKind().GroupVersionKind() {
-		case (&corev1.Secret{}).GetObjectKind().GroupVersionKind():
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), secretGVK) {
 			return lor.secretSpecialHandling(instance)
-		case (&corev1.ConfigMap{}).GetObjectKind().GroupVersionKind():
-			return lor.configmapSpecialHandling(instance)
-		case (&rbacv1.RoleBinding{}).GetObjectKind().GroupVersionKind():
-			return lor.roleBindingSpecialHandling(instance)
-		case (&rbacv1.Role{}).GetObjectKind().GroupVersionKind():
-			return lor.roleSpecialHandling(instance)
-		case (&rbacv1.ClusterRoleBinding{}).GetObjectKind().GroupVersionKind():
-			return lor.roleBindingSpecialHandling(instance)
-		case (&rbacv1.ClusterRole{}).GetObjectKind().GroupVersionKind():
-			return lor.roleSpecialHandling(instance)
-		case (&corev1.ServiceAccount{}).GetObjectKind().GroupVersionKind():
-			return lor.serviceAccountSpecialHandling(instance)
-		default:
-			return reconcile.Result{}, errors.New("non-standard resources (without the spec field) are not supported")
 		}
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), configmapGVK) {
+			return lor.configmapSpecialHandling(instance)
+		}
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), roleGVK) {
+			return lor.roleSpecialHandling(instance)
+		}
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), roleBindingGVK) {
+			return lor.roleBindingSpecialHandling(instance)
+		}
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), serviceAccountGVK) {
+			return lor.serviceAccountSpecialHandling(instance)
+		}
+
+		return reconcile.Result{}, errors.New("non-standard resources (without the spec field) are not supported")
 	}
 
 	if !reflect.DeepEqual(instance.UnstructuredContent()["spec"], lor.Object.UnstructuredContent()["spec"]) {

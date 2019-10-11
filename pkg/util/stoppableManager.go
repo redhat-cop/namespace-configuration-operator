@@ -1,8 +1,6 @@
 package util
 
 import (
-	"github.com/redhat-cop/operator-utils/pkg/util"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
@@ -31,9 +29,4 @@ func NewStoppableManager(parentManager manager.Manager) (StoppableManager, error
 		Manager:     manager,
 		stopChannel: make(chan struct{}),
 	}, nil
-}
-
-type LockedObjectReconciler struct {
-	Object unstructured.Unstructured
-	util.ReconcilerBase
 }
