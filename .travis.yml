@@ -2,14 +2,13 @@ sudo: required
 language: go
 go_import_path: github.com/redhat-cop/namespace-configuration-operator
 go:
-- "1.11"
+- "1.12"
 env:
-  - DEP_VERSION=0.5.0
+  - GO111MODULE=on
 
 before_install:
-  - curl -L -s https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64 -o $GOPATH/bin/dep
-  - chmod +x $GOPATH/bin/dep
-  - travis_retry dep ensure
+  - curl -LO https://git.io/get_helm.sh && chmod 700 get_helm.sh && ./get_helm.sh
+  - travis_retry go mod download
 
 deploy:
   - provider: script
