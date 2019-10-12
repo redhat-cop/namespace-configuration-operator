@@ -36,6 +36,17 @@ In this example a quota object is created.
 
 The namespace field of defined resources should not be specified and if it exists it will be overwritten with the namespace name of the namespace to which the configuration is being applied.
 
+Configuration resources created in the selected namespaces will be watched by the operator and reset to the desired state if changes occur.
+In particular only the `"spec"` section of the json file will be reset. The following objects which don't have the standard `spec` section are supported:
+
+* ServiceAccount
+* Configmap
+* Secret
+* Role
+* RoleBinding
+
+Any other objects that does not have the `spec` field is not supported and will result in an error. You are welcome to file requests for enhancement on non-standard resource types you'd like to be supported.
+
 ## Configuration Examples
 
 Here is a list of use cases in which the Namespace Configuration Controller can be useful.
@@ -332,14 +343,19 @@ oc apply -f deploy -n namespace-configuration-operator
 
 Execute the following steps to develop the functionality locally. It is recommended that development be done using a cluster with `cluster-admin` permissions.
 
-Clone the repository, then resolve all dependencies using `dep`:
+```shell
+go mod download
+```
+
+optionally:
 
 ```shell
-dep ensure
+go mod vendor
 ```
 
 Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), run the operator locally:
 
 ```shell
-operator-sdk up local
+oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
+OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose up local --namespace ""
 ```
