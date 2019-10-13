@@ -8,6 +8,23 @@ The `NamespaceConfig` CR allows specifying one or more objects that will be crea
 
 Dev teams may of may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
 
+## Deploying the Operator
+
+This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
+Here are the instructions to install the latest release
+
+```shell
+oc new-project namespace-configuration-operator
+helm repo add namespace-configuration-operator https://redhat-cop.github.io/namespace-configuration-operator
+helm repo update
+export namespace-configuration-operator_chart_version=$(helm search namespace-configuration-operator/namespace-configuration-operator | grep namespace-configuration-operator/namespace-configuration-operator | awk '{print $2}')
+helm fetch namespace-configuration-operator/namespace-configuration-operator --version ${namespace-configuration-operator}
+helm template namespace-configuration-operator-${namespace-configuration-operator}.tgz --namespace namespace-configuration-operator | oc apply -f - -n namespace-configuration-operator
+rm namespace-configuration-operator-${namespace-configuration-operator}.tgz
+```
+
+## Examples
+
 A `NamespaceConfig` CRD looks as follows:
 
 ```yaml

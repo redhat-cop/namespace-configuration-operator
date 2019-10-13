@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
@@ -265,11 +266,12 @@ func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Un
 		}
 		labels[operatorLabel] = label
 		obj.SetLabels(labels)
-		err := r.CreateOrUpdateResource(nil, namespace.GetName(), &obj)
+		obj2 := runtime.DeepCopyObject(obj)
+		err := r.CreateOrUpdateResource(nil, namespace.GetName(), &obj2)
 		if err != nil {
 			return err
 		}
-		err = r.addManagedObject(&obj)
+		err = r.addManagedObject(&obj2)
 		if err != nil {
 			return err
 		}
