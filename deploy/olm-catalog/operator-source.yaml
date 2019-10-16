@@ -6,6 +6,6 @@ metadata:
 spec:
   type: appregistry
   endpoint: https://quay.io/cnr
-  registryNamespace: <your-quay-repo>
+  registryNamespace: $quay_test_repo
   displayName: "namespace-configuration-operator"
   publisher: "CoP"

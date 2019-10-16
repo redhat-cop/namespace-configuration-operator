@@ -5,11 +5,19 @@ REPOSITORY ?= $(REGISTRY)/redhat-cop/namespace-configuration-operator
 
 IMG := $(REPOSITORY):latest
 
-VERSION := v0.0.1
+TRAVIS_TAG ?= latest
+
+VERSION := $(TRAVIS_TAG)
 
 BUILD_COMMIT := $(shell ./scripts/build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./scripts/build/get-build-timestamp.sh)
 BUILD_HOSTNAME := $(shell ./scripts/build/get-build-hostname.sh)
+
+export GITHUB_PAGES_DIR ?= /tmp/helm/publish
+export GITHUB_PAGES_BRANCH ?= gh-pages
+export GITHUB_PAGES_REPO ?= redhat-cop/namespace-configuration-operator
+export HELM_CHARTS_SOURCE ?= charts
+export HELM_CHART_DEST ?= $(GITHUB_PAGES_DIR)
 
 LDFLAGS := "-X github.com/redhat-cop/namespace-configuration-operator/version.Version=$(VERSION) \
 	-X github.com/redhat-cop/namespace-configuration-operator/version.Vcs=$(BUILD_COMMIT) \
@@ -58,19 +66,25 @@ docker-login:
 docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):dev
 
+docker-tag-latest:
+	@docker tag $(IMG) $(REPOSITORY):latest	
+
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
-	@docker tag $(IMG) $(REPOSITORY):latest	
+#	@docker tag $(IMG) $(REPOSITORY):latest	
 
 # Push for Dev
 docker-push-dev:  docker-tag-dev
 	@docker push $(REPOSITORY):dev
 
+docker-push-latest:  docker-tag-latest
+	@docker push $(REPOSITORY):latest	
+
 # Push for Release
 docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
-	@docker push $(REPOSITORY):latest
+#	@docker push $(REPOSITORY):latest
 
 # Build the docker image
 docker-build:
@@ -80,11 +94,16 @@ docker-build:
 docker-push:
 	docker push ${IMG}
 
+publish-chart-repo:
+	./scripts/build/checkout-rebase-pages.sh 
+	./scripts/build/build-chart-repo.sh 
+	./scripts/build/push-to-pages.sh 
+
 # Travis Latest Tag Deployment
-travis-latest-deploy: docker-login docker-build docker-push
+travis-latest-deploy: docker-login docker-build docker-push-latest
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build docker-push-dev
 
 # Travis Release
-travis-release-deploy: docker-login docker-build docker-push-release
+travis-release-deploy: docker-login docker-build docker-push-release publish-chart-repo

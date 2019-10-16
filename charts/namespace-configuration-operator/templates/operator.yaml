@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: namespace-configuration-operator
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:
@@ -16,7 +17,7 @@ spec:
       containers:
         - name: namespace-configuration-operator
           # Replace this with the built image name
-          image: quay.io/redhat-cop/namespace-configuration-operator:0.0.3
+          image: quay.io/redhat-cop/namespace-configuration-operator:{{ .Values.image_tag }}
           command:
           - namespace-configuration-operator
           imagePullPolicy: Always
