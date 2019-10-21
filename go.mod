@@ -15,6 +15,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
 	sigs.k8s.io/yaml v1.1.0
+	github.com/redhat-cop/operator-utils v0.1.0
 )
 
 // Pinned to kubernetes-1.13.4
