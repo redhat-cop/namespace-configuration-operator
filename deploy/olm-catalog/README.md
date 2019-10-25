@@ -64,7 +64,8 @@ Now you should see the operator in the operator catalog, follow the normal insta
 git -C /tmp clone https://github.com/operator-framework/community-operators
 git -C /tmp/community-operators remote add tmp https://github.com/${community_fork}/community-operators
 git -C /tmp/community-operators checkout -b namespace-configuration-operator-${new_version}
-operator-courier flatten deploy/olm-catalog/namespace-configuration-operator /tmp/community-operators/community-operators/namespace-configuration-operator
+rm -rf /tmp/community-operators/community-operators/namespace-configuration-operator/*
+cp -R deploy/olm-catalog/namespace-configuration-operator/* /tmp/community-operators/community-operators/namespace-configuration-operator
 git -C /tmp/community-operators add .
 git -C /tmp/community-operators commit -m "namespace-configuration-operator release ${new_version}"
 git -C /tmp/community-operators push tmp
