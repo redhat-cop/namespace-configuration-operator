@@ -2,8 +2,23 @@ apiVersion: v1
 entries:
   namespace-configuration-operator:
   - apiVersion: v1
+    appVersion: v0.1.0
+    created: "2019-10-26T01:34:27.053909118Z"
+    description: Helm chart that deploys namespace-configuration-operator
+    digest: 26c42d71a4630964b6448d0bab3de6a5c4940d4488212abbdfa9dcc9061c45cb
+    engine: gotpl
+    keywords:
+    - certificates
+    - operator
+    name: namespace-configuration-operator
+    sources:
+    - https://github.com/redhat-cop/namespace-configuration-operator
+    urls:
+    - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v0.1.0.tgz
+    version: v0.1.0
+  - apiVersion: v1
     appVersion: v0.0.2
-    created: "2019-10-17T01:38:20.720532645Z"
+    created: "2019-10-26T01:34:27.053594218Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: c0df6e91ea00a22bf19411e1363c540739afc431699cfbc58fdeaecbaa800749
     engine: gotpl
@@ -16,4 +31,4 @@ entries:
     urls:
     - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v0.0.2.tgz
     version: v0.0.2
-generated: "2019-10-17T01:38:20.71997806Z"
+generated: "2019-10-26T01:34:27.052940565Z"
