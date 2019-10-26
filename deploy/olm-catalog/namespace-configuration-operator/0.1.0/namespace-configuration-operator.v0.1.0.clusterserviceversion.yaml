@@ -89,7 +89,7 @@ spec:
                       fieldPath: metadata.name
                 - name: OPERATOR_NAME
                   value: namespace-configuration-operator
-                image: quay.io/redhat-cop/namespace-configuration-operator:0.1.0
+                image: quay.io/redhat-cop/namespace-configuration-operator:v0.1.0
                 imagePullPolicy: Always
                 name: namespace-configuration-operator
                 resources: {}
