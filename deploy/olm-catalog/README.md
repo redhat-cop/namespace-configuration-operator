@@ -67,7 +67,10 @@ git -C /tmp/community-operators checkout -b namespace-configuration-operator-${n
 rm -rf /tmp/community-operators/community-operators/namespace-configuration-operator/*
 cp -R deploy/olm-catalog/namespace-configuration-operator/* /tmp/community-operators/community-operators/namespace-configuration-operator
 git -C /tmp/community-operators add .
-git -C /tmp/community-operators commit -m "namespace-configuration-operator release ${new_version}"
+git -C /tmp/community-operators commit -m "namespace-configuration-operator release ${new_version}" -s
 git -C /tmp/community-operators push tmp
-hub -C /tmp/community-operators pull-request -m "namespace-configuration-operator release ${new_version}"
+# if first time
+hub -C /tmp/community-operators pull-request -F ./deploy/olm-catalog/pr-message-initial-commit.md
+# else
+hub -C /tmp/community-operators pull-request -F ./deploy/olm-catalog/pr-message-new-version.md
 ```
