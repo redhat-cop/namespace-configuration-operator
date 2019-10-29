@@ -1,7 +1,4 @@
-Thanks submitting your Operator. Please check below list before you create your Pull Request.
-*************************************************
-**Flat operator directory structure is obsolete from 23-rd of October 2019, only nested directory structure will be accepted.**
-*************************************************
+namespace-configuration-operator initial commit
 
 ### New Submissions
 
