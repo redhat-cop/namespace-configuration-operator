@@ -47,7 +47,7 @@ oc -n namespace-configuration-operator apply -f deploy
 
 ## Examples
 
-A `NamespaceConfig` CRD looks as follows:
+A `NamespaceConfig` CR looks as follows:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
@@ -85,6 +85,36 @@ In particular only the `"spec"` section of the json file will be reset. The foll
 * RoleBinding
 
 Any other objects that does not have the `spec` field is not supported and will result in an error. You are welcome to file requests for enhancement on non-standard resource types you'd like to be supported.
+
+### Selector: matchLabels vs matchExpressions
+
+The [selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) can be either a `matchLabel` or a `matchExpression`. For more information check the [k8s doc](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#resources-that-support-set-based-requirements) on this topic.
+
+A `NamespaceConfig` object using a `matchLabels` selector:
+
+```yaml
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: special-sa
+spec:
+  selector:
+    matchLabels:
+      special-sa: "true"
+```
+
+A `NamespaceConfig` object using a `matchExpressions` selector:
+
+```yaml
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: tier-config
+spec:
+  selector:
+    matchExpressions:
+      - {key: tier, operator: In, values: [gold,silver]}
+```
 
 ## Configuration Examples
 
