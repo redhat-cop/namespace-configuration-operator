@@ -11,16 +11,38 @@ Dev teams may of may not be granted permissions to create these objects. In case
 ## Deploying the Operator
 
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
-Here are the instructions to install the latest release
+
+You can either deploy it using [`Helm`](https://helm.sh/) or creating the manifests directly.
+
+NOTE:
+**Given that a number of elevated permissions are required to create resources at a cluster scope, the account you are currently logged in must have elevated rights.**
+
+### Deploying with Helm
+
+Here are the instructions to install the latest release with Helm.
 
 ```shell
 oc new-project namespace-configuration-operator
+
 helm repo add namespace-configuration-operator https://redhat-cop.github.io/namespace-configuration-operator
 helm repo update
 export namespace-configuration-operator_chart_version=$(helm search namespace-configuration-operator/namespace-configuration-operator | grep namespace-configuration-operator/namespace-configuration-operator | awk '{print $2}')
+
 helm fetch namespace-configuration-operator/namespace-configuration-operator --version ${namespace-configuration-operator}
 helm template namespace-configuration-operator-${namespace-configuration-operator}.tgz --namespace namespace-configuration-operator | oc apply -f - -n namespace-configuration-operator
+
 rm namespace-configuration-operator-${namespace-configuration-operator}.tgz
+```
+
+### Deploying directly with manifests
+
+Here are the instructions to install the latest release creating the manifest directly in OCP.
+
+```shell
+git clone git@github.com:redhat-cop/namespace-configuration-operator.git; cd namespace-configuration-operator
+oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
+oc new-project namespace-configuration-operator
+oc -n namespace-configuration-operator apply -f deploy
 ```
 
 ## Examples
@@ -339,21 +361,6 @@ oc delete -f examples/overcommit-limitrange.yaml -n test-namespace-config
 oc delete -f examples/multitenant-networkpolicy.yaml -n test-namespace-config
 oc delete -f examples/tshirt-quotas.yaml -n test-namespace-config
 oc delete project special-pod special-sa overcommit-project multitenant-project small-project large-project test-namespace-config
-```
-
-## Deploying the Operator
-
-This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
-
-```shell
-oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
-oc new-project namespace-configuration-operator
-```
-
-Deploy the cluster resources. Given that a number of elevated permissions are required to resources at a cluster scope the account you are currently logged in must have elevated rights.
-
-```shell
-oc apply -f deploy -n namespace-configuration-operator
 ```
 
 ## Local Development
