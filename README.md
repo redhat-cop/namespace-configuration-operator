@@ -261,7 +261,7 @@ oc label namespace overcommit-project overcommit=limited
 
 ### ServiceAccount with Special Permission
 
-Another scenario is an application needs to talk to the master API and needs to specific permissions to do that. As an example, we are creating a service account with the `registry-viewer` and `registry-editor` accounts. Here is what we can do:
+Another scenario is an application that needs to talk to the master API and needs specific permissions to do that. As an example, we are creating a service account with the `registry-viewer` and `registry-editor` accounts. Here is what we can do:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
@@ -301,7 +301,7 @@ spec:
       name: special-sa
 ```
 
-Here it is how it can be deployed:
+Here is how it can be deployed:
 
 ```shell
 oc apply -f examples/serviceaccount-permissions.yaml -n test-namespace-config
