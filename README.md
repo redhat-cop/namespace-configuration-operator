@@ -311,11 +311,11 @@ oc label namespace special-sa special-sa=true
 
 ## Pod with Special Permissions
 
-Another scenario is pod that need to run with special permissions, i.e. a custom PodSecurityPolicy and we don't want to give permission to the dev team to grant PodSecurityPolicy permissions.
-In OpenShift SCC have represented the PodSecurityPolicy since the beginning of the product.
-SCCs are not compatible with `namespace-configuration-operator` because of the way SCCs profiles are granted to serviceaccounts.
+Another scenario is a pod that needs to run with special permissions, i.e. a custom PodSecurityPolicy, and we don't want to give permission to the dev team to grant PodSecurityPolicy permissions.
+In OpenShift SCCs have represented the PodSecurityPolicy since the beginning of the product.
+SCCs are not compatible with `namespace-configuration-operator` because of the way SCC profiles are granted to serviceaccounts.
 With PodSecurityPolicy, this grant is done simply with a RoleBinding object.
-Here how this might work:
+Here is how this might work:
 
 ```yaml
 apiVersion: policy/v1beta1
