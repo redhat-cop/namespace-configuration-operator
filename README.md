@@ -6,7 +6,7 @@ The namespace configuration operator helps keeping a namespace's configuration a
 
 The `NamespaceConfig` CR allows specifying one or more objects that will be created in the selected namespaces.
 
-Dev teams may of may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
+Dev teams may or may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
 
 ## Deploying the Operator
 
