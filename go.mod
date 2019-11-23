@@ -1,12 +1,11 @@
 module github.com/redhat-cop/namespace-configuration-operator
 
 require (
-	github.com/NYTimes/gziphandler v1.0.1 // indirect
 	github.com/go-openapi/spec v0.19.0
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190820010559-640171cc31c8
 	github.com/pkg/errors v0.8.1
-	github.com/redhat-cop/operator-utils v0.0.0-20190918003210-ef655deaf0df
+	github.com/redhat-cop/operator-utils v0.1.0
 	github.com/spf13/pflag v1.0.3
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
@@ -15,7 +14,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
 	sigs.k8s.io/yaml v1.1.0
-	github.com/redhat-cop/operator-utils v0.1.0
 )
 
 // Pinned to kubernetes-1.13.4
@@ -37,3 +35,5 @@ replace (
 )
 
 replace github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.0
+
+go 1.13

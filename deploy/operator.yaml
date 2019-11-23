@@ -29,3 +29,7 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "namespace-configuration-operator"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace              
