@@ -127,7 +127,7 @@ oc new-project test-namespace-config
 
 ### T-Shirt Sized Quotas
 
-During the provisioning of the projects to dev teams some, organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
+During the provisioning of the projects to dev teams some organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
