@@ -180,8 +180,8 @@ oc label namespace small-project size=small
 ### Default Network Policy
 
 Network policy are like firewall rules. There can be some reasonable defaults.
-In most cases isolating one project from other projects is a good way to start. This in OpenShift is the default behavior of the multitenant SDN plugin.
-The configuration would look as follows:
+In most cases isolating one project from other projects is a good way to start. In OpenShift this is the default behavior of the multitenant SDN plugin.
+The configuration would be as follows:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
