@@ -6,7 +6,7 @@ The namespace configuration operator helps keeping a namespace's configuration a
 
 The `NamespaceConfig` CR allows specifying one or more objects that will be created in the selected namespaces.
 
-Dev teams may of may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
+Dev teams may or may not be granted permissions to create these objects. In case they haven't been granted permission, the namespace configuration operator can be a way to enforce namespace configuration policies and govern the way namespaces are configured.
 
 ## Deploying the Operator
 
@@ -127,7 +127,7 @@ oc new-project test-namespace-config
 
 ### T-Shirt Sized Quotas
 
-During the provisioning of the projects to dev teams some, organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
+During the provisioning of the projects to dev teams some organizations start with T-shirt sized quotas. Here is an example of how this can be done with the Namespace Configuration Controller
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
@@ -180,8 +180,8 @@ oc label namespace small-project size=small
 ### Default Network Policy
 
 Network policy are like firewall rules. There can be some reasonable defaults.
-In most cases isolating one project from other projects is a good way to start. This in OpenShift is the default behavior of the multitenant SDN plugin.
-The configuration would look as follows:
+In most cases isolating one project from other projects is a good way to start. In OpenShift this is the default behavior of the multitenant SDN plugin.
+The configuration would be as follows:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
@@ -261,7 +261,7 @@ oc label namespace overcommit-project overcommit=limited
 
 ### ServiceAccount with Special Permission
 
-Another scenario is an application needs to talk to the master API and needs to specific permissions to do that. As an example, we are creating a service account with the `registry-viewer` and `registry-editor` accounts. Here is what we can do:
+Another scenario is an application that needs to talk to the master API and needs specific permissions to do that. As an example, we are creating a service account with the `registry-viewer` and `registry-editor` accounts. Here is what we can do:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
@@ -301,7 +301,7 @@ spec:
       name: special-sa
 ```
 
-Here it is how it can be deployed:
+Here is how it can be deployed:
 
 ```shell
 oc apply -f examples/serviceaccount-permissions.yaml -n test-namespace-config
@@ -311,11 +311,11 @@ oc label namespace special-sa special-sa=true
 
 ## Pod with Special Permissions
 
-Another scenario is pod that need to run with special permissions, i.e. a custom PodSecurityPolicy and we don't want to give permission to the dev team to grant PodSecurityPolicy permissions.
-In OpenShift SCC have represented the PodSecurityPolicy since the beginning of the product.
-SCCs are not compatible with `namespace-configuration-operator` because of the way SCCs profiles are granted to serviceaccounts.
+Another scenario is a pod that needs to run with special permissions, i.e. a custom PodSecurityPolicy, and we don't want to give permission to the dev team to grant PodSecurityPolicy permissions.
+In OpenShift SCCs have represented the PodSecurityPolicy since the beginning of the product.
+SCCs are not compatible with `namespace-configuration-operator` because of the way SCC profiles are granted to serviceaccounts.
 With PodSecurityPolicy, this grant is done simply with a RoleBinding object.
-Here how this might work:
+Here is how this might work:
 
 ```yaml
 apiVersion: policy/v1beta1
