@@ -41,6 +41,11 @@ var roleBindingGVK = schema.GroupVersionKind{
 	Group:   "rbac.authorization.k8s.io",
 	Kind:    "RoleBinding",
 }
+var openShiftTemplateGVK = schema.GroupVersionKind{
+	Version: "v1",
+	Group:   "template.openshift.io",
+	Kind:    "Template",	
+}
 
 type LockedObjectReconciler struct {
 	Object unstructured.Unstructured
@@ -57,7 +62,8 @@ func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstruct
 			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), configmapGVK) &&
 			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), roleGVK) &&
 			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), roleBindingGVK) &&
-			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), serviceAccountGVK) {
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), serviceAccountGVK) &&
+			!reflect.DeepEqual(object.GetObjectKind().GroupVersionKind(), openShiftTemplateGVK) {
 			err := errors.New("non-standard resources (without the spec field) are not supported")
 			log.Error(err, "non-standard resources (without the spec field) are not supported", "type", object.GetObjectKind().GroupVersionKind())
 			return &LockedObjectReconciler{}, err
@@ -131,6 +137,9 @@ func (lor *LockedObjectReconciler) Reconcile(request reconcile.Request) (reconci
 		}
 		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), serviceAccountGVK) {
 			return lor.serviceAccountSpecialHandling(instance)
+		}
+		if reflect.DeepEqual(instance.GetObjectKind().GroupVersionKind(), openShiftTemplateGVK) {
+			return lor.openShiftTemplateSpecialHandling(instance)
 		}
 
 		return reconcile.Result{}, errors.New("non-standard resources (without the spec field) are not supported")
@@ -258,6 +267,31 @@ func (lor *LockedObjectReconciler) roleBindingSpecialHandling(instance *unstruct
 	}
 	return reconcile.Result{}, nil
 }
+
+func (lor *LockedObjectReconciler) openShiftTemplateSpecialHandling(instance *unstructured.Unstructured) (reconcile.Result, error) {
+	log.Info("Change Detected to Template Resource")
+	tobeupdated := false
+	if !reflect.DeepEqual(instance.UnstructuredContent()["objects"], lor.Object.UnstructuredContent()["objects"]) {
+		instance.UnstructuredContent()["objects"] = lor.Object.UnstructuredContent()["objects"]
+		tobeupdated = true
+	}
+	if !reflect.DeepEqual(instance.UnstructuredContent()["parameters"], lor.Object.UnstructuredContent()["parameters"]) {
+		instance.UnstructuredContent()["parameters"] = lor.Object.UnstructuredContent()["parameters"]
+		tobeupdated = true
+	}
+	if !reflect.DeepEqual(instance.GetAnnotations(), lor.Object.GetAnnotations()) {
+		instance.SetAnnotations(lor.Object.GetAnnotations())
+	 	tobeupdated = true
+	 }
+	if tobeupdated {
+		err := lor.CreateOrUpdateResource(nil, "", instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	return reconcile.Result{}, nil
+}
+
 
 func (lor *LockedObjectReconciler) serviceAccountSpecialHandling(instance *unstructured.Unstructured) (reconcile.Result, error) {
 	//service accounts are essentially read only
