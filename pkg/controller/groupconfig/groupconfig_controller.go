@@ -6,8 +6,11 @@ import (
 
 	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
+	"github.com/redhat-cop/namespace-configuration-operator/pkg/common"
+	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
+	"github.com/scylladb/go-set/strset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -21,9 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllername = "groupconfig-controller"
+const controllerName = "groupconfig-controller"
 
-var log = logf.Log.WithName("controllername")
+var log = logf.Log.WithName(controllerName)
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -39,7 +42,7 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileGroupConfig{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor(controllername)),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor(controllerName)),
 	}
 }
 
@@ -54,7 +57,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Create a new controller
-	c, err := controller.New("groupconfig-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -140,6 +143,33 @@ func (r *ReconcileGroupConfig) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if !r.IsInitialized(instance) {
+		err := r.GetClient().Update(context.TODO(), instance)
+		if err != nil {
+			log.Error(err, "unable to update instance", "instance", instance)
+			return r.ManageError(instance, err)
+		}
+		return reconcile.Result{}, nil
+	}
+
+	if util.IsBeingDeleted(instance) {
+		if !util.HasFinalizer(instance, controllerName) {
+			return reconcile.Result{}, nil
+		}
+		err := r.manageCleanUpLogic(instance)
+		if err != nil {
+			log.Error(err, "unable to delete instance", "instance", instance)
+			return r.ManageError(instance, err)
+		}
+		util.RemoveFinalizer(instance, controllerName)
+		err = r.GetClient().Update(context.TODO(), instance)
+		if err != nil {
+			log.Error(err, "unable to update instance", "instance", instance)
+			return r.ManageError(instance, err)
+		}
+		return reconcile.Result{}, nil
+	}
+
 	//get selected users
 	selectedGroups, err := r.getSelectedGroups(instance)
 	if err != nil {
@@ -217,4 +247,34 @@ func (r *ReconcileGroupConfig) findApplicableGroupConfigsGroupUser(group userv1.
 	}
 
 	return applicableGroupConfigs, nil
+}
+
+func (r *ReconcileGroupConfig) IsInitialized(instance *redhatcopv1alpha1.GroupConfig) bool {
+	needsUpdate := true
+	for i := range instance.Spec.Templates {
+		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
+		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
+			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
+			needsUpdate = false
+		}
+	}
+	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, controllerName) {
+		util.AddFinalizer(instance, controllerName)
+		needsUpdate = false
+	}
+	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, controllerName) {
+		util.RemoveFinalizer(instance, controllerName)
+		needsUpdate = false
+	}
+
+	return needsUpdate
+}
+
+func (r *ReconcileGroupConfig) manageCleanUpLogic(instance *redhatcopv1alpha1.GroupConfig) error {
+	err := r.Terminate(instance, true)
+	if err != nil {
+		log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
+		return err
+	}
+	return nil
 }
