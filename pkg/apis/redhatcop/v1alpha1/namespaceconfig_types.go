@@ -26,7 +26,7 @@ type NamespaceConfigStatus struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	// +kubebuilder:validation:Enum=Success,Failure
+	// +kubebuilder:validation:Enum=Success;Failure
 	Status     string      `json:"status,omitempty"`
 	LastUpdate metav1.Time `json:"lastUpdate,omitempty"`
 	Reason     string      `json:"reason,omitempty"`

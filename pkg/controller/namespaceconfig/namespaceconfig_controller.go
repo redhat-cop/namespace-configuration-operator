@@ -32,12 +32,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const controllerName = "namespace-config-operator"
 const operatorLabel = "namespace-config-operator.redhat-cop.io_owner"
 const finalizer = "namespace-config-operator"
 
 var managedObjects = map[string]mutil.StoppableManager{}
 
-var log = logf.Log.WithName("controller_namespaceconfig")
+var log = logf.Log.WithName(controllerName)
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -54,7 +55,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 	return &ReconcileNamespaceConfig{
-		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetRecorder("namespaceconfiguration-controller")),
+		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor(controllerName)),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
 		Manager:         mgr,
 	}
@@ -63,7 +64,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("namespaceconfig-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -249,7 +250,7 @@ func (r *ReconcileNamespaceConfig) getSelectedNamespaces(namespaceconfig *redhat
 		log.Error(err, "unable to create selector from label selector", "selector", &namespaceconfig.Spec.Selector)
 		return []corev1.Namespace{}, err
 	}
-	err = r.GetClient().List(context.TODO(), &client.ListOptions{LabelSelector: selector}, &nl)
+	err = r.GetClient().List(context.TODO(), &nl, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
 		log.Error(err, "unable to list namespaces with selector", "selector", selector)
 		return []corev1.Namespace{}, err
@@ -282,7 +283,7 @@ func findApplicableNameSpaceConfigs(namespace corev1.Namespace, c *client.Client
 	//find all the namespaceconfig
 	result := []redhatcopv1alpha1.NamespaceConfig{}
 	ncl := redhatcopv1alpha1.NamespaceConfigList{}
-	err := (*c).List(context.TODO(), &client.ListOptions{}, &ncl)
+	err := (*c).List(context.TODO(), &ncl, &client.ListOptions{})
 	if err != nil {
 		log.Error(err, "unable to retrieve the list of namespace configs")
 		return []redhatcopv1alpha1.NamespaceConfig{}, err
@@ -347,7 +348,7 @@ func (r *ReconcileNamespaceConfig) deleteObject(obj unstructured.Unstructured) {
 		return
 	}
 	log.Info("deleting", "object", obj)
-	err = r.DeleteResource(&obj)
+	err = r.DeleteResourceIfExists(&obj)
 	if err != nil {
 		log.Error(err, "unable to delete obj, ignoring...", "obj", obj)
 		return

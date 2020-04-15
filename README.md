@@ -411,7 +411,7 @@ Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), ru
 
 ```shell
 oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
-OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose up local --namespace ""
+OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose run  --local --namespace ""
 ```
 
 ## Release Process
