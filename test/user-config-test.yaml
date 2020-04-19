@@ -1,0 +1,29 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: UserConfig
+metadata:
+  name: test-user-config
+spec:
+  providerName: my-provider
+  templates:
+  - objectTemplate: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        annotations:
+        name: {{ .Name }}-sandbox
+  - objectTemplate: | 
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: standard-sandbox
+        namespace: {{ .Name }}-sandbox
+      spec:
+        hard:
+          pods: "4" 
+          requests.cpu: "1" 
+          requests.memory: 1Gi 
+          requests.ephemeral-storage: 2Gi 
+          limits.cpu: "2" 
+          limits.memory: 2Gi 
+          limits.ephemeral-storage: 4Gi        
+

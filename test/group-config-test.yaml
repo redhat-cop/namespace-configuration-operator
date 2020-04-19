@@ -1,0 +1,7 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: example-groupconfig
+spec:
+  # Add fields here
+  size: 3

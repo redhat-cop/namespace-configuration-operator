@@ -257,7 +257,7 @@ func (r *ReconcileUserConfig) getSelectedUsers(instance *redhatcopv1alpha1.UserC
 
 	for _, user := range userList.Items {
 		for _, identity := range identitiesList.Items {
-			if user.GetName() == identity.User.Name {
+			if user.GetUID() == identity.User.UID {
 				if matches(instance, identity) {
 					selectedUsers = append(selectedUsers, user)
 				}
