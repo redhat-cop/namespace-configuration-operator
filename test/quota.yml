@@ -1,0 +1,16 @@
+apiVersion: quota.openshift.io/v1
+kind: ClusterResourceQuota
+metadata:
+  name: ciao-quota
+spec:
+  quota:
+    hard:
+      pods: "4" 
+      requests.cpu: "1" 
+      requests.memory: 1Gi 
+      requests.ephemeral-storage: 2Gi 
+      limits.cpu: "2" 
+      limits.memory: 2Gi 
+      limits.ephemeral-storage: 4Gi
+  selector:
+    group: ciao

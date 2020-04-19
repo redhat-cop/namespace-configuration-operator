@@ -9,7 +9,6 @@ spec:
       apiVersion: v1
       kind: Namespace
       metadata:
-        annotations:
         name: {{ .Name }}-sandbox
   - objectTemplate: | 
       apiVersion: v1

@@ -1,7 +1,49 @@
 apiVersion: redhatcop.redhat.io/v1alpha1
 kind: GroupConfig
 metadata:
-  name: example-groupconfig
+  name: test-groupconfig
 spec:
-  # Add fields here
-  size: 3
+  labelSelector:
+    matchLabels:
+      type: team    
+  templates:
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-dev
+        labels:
+          group: {{ .Name }}  
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-qa
+        labels:
+          group: {{ .Name }}          
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-prod
+        labels:
+          group: {{ .Name }}                           
+    - objectTemplate: | 
+        apiVersion: quota.openshift.io/v1
+        kind: ClusterResourceQuota
+        metadata:
+          name: {{ .Name }}-quota
+        spec:
+          quota:
+            hard:
+              pods: "4" 
+              requests.cpu: "1" 
+              requests.memory: 1Gi 
+              requests.ephemeral-storage: 2Gi 
+              limits.cpu: "2" 
+              limits.memory: 2Gi 
+              limits.ephemeral-storage: 4Gi
+          selector:
+            labels:
+              matchLabels:
+                group: {{ .Name }}            

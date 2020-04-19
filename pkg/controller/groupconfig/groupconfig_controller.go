@@ -92,7 +92,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return reconcileRequests
 		})
 
-	// Watch for changes to User
+	// Watch for changes to group
 	err = c.Watch(&source.Kind{
 		Type: &userv1.Group{
 			TypeMeta: metav1.TypeMeta{
@@ -101,6 +101,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		}}, &handler.EnqueueRequestsFromMapFunc{
 		ToRequests: groupToGroupConfig,
 	})
+	if err != nil {
+		return err
+	}
+
+	//if interested in updates from the managed resources
+	// watch for changes in status in the locked resources
+	err = c.Watch(
+		&source.Channel{Source: reconcileGroupConfig.GetStatusChangeChannel()},
+		&handler.EnqueueRequestForObject{},
+	)
 	if err != nil {
 		return err
 	}
@@ -195,7 +205,7 @@ func (r *ReconcileGroupConfig) Reconcile(request reconcile.Request) (reconcile.R
 func (r *ReconcileGroupConfig) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplate(instance.Spec.Templates, group)
+		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, group)
 		if err != nil {
 			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
 			return []lockedresource.LockedResource{}, err

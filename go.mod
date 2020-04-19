@@ -6,7 +6,7 @@ require (
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/operator-framework/operator-sdk v0.16.0
 	github.com/pkg/errors v0.8.1
-	github.com/redhat-cop/operator-utils v0.2.0
+	github.com/redhat-cop/operator-utils v0.2.1
 	github.com/scylladb/go-set v1.0.2
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.0.0

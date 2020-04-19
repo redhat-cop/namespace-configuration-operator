@@ -137,6 +137,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	//if interested in updates from the managed resources
+	// watch for changes in status in the locked resources
+	err = c.Watch(
+		&source.Channel{Source: reconcileUserConfig.GetStatusChangeChannel()},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -227,7 +237,7 @@ func (r *ReconcileUserConfig) Reconcile(request reconcile.Request) (reconcile.Re
 func (r *ReconcileUserConfig) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, user := range users {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplate(instance.Spec.Templates, user)
+		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, user)
 		if err != nil {
 			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", user)
 			return []lockedresource.LockedResource{}, err
