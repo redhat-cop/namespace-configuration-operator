@@ -141,9 +141,6 @@ spec:
                 - objectTemplate
                 type: object
               type: array
-          required:
-          - annotationSelector
-          - labelSelector
           type: object
         status:
           description: GroupConfigStatus defines the observed state of GroupConfig

@@ -183,13 +183,13 @@ func (r *ReconcileGroupConfig) Reconcile(request reconcile.Request) (reconcile.R
 	//get selected users
 	selectedGroups, err := r.getSelectedGroups(instance)
 	if err != nil {
-		log.Error(err, "unable to get users selected by", "UserConfig", instance)
+		log.Error(err, "unable to get groups selected by", "GroupConfig", instance)
 		return r.ManageError(instance, err)
 	}
 
 	lockedResources, err := r.getResourceList(instance, selectedGroups)
 	if err != nil {
-		log.Error(err, "unable to process resources", "UserConfig", instance, "users", selectedGroups)
+		log.Error(err, "unable to process resources", "GroupConfig", instance, "groups", selectedGroups)
 		return r.ManageError(instance, err)
 	}
 

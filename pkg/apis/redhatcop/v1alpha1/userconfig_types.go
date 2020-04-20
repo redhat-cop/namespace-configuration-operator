@@ -19,25 +19,26 @@ type UserConfigSpec struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
 	// LabelSelector selects Users by label.
-	// +kubebuilder:validation:Required
-	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+	// +kubebuilder:validation:Optional
+	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// AnnotationSelector selects Users by annotation.
-	// +kubebuilder:validation:Required
-	AnnotationSelector metav1.LabelSelector `json:"annotationSelector"`
+	// +kubebuilder:validation:Optional
+	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
 	//IdentityExtraSelector allows you to specify a selector for the extra fields of the User's idenitities.
 	//If one of the user identities matches the selector the User is selected
 	//This condition is in OR with ProviderName
 	// +kubebuilder:validation:Optional
-	IdentityExtraFieldSelector metav1.LabelSelector `json:"identityExtraFieldSelector,omitempry"`
+	IdentityExtraFieldSelector metav1.LabelSelector `json:"identityExtraFieldSelector,omitempty"`
 
 	//ProviderName allows you to specify an idenitity provider. If a user logged in with that provider it is selected.
 	//This condition is in OR with IdentityExtraSelector
-	ProviderName string `json:"providerName,omitempry"`
+	// +kubebuilder:validation:Optional
+	ProviderName string `json:"providerName,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	Templates []apis.LockedResourceTemplate `json:"templates,omitempry"`
+	Templates []apis.LockedResourceTemplate `json:"templates,omitempty"`
 }
 
 // UserConfigStatus defines the observed state of UserConfig

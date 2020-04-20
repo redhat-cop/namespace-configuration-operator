@@ -175,13 +175,13 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 	//get selected users
 	selectedNamespaces, err := r.getSelectedNamespaces(instance)
 	if err != nil {
-		log.Error(err, "unable to get users selected by", "UserConfig", instance)
+		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
 		return r.ManageError(instance, err)
 	}
 
 	lockedResources, err := r.getResourceList(instance, selectedNamespaces)
 	if err != nil {
-		log.Error(err, "unable to process resources", "UserConfig", instance, "users", selectedNamespaces)
+		log.Error(err, "unable to process resources", "NamespaceConfig", instance, "namespaces", selectedNamespaces)
 		return r.ManageError(instance, err)
 	}
 

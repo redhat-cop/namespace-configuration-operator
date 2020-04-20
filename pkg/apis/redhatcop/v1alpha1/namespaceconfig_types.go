@@ -17,15 +17,15 @@ type NamespaceConfigSpec struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
 	// LabelSelector selects Namespaces by label.
-	// +kubebuilder:validation:Required
-	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+	// +kubebuilder:validation:Optional
+	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// AnnotationSelector selects Namespaces by annotation.
-	// +kubebuilder:validation:Required
-	AnnotationSelector metav1.LabelSelector `json:"annotationSelector"`
+	// +kubebuilder:validation:Optional
+	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	Templates []apis.LockedResourceTemplate `json:"templates,omitempry"`
+	Templates []apis.LockedResourceTemplate `json:"templates,omitempty"`
 }
 
 // NamespaceConfigStatus defines the observed state of NSConfig
