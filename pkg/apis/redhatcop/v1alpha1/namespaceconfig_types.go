@@ -1,42 +1,54 @@
 package v1alpha1
 
 import (
+	"github.com/redhat-cop/operator-utils/pkg/util/apis"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // NamespaceConfigSpec defines the desired state of NamespaceConfig
-// +k8s:openapi-gen=true
+// There are two selectors: "labelSelector", "annotationSelector".
+// Selectors are considered in AND, so if multiple are defined they must all be true for a Namespace to be selected.
 type NamespaceConfigSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	Selector  metav1.LabelSelector   `json:"selector,omitempty"`
-	Resources []runtime.RawExtension `json:"resources,omitempty"`
+	// LabelSelector selects Namespaces by label.
+	// +kubebuilder:validation:Required
+	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+
+	// AnnotationSelector selects Namespaces by annotation.
+	// +kubebuilder:validation:Required
+	AnnotationSelector metav1.LabelSelector `json:"annotationSelector"`
+
+	// +kubebuilder:validation:Optional
+	Templates []apis.LockedResourceTemplate `json:"templates,omitempry"`
 }
 
-// NamespaceConfigStatus defines the observed state of NamespaceConfig
-// +k8s:openapi-gen=true
+// NamespaceConfigStatus defines the observed state of NSConfig
 type NamespaceConfigStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	apis.EnforcingReconcileStatus `json:",inline"`
+}
 
-	// +kubebuilder:validation:Enum=Success;Failure
-	Status     string      `json:"status,omitempty"`
-	LastUpdate metav1.Time `json:"lastUpdate,omitempty"`
-	Reason     string      `json:"reason,omitempty"`
+func (m *NamespaceConfig) GetEnforcingReconcileStatus() apis.EnforcingReconcileStatus {
+	return m.Status.EnforcingReconcileStatus
+}
+
+func (m *NamespaceConfig) SetEnforcingReconcileStatus(reconcileStatus apis.EnforcingReconcileStatus) {
+	m.Status.EnforcingReconcileStatus = reconcileStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NamespaceConfig is the Schema for the namespaceconfigs API
-// +k8s:openapi-gen=true
+// NamespaceConfig is the Schema for the nsconfigs API
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:path=namespaceconfigs,scope=Cluster
 type NamespaceConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -47,7 +59,7 @@ type NamespaceConfig struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NamespaceConfigList contains a list of NamespaceConfig
+// NamespaceConfigList contains a list of NSConfig
 type NamespaceConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

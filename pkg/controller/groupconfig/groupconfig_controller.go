@@ -67,7 +67,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "GroupConfig",
 		},
-	}}, &handler.EnqueueRequestForObject{})
+	}}, &handler.EnqueueRequestForObject{}, util.ResourceGenerationOrFinalizerChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -76,12 +76,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		func(a handler.MapObject) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			group := a.Object.(*userv1.Group)
-			userConfigs, err := reconcileGroupConfig.findApplicableGroupConfigsGroupUser(*group)
+			groupConfigs, err := reconcileGroupConfig.findApplicableGroupConfigsFromGroup(*group)
 			if err != nil {
 				log.Error(err, "unable to find applicable GroupConfigs for", "group", group)
 				return []reconcile.Request{}
 			}
-			for _, userconfig := range userConfigs {
+			for _, userconfig := range groupConfigs {
 				reconcileRequests = append(reconcileRequests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      userconfig.GetName(),
@@ -218,24 +218,38 @@ func (r *ReconcileGroupConfig) getResourceList(instance *redhatcopv1alpha1.Group
 func (r *ReconcileGroupConfig) getSelectedGroups(instance *redhatcopv1alpha1.GroupConfig) ([]userv1.Group, error) {
 	groupList := &userv1.GroupList{}
 
-	selector, err := metav1.LabelSelectorAsSelector(&instance.Spec.LabelSelector)
+	labelSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.LabelSelector)
 	if err != nil {
 		log.Error(err, "unable to create ", "selector from", instance.Spec.LabelSelector)
 		return []userv1.Group{}, err
 	}
 
-	err = r.GetClient().List(context.TODO(), groupList, &client.ListOptions{
-		LabelSelector: selector,
-	})
+	annotationSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.AnnotationSelector)
 	if err != nil {
-		log.Error(err, "unable to get groups with", "selector", selector)
+		log.Error(err, "unable to create ", "selector from", instance.Spec.AnnotationSelector)
 		return []userv1.Group{}, err
 	}
 
-	return groupList.Items, nil
+	err = r.GetClient().List(context.TODO(), groupList, &client.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		log.Error(err, "unable to get groups with", "selector", labelSelector)
+		return []userv1.Group{}, err
+	}
+
+	selectedGroups := []userv1.Group{}
+	for _, group := range groupList.Items {
+		annotationsAsLabels := labels.Set(group.Annotations)
+		if annotationSelector.Matches(annotationsAsLabels) {
+			selectedGroups = append(selectedGroups, group)
+		}
+	}
+
+	return selectedGroups, nil
 }
 
-func (r *ReconcileGroupConfig) findApplicableGroupConfigsGroupUser(group userv1.Group) ([]redhatcopv1alpha1.GroupConfig, error) {
+func (r *ReconcileGroupConfig) findApplicableGroupConfigsFromGroup(group userv1.Group) ([]redhatcopv1alpha1.GroupConfig, error) {
 	groupConfigList := &redhatcopv1alpha1.GroupConfigList{}
 	err := r.GetClient().List(context.TODO(), groupConfigList, &client.ListOptions{})
 	if err != nil {
@@ -245,13 +259,21 @@ func (r *ReconcileGroupConfig) findApplicableGroupConfigsGroupUser(group userv1.
 	applicableGroupConfigs := []redhatcopv1alpha1.GroupConfig{}
 
 	for _, groupConfig := range groupConfigList.Items {
-		selector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.LabelSelector)
+		labelSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.LabelSelector)
 		if err != nil {
 			log.Error(err, "unable to create ", "selector from", groupConfig.Spec.LabelSelector)
 			return []redhatcopv1alpha1.GroupConfig{}, err
 		}
-		labels := labels.Set(group.GetLabels())
-		if selector.Matches(labels) {
+
+		annotationSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.AnnotationSelector)
+		if err != nil {
+			log.Error(err, "unable to create ", "selector from", groupConfig.Spec.AnnotationSelector)
+			return []redhatcopv1alpha1.GroupConfig{}, err
+		}
+
+		labelsAslabels := labels.Set(group.GetLabels())
+		annotationsAsLabels := labels.Set(group.GetAnnotations())
+		if labelSelector.Matches(labelsAslabels) && annotationSelector.Matches(annotationsAsLabels) {
 			applicableGroupConfigs = append(applicableGroupConfigs, groupConfig)
 		}
 	}

@@ -9,16 +9,28 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // UserConfigSpec defines the desired state of UserConfig
+// There are four selectors: "labelSelector", "annotationSelector", "identityExtraFieldSelector" and "providerName".
+// labelSelector and annoationSelector are matches against the User object
+// identityExtraFieldSelector and providerName are matched against any of the Identities associated with User
+// Selectors are considered in AND, so if multiple are defined tthey must all be true for a User to be selected.
 type UserConfigSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	//IdentityExtraSelector allows you to specify a selector for the extra field of the user idenitities.
-	//If one of the user identities matches the selector the user is selected
+	// LabelSelector selects Users by label.
+	// +kubebuilder:validation:Required
+	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+
+	// AnnotationSelector selects Users by annotation.
+	// +kubebuilder:validation:Required
+	AnnotationSelector metav1.LabelSelector `json:"annotationSelector"`
+
+	//IdentityExtraSelector allows you to specify a selector for the extra fields of the User's idenitities.
+	//If one of the user identities matches the selector the User is selected
 	//This condition is in OR with ProviderName
 	// +kubebuilder:validation:Optional
-	IdentityExtraSelector metav1.LabelSelector `json:"identityExtraSelector,omitempry"`
+	IdentityExtraFieldSelector metav1.LabelSelector `json:"identityExtraFieldSelector,omitempry"`
 
 	//ProviderName allows you to specify an idenitity provider. If a user logged in with that provider it is selected.
 	//This condition is in OR with IdentityExtraSelector

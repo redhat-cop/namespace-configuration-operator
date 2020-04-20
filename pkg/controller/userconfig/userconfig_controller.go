@@ -66,7 +66,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			TypeMeta: metav1.TypeMeta{
 				Kind: "UserConfig",
 			},
-		}}, &handler.EnqueueRequestForObject{})
+		}}, &handler.EnqueueRequestForObject{}, util.ResourceGenerationOrFinalizerChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		func(a handler.MapObject) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			user := a.Object.(*userv1.User)
-			userConfigs, err := reconcileUserConfig.findApplicableUserConfigsFromUser(*user)
+			userConfigs, err := reconcileUserConfig.findApplicableUserConfigsFromUser(user)
 			if err != nil {
 				log.Error(err, "unable to find applicable UserConfigs for", "user", user)
 				return []reconcile.Request{}
@@ -108,7 +108,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		func(a handler.MapObject) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			identity := a.Object.(*userv1.Identity)
-			userConfigs, err := reconcileUserConfig.findApplicableUserConfigsFromIdentities([]userv1.Identity{*identity})
+			user, err := reconcileUserConfig.findUserFromIdentity(identity)
+			if err != nil {
+				log.Error(err, "unable to find applicable User for", "identity", identity)
+				return []reconcile.Request{}
+			}
+			userConfigs, err := reconcileUserConfig.findApplicableUserConfigsFromIdentities(user, []userv1.Identity{*identity})
 			if err != nil {
 				log.Error(err, "unable to find applicable UserConfigs for", "identity", identity)
 				return []reconcile.Request{}
@@ -268,7 +273,7 @@ func (r *ReconcileUserConfig) getSelectedUsers(instance *redhatcopv1alpha1.UserC
 	for _, user := range userList.Items {
 		for _, identity := range identitiesList.Items {
 			if user.GetUID() == identity.User.UID {
-				if matches(instance, identity) {
+				if matches(instance, &user, &identity) {
 					selectedUsers = append(selectedUsers, user)
 				}
 			}
@@ -277,17 +282,33 @@ func (r *ReconcileUserConfig) getSelectedUsers(instance *redhatcopv1alpha1.UserC
 	return selectedUsers, nil
 }
 
-func matches(instance *redhatcopv1alpha1.UserConfig, indentity userv1.Identity) bool {
-	selector, err := metav1.LabelSelectorAsSelector(&instance.Spec.IdentityExtraSelector)
+func matches(instance *redhatcopv1alpha1.UserConfig, user *userv1.User, indentity *userv1.Identity) bool {
+	extraFieldSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.IdentityExtraFieldSelector)
 	if err != nil {
-		log.Error(err, "unable to create ", "selector from", instance.Spec.IdentityExtraSelector)
+		log.Error(err, "unable to create ", "selector from", instance.Spec.IdentityExtraFieldSelector)
 		return false
 	}
-	extraArgsLabels := labels.Set(indentity.Extra)
-	return selector.Matches(extraArgsLabels) || indentity.ProviderName == instance.Spec.ProviderName
+	labelSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.LabelSelector)
+	if err != nil {
+		log.Error(err, "unable to create ", "selector from", instance.Spec.LabelSelector)
+		return false
+	}
+	annotationSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.AnnotationSelector)
+	if err != nil {
+		log.Error(err, "unable to create ", "selector from", instance.Spec.AnnotationSelector)
+		return false
+	}
+
+	extraFieldAsLabels := labels.Set(indentity.Extra)
+	labelsAsLabels := labels.Set(user.Labels)
+	annotationsAsLabels := labels.Set(user.Annotations)
+	if instance.Spec.ProviderName != "" {
+		return extraFieldSelector.Matches(extraFieldAsLabels) && labelSelector.Matches(labelsAsLabels) && annotationSelector.Matches(annotationsAsLabels) && indentity.ProviderName == instance.Spec.ProviderName
+	}
+	return extraFieldSelector.Matches(extraFieldAsLabels) && labelSelector.Matches(labelsAsLabels) && annotationSelector.Matches(annotationsAsLabels)
 }
 
-func (r *ReconcileUserConfig) findApplicableUserConfigsFromIdentities(identities []userv1.Identity) ([]redhatcopv1alpha1.UserConfig, error) {
+func (r *ReconcileUserConfig) findApplicableUserConfigsFromIdentities(user *userv1.User, identities []userv1.Identity) ([]redhatcopv1alpha1.UserConfig, error) {
 	userConfigList := &redhatcopv1alpha1.UserConfigList{}
 	err := r.GetClient().List(context.TODO(), userConfigList, &client.ListOptions{})
 	if err != nil {
@@ -297,7 +318,7 @@ func (r *ReconcileUserConfig) findApplicableUserConfigsFromIdentities(identities
 	applicableUserConfigs := []redhatcopv1alpha1.UserConfig{}
 	for _, userConfig := range userConfigList.Items {
 		for _, identity := range identities {
-			if matches(&userConfig, identity) {
+			if matches(&userConfig, user, &identity) {
 				applicableUserConfigs = append(applicableUserConfigs, userConfig)
 			}
 		}
@@ -305,7 +326,7 @@ func (r *ReconcileUserConfig) findApplicableUserConfigsFromIdentities(identities
 	return applicableUserConfigs, nil
 }
 
-func (r *ReconcileUserConfig) findApplicableUserConfigsFromUser(user userv1.User) ([]redhatcopv1alpha1.UserConfig, error) {
+func (r *ReconcileUserConfig) findApplicableUserConfigsFromUser(user *userv1.User) ([]redhatcopv1alpha1.UserConfig, error) {
 	identitiesList := &userv1.IdentityList{}
 	err := r.GetClient().List(context.TODO(), identitiesList, &client.ListOptions{})
 	if err != nil {
@@ -314,11 +335,9 @@ func (r *ReconcileUserConfig) findApplicableUserConfigsFromUser(user userv1.User
 	}
 	matchingIdentities := []userv1.Identity{}
 	for _, identity := range identitiesList.Items {
-		if identity.User.Name == user.GetName() {
-			matchingIdentities = append(matchingIdentities, identity)
-		}
+		matchingIdentities = append(matchingIdentities, identity)
 	}
-	return r.findApplicableUserConfigsFromIdentities(matchingIdentities)
+	return r.findApplicableUserConfigsFromIdentities(user, matchingIdentities)
 }
 
 func (r *ReconcileUserConfig) IsInitialized(instance *redhatcopv1alpha1.UserConfig) bool {
@@ -349,4 +368,20 @@ func (r *ReconcileUserConfig) manageCleanUpLogic(instance *redhatcopv1alpha1.Use
 		return err
 	}
 	return nil
+}
+
+func (r *ReconcileUserConfig) findUserFromIdentity(identity *userv1.Identity) (*userv1.User, error) {
+	userList := &userv1.UserList{}
+	err := r.GetClient().List(context.TODO(), userList, &client.ListOptions{})
+	if err != nil {
+		log.Error(err, "unable to get all users")
+		return &userv1.User{}, err
+	}
+
+	for _, user := range userList.Items {
+		if user.GetUID() == identity.User.UID {
+			return &user, nil
+		}
+	}
+	return &userv1.User{}, errs.New("user not found")
 }

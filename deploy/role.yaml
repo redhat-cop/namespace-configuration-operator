@@ -23,3 +23,15 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - redhat-cop.redhat.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

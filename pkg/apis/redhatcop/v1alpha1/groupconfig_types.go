@@ -9,13 +9,20 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // GroupConfigSpec defines the desired state of GroupConfig
+// There are two selectors: "labelSelector", "annotationSelector".
+// Selectors are considered in AND, so if multiple are defined they must all be true for a Group to be selected.
 type GroupConfigSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
+	// LabelSelector selects Groups by label.
 	// +kubebuilder:validation:Required
 	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+
+	// AnnotationSelector selects Groups by annotation.
+	// +kubebuilder:validation:Required
+	AnnotationSelector metav1.LabelSelector `json:"annotationSelector"`
 
 	// +kubebuilder:validation:Optional
 	Templates []apis.LockedResourceTemplate `json:"templates,omitempry"`
