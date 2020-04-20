@@ -1,0 +1,14 @@
+---
+apiVersion: user.openshift.io/v1
+kind: User
+metadata:
+  name: test-user-config
+identities:
+  - my-provider:test-user-config  
+---
+apiVersion: user.openshift.io/v1
+kind: User
+metadata:
+  name: test-user-config2
+identities:
+  - my-provider:test-user-config2

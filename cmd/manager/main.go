@@ -20,6 +20,7 @@ import (
 	"github.com/redhat-cop/namespace-configuration-operator/pkg/controller"
 	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -175,10 +176,29 @@ func main() {
 func serveCRMetrics(cfg *rest.Config) error {
 	// Below function returns filtered operator/CustomResource specific GVKs.
 	// For more control override the below GVK list with your own custom logic.
-	filteredGVK, err := k8sutil.GetGVKsFromAddToScheme(apis.AddToScheme)
-	if err != nil {
-		return err
+	// filteredGVK, err := k8sutil.GetGVKsFromAddToScheme(apis.AddToScheme)
+	// if err != nil {
+	// 	return err
+	// }
+
+	filteredGVK := []schema.GroupVersionKind{
+		{
+			Group:   "redhatcop.redhat.io",
+			Version: "v1alpha1",
+			Kind:    "NamespaceConfig",
+		},
+		{
+			Group:   "redhatcop.redhat.io",
+			Version: "v1alpha1",
+			Kind:    "GroupConfig",
+		},
+		{
+			Group:   "redhatcop.redhat.io",
+			Version: "v1alpha1",
+			Kind:    "UserConfig",
+		},
 	}
+
 	// Get the namespace the operator is currently deployed in.
 	operatorNs, err := k8sutil.GetOperatorNamespace()
 	if err != nil {

@@ -379,6 +379,7 @@ func (r *ReconcileUserConfig) findUserFromIdentity(identity *userv1.Identity) (*
 	}
 
 	for _, user := range userList.Items {
+		log.V(1).Info("comparing", "user uid", user.GetUID(), " and identity uid", identity.User.UID)
 		if user.GetUID() == identity.User.UID {
 			return &user, nil
 		}

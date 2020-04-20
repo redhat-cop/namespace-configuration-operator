@@ -416,6 +416,34 @@ oc apply -f deploy/crds/redhatcop.redhat.io_userconfigs_crd.yaml
 OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose run  --local --watch-namespace "" --operator-flags="--zap-level=debug"
 ```
 
+## Test
+
+### Testing NamespaceConfig
+
+```shell
+oc apply -f ./test/namespace-config-test.yaml
+oc apply -f ./test/namespaces.yaml
+```
+
+### Testing GroupConfig
+
+```shell
+oc apply -f ./test/group-config-test.yaml
+oc apply -f ./test/groups.yaml
+```
+
+### Testing UserConfig
+
+```shell
+oc apply -f ./test/user-config-test.yaml
+oc apply -f ./test/users.yaml
+for username in test-user-config test-user-config2 ; do
+export username
+export uid=$(oc get user $username -o jsonpath='{.metadata.uid}')
+cat ./test/identities.yaml | envsubst | oc apply -f -
+done
+```
+
 ## Release Process
 
 To release execute the following:
