@@ -1,0 +1,9 @@
+apiVersion: user.openshift.io/v1
+kind: Identity
+metadata:
+  name: my-provider:${username}
+providerName: my-provider
+providerUserName: ${username}
+user:
+  name: ${username}
+  uid: ${uid}

@@ -24,7 +24,7 @@ spec:
             limits.ephemeral-storage: 4Gi
     - objectTemplate: |
         kind: EgressNetworkPolicy
-        apiVersion: network.openshift.io/v1
+        apiVersion: v1
         metadata:
           name: air-gapped
           namespace: {{ .Name }}  
