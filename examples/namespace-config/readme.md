@@ -1,7 +1,16 @@
 # NamespaceConfig Configuration Examples
 
-Here is a list of use cases in which the Namespace Configuration Controller can be useful.
+Here is a list of use cases in which the Namespace Configuration Controller can be useful:
+
+1. [T-Shirt Sized Quotas](#T-Shirt-Sized-Quotas)
+2. [Default Network Policy](#Default-Network-Policy)
+3. [Defining the Overcommitment Ratio](#Defining-the-Overcommitment-Ratio)
+4. [ServiceAccount with Special Permission](#ServiceAccount-with-Special-Permission)
+5. [Pod with Special Permissions](#Pod-with-Special-Permissions)
+
 This examples are ported from the previous version of the namespace-configuration-operator and can be used also as guidelines on how to perform the CR conversion.
+
+
 
 Examples will be deployed in the `test-namespace-config` (you can pick any other name):
 
