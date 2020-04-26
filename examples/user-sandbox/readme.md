@@ -36,7 +36,7 @@ spec:
       subjects:
       - kind: User
         apiGroup: rbac.authorization.k8s.io
-        name: {{ .Name }} 
+        name: {{ .Name }}
   - objectTemplate: |
       apiVersion: v1
       kind: ResourceQuota
@@ -94,7 +94,7 @@ Here is how you can test it:
 ```shell
 oc apply -f ./examples/user-sandbox/user-config.yaml
 oc apply -f ./examples/user-sandbox/users.yaml
-for username in test-user-config test-user-config2 ; do
+for username in user1 user2 ; do
 export username
 export uid=$(oc get user $username -o jsonpath='{.metadata.uid}')
 cat ./examples/user-sandbox/identities.yaml | envsubst | oc apply -f -

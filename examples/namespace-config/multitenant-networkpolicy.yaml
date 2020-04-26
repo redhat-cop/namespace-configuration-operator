@@ -1,0 +1,33 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: multitenant
+spec:
+  selector:
+    matchLabels:
+      multitenant: "true"  
+  templates:
+  - objectTemplate: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: allow-from-same-namespace
+      namespace: {{ .Name }}
+    spec:
+      podSelector:
+      ingress:
+      - from:
+        - podSelector: {}
+  - objectTemplate:  |     
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy    
+      metadata:
+        name: allow-from-default-namespace
+        namespace: {{ .Name }}
+      spec:
+        podSelector:
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                name: default        

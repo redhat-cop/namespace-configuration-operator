@@ -105,6 +105,8 @@ spec:
 
 Although not enforced by the operator the general expectation is that the NamespaceConfig CR will be used to create objects inside the selected namespace.
 
+Examples of NamespaceConfig usages can be found [here](./examples/namespace-config/readme.md)
+
 ## GroupConfig
 
 The `GroupConfig` CR allows specifying one or more objects that will be created in the selected Group.
