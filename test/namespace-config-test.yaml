@@ -1,0 +1,35 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: test-namespaceconfig
+spec:
+  labelSelector:
+    matchLabels:
+      type: secure    
+  templates:
+    - objectTemplate: |
+        apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: standard-sandbox
+          namespace: {{ .Name }}
+        spec:
+          hard:
+            pods: "4" 
+            requests.cpu: "1" 
+            requests.memory: 1Gi 
+            requests.ephemeral-storage: 2Gi 
+            limits.cpu: "2" 
+            limits.memory: 2Gi 
+            limits.ephemeral-storage: 4Gi
+    - objectTemplate: |
+        kind: EgressNetworkPolicy
+        apiVersion: v1
+        metadata:
+          name: air-gapped
+          namespace: {{ .Name }}  
+        spec:
+          egress:
+          - type: Deny
+            to:
+              cidrSelector: 0.0.0.0/0         

@@ -1,0 +1,123 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: team-onboarding
+spec:
+  labelSelector:
+    matchLabels:
+      type: devteam    
+  templates:
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-build
+        labels:
+          team: {{ .Name }}
+          type: build
+        annotations:
+          egressip-ipam-operator.redhat-cop.io/egressipam=egressip-ipam
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: {{ .Name }}-build
+          namespace: {{ .Name }}-build
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        subjects:
+        - kind: Group
+          apiGroup: rbac.authorization.k8s.io
+          name: {{ .Name }}           
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-dev
+        labels:
+          team: {{ .Name }}
+          type: run
+          stage: dev
+        annotations:
+          egressip-ipam-operator.redhat-cop.io/egressipam=egressip-ipam      
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: {{ .Name }}-dev
+          namespace: {{ .Name }}-dev
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin-no-build
+        subjects:
+        - kind: Group
+          apiGroup: rbac.authorization.k8s.io
+          name: {{ .Name }}               
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-qa
+        labels:
+          team: {{ .Name }}
+          type: run
+          stage: qa
+        annotations:
+          egressip-ipam-operator.redhat-cop.io/egressipam=egressip-ipam
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: {{ .Name }}-qa
+          namespace: {{ .Name }}-qa
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin-no-build
+        subjects:
+        - kind: Group
+          apiGroup: rbac.authorization.k8s.io
+          name: {{ .Name }}          
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ .Name }}-prod
+        labels:
+          team: {{ .Name }}
+          type: run
+          stage: prod     
+        annotations:
+          egressip-ipam-operator.redhat-cop.io/egressipam=egressip-ipam 
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: {{ .Name }}-prod
+          namespace: {{ .Name }}-prod
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin-no-build
+        subjects:
+        - kind: Group
+          apiGroup: rbac.authorization.k8s.io
+          name: {{ .Name }}                             
+    - objectTemplate: | 
+        apiVersion: quota.openshift.io/v1
+        kind: ClusterResourceQuota
+        metadata:
+          name: {{ .Name }}-quota
+        spec:
+          quota:
+            hard: 
+              requests.cpu: "50" 
+              requests.memory: 50Gi 
+              requests.ephemeral-storage: 50Gi 
+          selector:
+            labels:
+              matchLabels:
+                team: {{ .Name }}

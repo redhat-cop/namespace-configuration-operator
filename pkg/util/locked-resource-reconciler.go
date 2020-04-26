@@ -44,7 +44,7 @@ var roleBindingGVK = schema.GroupVersionKind{
 var openShiftTemplateGVK = schema.GroupVersionKind{
 	Version: "v1",
 	Group:   "template.openshift.io",
-	Kind:    "Template",	
+	Kind:    "Template",
 }
 
 type LockedObjectReconciler struct {
@@ -71,7 +71,7 @@ func NewLockedObjectReconciler(mgr manager.Manager, object unstructured.Unstruct
 	}
 
 	reconciler := &LockedObjectReconciler{
-		ReconcilerBase: util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetRecorder("controller_locked_object_"+GetKeyFromObject(&object))),
+		ReconcilerBase: util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor("controller_locked_object_"+GetKeyFromObject(&object))),
 		Object:         object,
 	}
 
@@ -281,8 +281,8 @@ func (lor *LockedObjectReconciler) openShiftTemplateSpecialHandling(instance *un
 	}
 	if !reflect.DeepEqual(instance.GetAnnotations(), lor.Object.GetAnnotations()) {
 		instance.SetAnnotations(lor.Object.GetAnnotations())
-	 	tobeupdated = true
-	 }
+		tobeupdated = true
+	}
 	if tobeupdated {
 		err := lor.CreateOrUpdateResource(nil, "", instance)
 		if err != nil {
@@ -291,7 +291,6 @@ func (lor *LockedObjectReconciler) openShiftTemplateSpecialHandling(instance *un
 	}
 	return reconcile.Result{}, nil
 }
-
 
 func (lor *LockedObjectReconciler) serviceAccountSpecialHandling(instance *unstructured.Unstructured) (reconcile.Result, error) {
 	//service accounts are essentially read only

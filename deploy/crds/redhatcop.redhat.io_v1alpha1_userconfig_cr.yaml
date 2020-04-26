@@ -1,0 +1,7 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: UserConfig
+metadata:
+  name: example-userconfig
+spec:
+  # Add fields here
+  size: 3

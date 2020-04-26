@@ -2,42 +2,32 @@ package namespaceconfig
 
 import (
 	"context"
-	"encoding/json"
-	"math"
-	"reflect"
+	"errors"
 	"strings"
-	"time"
 
-	multierror "github.com/hashicorp/go-multierror"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/pkg/apis/redhatcop/v1alpha1"
-	mutil "github.com/redhat-cop/namespace-configuration-operator/pkg/util"
+	"github.com/redhat-cop/namespace-configuration-operator/pkg/common"
 	"github.com/redhat-cop/operator-utils/pkg/util"
+	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
+	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
+	"github.com/scylladb/go-set/strset"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/yaml"
 )
 
-const operatorLabel = "namespace-config-operator.redhat-cop.io_owner"
-const finalizer = "namespace-config-operator"
+const controllerName = "namespace-config-operator"
 
-var managedObjects = map[string]mutil.StoppableManager{}
-
-var log = logf.Log.WithName("controller_namespaceconfig")
+var log = logf.Log.WithName(controllerName)
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -54,22 +44,28 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 	return &ReconcileNamespaceConfig{
-		ReconcilerBase:  util.NewReconcilerBase(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetRecorder("namespaceconfiguration-controller")),
-		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
-		Manager:         mgr,
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor(controllerName)),
 	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	reconcileNamespaceConfig, ok := r.(*ReconcileNamespaceConfig)
+	if !ok {
+		return errors.New("unable to convert to ReconcileNamespaceConfig")
+	}
 	// Create a new controller
-	c, err := controller.New("namespaceconfig-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to primary resource NamespaceConfig
-	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{}}, &handler.EnqueueRequestForObject{}, resourceGenerationOrFinalizerChangedPredicate{})
+	err = c.Watch(&source.Kind{Type: &redhatcopv1alpha1.NamespaceConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "NamespaceConfig",
+		},
+	}}, &handler.EnqueueRequestForObject{}, util.ResourceGenerationOrFinalizerChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -78,8 +74,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		func(a handler.MapObject) []reconcile.Request {
 			res := []reconcile.Request{}
 			ns := a.Object.(*corev1.Namespace)
-			client := mgr.GetClient()
-			ncl, err := findApplicableNameSpaceConfigs(*ns, &client)
+			ncl, err := reconcileNamespaceConfig.findApplicableNameSpaceConfigs(*ns)
 			if err != nil {
 				log.Error(err, "unable to find applicable NamespaceConfig for namespace", "namespace", ns.Name)
 				return []reconcile.Request{}
@@ -97,12 +92,23 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner NamespaceConfig
-	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Namespace",
+		},
+	}}, &handler.EnqueueRequestsFromMapFunc{
 		ToRequests: namespaceToNamespaceConfig,
 	})
 	if err != nil {
 		return err
 	}
+
+	//if interested in updates from the managed resources
+	// watch for changes in status in the locked resources
+	err = c.Watch(
+		&source.Channel{Source: reconcileNamespaceConfig.GetStatusChangeChannel()},
+		&handler.EnqueueRequestForObject{},
+	)
 
 	return nil
 }
@@ -111,13 +117,7 @@ var _ reconcile.Reconciler = &ReconcileNamespaceConfig{}
 
 // ReconcileNamespaceConfig reconciles a NamespaceConfig object
 type ReconcileNamespaceConfig struct {
-	util.ReconcilerBase
-	discovery.DiscoveryClient
-	Manager manager.Manager
-}
-
-func (r *ReconcileNamespaceConfig) GetManager() *manager.Manager {
-	return &r.Manager
+	lockedresourcecontroller.EnforcingReconciler
 }
 
 // Reconcile reads that state of the cluster for a NamespaceConfig object and makes changes based on the state read
@@ -145,408 +145,164 @@ func (r *ReconcileNamespaceConfig) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// if isNotValid(instance) {
-	// 	//record event
-	// 	//update status
-	// 	//return with time
-	// }
-
-	// if !isInitliazed(instance) {
-	// 	err := r.GetClient().Update(context.TODO(), instance)
-	// 	if err != nil {
-	// 		log.Error(err, "unable to update instance", "instance", instance)
-	// 		return reconcile.Result{}, err
-	// 	}
-	// 	return reconcile.Result{}, nil
-	// }
-
-	//namespaces selected by this instance
-	namespaces, err := r.getSelectedNamespaces(instance)
-	if err != nil {
-		log.Error(err, "unable to retrieve the list of selected namespaces", "selector", instance.Spec.Selector)
-		return r.manageError(err, instance)
-	}
-	ownerLabelValue := instance.GetNamespace() + "-" + instance.GetName()
-	ownerSelector := operatorLabel + "=" + ownerLabelValue
-	// object defined by this instance
-	objects, err := getObjects(instance)
-	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, finalizer) {
-			return reconcile.Result{}, nil
-		}
-		resources, _, err := r.getKnowTypes()
-		if err == nil {
-			//log.Info("known types", "known types", resources)
-			labeledObjects := r.findAllLabeledObjects(resources, ownerSelector)
-			//log.Info("deleting labeled objects", "objs", labeledObjects)
-			for _, obj := range labeledObjects {
-				r.deleteObject(obj)
-			}
-			util.RemoveFinalizer(instance, finalizer)
-			err := r.GetClient().Update(context.TODO(), instance)
-			if err != nil {
-				log.Error(err, "unable to update instance", "instance", instance)
-				return r.manageError(err, instance)
-			}
-			return reconcile.Result{}, nil
-		}
-	}
-	if !util.HasFinalizer(instance, finalizer) {
-		util.AddFinalizer(instance, finalizer)
+	if !r.IsInitialized(instance) {
 		err := r.GetClient().Update(context.TODO(), instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.manageError(err, instance)
+			return r.ManageError(instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
-	// know types in this cluster
-	resources, _, err := r.getKnowTypes()
-	if err == nil {
-		// object owned by this instance (will include legit and illegit ones)
-		labeledObjects := r.findAllLabeledObjects(resources, ownerSelector)
-		r.deleteObjectsOnControlledNamespaces(labeledObjects, objects, namespaces)
-		r.deleteObjectsOnUncontrolledNamespaces(labeledObjects, namespaces)
-	} else {
-		log.Error(err, "unable to retrive known types, ignoring delete phase ...")
-	}
-	var err1 *multierror.Error
-	for _, ns := range namespaces {
-		err := r.applyConfigToNamespace(objects, ns, ownerLabelValue)
-		if err != nil {
-			err1 = multierror.Append(err1, err)
-		}
-	}
-	if err1.ErrorOrNil() != nil {
-		return r.manageError(err1.ErrorOrNil(), instance)
-	}
-	return r.manageSuccess(instance)
-}
 
-func getObjects(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]unstructured.Unstructured, error) {
-	objs := []unstructured.Unstructured{}
-	for _, raw := range namespaceconfig.Spec.Resources {
-		bb, err := yaml.YAMLToJSON(raw.Raw)
-		if err != nil {
-			log.Error(err, "Error transforming yaml to json", "raw", raw.Raw)
-			return []unstructured.Unstructured{}, err
+	if util.IsBeingDeleted(instance) {
+		if !util.HasFinalizer(instance, controllerName) {
+			return reconcile.Result{}, nil
 		}
-		obj := unstructured.Unstructured{}
-		err = json.Unmarshal(bb, &obj)
+		err := r.manageCleanUpLogic(instance)
 		if err != nil {
-			log.Error(err, "Error unmarshalling json manifest", "manifest", string(bb))
-			return []unstructured.Unstructured{}, err
+			log.Error(err, "unable to delete instance", "instance", instance)
+			return r.ManageError(instance, err)
 		}
-		objs = append(objs, obj)
+		util.RemoveFinalizer(instance, controllerName)
+		err = r.GetClient().Update(context.TODO(), instance)
+		if err != nil {
+			log.Error(err, "unable to update instance", "instance", instance)
+			return r.ManageError(instance, err)
+		}
+		return reconcile.Result{}, nil
 	}
-	return objs, nil
-}
 
-func (r *ReconcileNamespaceConfig) getSelectedNamespaces(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {
-	nl := corev1.NamespaceList{}
-	selector, err := metav1.LabelSelectorAsSelector(&namespaceconfig.Spec.Selector)
+	//get selected users
+	selectedNamespaces, err := r.getSelectedNamespaces(instance)
 	if err != nil {
-		log.Error(err, "unable to create selector from label selector", "selector", &namespaceconfig.Spec.Selector)
-		return []corev1.Namespace{}, err
+		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
+		return r.ManageError(instance, err)
 	}
-	err = r.GetClient().List(context.TODO(), &client.ListOptions{LabelSelector: selector}, &nl)
+
+	lockedResources, err := r.getResourceList(instance, selectedNamespaces)
 	if err != nil {
-		log.Error(err, "unable to list namespaces with selector", "selector", selector)
-		return []corev1.Namespace{}, err
+		log.Error(err, "unable to process resources", "NamespaceConfig", instance, "namespaces", selectedNamespaces)
+		return r.ManageError(instance, err)
 	}
-	return nl.Items, nil
+
+	err = r.UpdateLockedResources(instance, lockedResources)
+	if err != nil {
+		log.Error(err, "unable to update locked resources")
+		return r.ManageError(instance, err)
+	}
+
+	return r.ManageSuccess(instance)
 }
 
-func (r *ReconcileNamespaceConfig) applyConfigToNamespace(objs []unstructured.Unstructured, namespace corev1.Namespace, label string) error {
-	for _, obj := range objs {
-		labels := obj.GetLabels()
-		if labels == nil {
-			labels = map[string]string{}
-		}
-		labels[operatorLabel] = label
-		obj.SetLabels(labels)
-		obj2 := obj.DeepCopy()
-		err := r.CreateOrUpdateResource(nil, namespace.GetName(), obj2)
-		if err != nil {
-			return err
-		}
-		err = r.addManagedObject(obj2)
-		if err != nil {
-			return err
-		}
+func (r *ReconcileNamespaceConfig) manageCleanUpLogic(instance *redhatcopv1alpha1.NamespaceConfig) error {
+	err := r.Terminate(instance, true)
+	if err != nil {
+		log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
+		return err
 	}
 	return nil
 }
 
-func findApplicableNameSpaceConfigs(namespace corev1.Namespace, c *client.Client) ([]redhatcopv1alpha1.NamespaceConfig, error) {
+func (r *ReconcileNamespaceConfig) IsInitialized(instance *redhatcopv1alpha1.NamespaceConfig) bool {
+	needsUpdate := true
+	for i := range instance.Spec.Templates {
+		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
+		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
+			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
+			needsUpdate = false
+		}
+	}
+	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, controllerName) {
+		util.AddFinalizer(instance, controllerName)
+		needsUpdate = false
+	}
+	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, controllerName) {
+		util.RemoveFinalizer(instance, controllerName)
+		needsUpdate = false
+	}
+
+	return needsUpdate
+}
+
+func (r *ReconcileNamespaceConfig) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, groups []corev1.Namespace) ([]lockedresource.LockedResource, error) {
+	lockedresources := []lockedresource.LockedResource{}
+	for _, group := range groups {
+		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, group)
+		if err != nil {
+			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
+			return []lockedresource.LockedResource{}, err
+		}
+		lockedresources = append(lockedresources, lrs...)
+	}
+	return lockedresources, nil
+}
+
+func (r *ReconcileNamespaceConfig) getSelectedNamespaces(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {
+	nl := corev1.NamespaceList{}
+	selector, err := metav1.LabelSelectorAsSelector(&namespaceconfig.Spec.LabelSelector)
+	if err != nil {
+		log.Error(err, "unable to create selector from label selector", "selector", &namespaceconfig.Spec.LabelSelector)
+		return []corev1.Namespace{}, err
+	}
+
+	annotationSelector, err := metav1.LabelSelectorAsSelector(&namespaceconfig.Spec.AnnotationSelector)
+	if err != nil {
+		log.Error(err, "unable to create ", "selector from", namespaceconfig.Spec.AnnotationSelector)
+		return []corev1.Namespace{}, err
+	}
+
+	err = r.GetClient().List(context.TODO(), &nl, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		log.Error(err, "unable to list namespaces with selector", "selector", selector)
+		return []corev1.Namespace{}, err
+	}
+
+	selectedNamespaces := []corev1.Namespace{}
+
+	for _, namespace := range nl.Items {
+		annotationsAsLabels := labels.Set(namespace.Annotations)
+		if annotationSelector.Matches(annotationsAsLabels) && !isProhibitedNamespaceName(namespace.GetName()) {
+			selectedNamespaces = append(selectedNamespaces, namespace)
+		}
+	}
+
+	return selectedNamespaces, nil
+}
+
+func (r *ReconcileNamespaceConfig) findApplicableNameSpaceConfigs(namespace corev1.Namespace) ([]redhatcopv1alpha1.NamespaceConfig, error) {
+	if isProhibitedNamespaceName(namespace.GetName()) {
+		return []redhatcopv1alpha1.NamespaceConfig{}, nil
+	}
 	//find all the namespaceconfig
 	result := []redhatcopv1alpha1.NamespaceConfig{}
 	ncl := redhatcopv1alpha1.NamespaceConfigList{}
-	err := (*c).List(context.TODO(), &client.ListOptions{}, &ncl)
+	err := r.GetClient().List(context.TODO(), &ncl, &client.ListOptions{})
 	if err != nil {
 		log.Error(err, "unable to retrieve the list of namespace configs")
 		return []redhatcopv1alpha1.NamespaceConfig{}, err
 	}
 	//for each namespaceconfig see if it selects the namespace
 	for _, nc := range ncl.Items {
-		selector, err := metav1.LabelSelectorAsSelector(&nc.Spec.Selector)
+		labelSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.LabelSelector)
 		if err != nil {
-			log.Error(err, "unable to create selector from label selector", "selector", &nc.Spec.Selector)
+			log.Error(err, "unable to create selector from label selector", "selector", &nc.Spec.LabelSelector)
 			return []redhatcopv1alpha1.NamespaceConfig{}, err
 		}
-		if selector.Matches(labels.Set(namespace.Labels)) {
+		annotationSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.AnnotationSelector)
+		if err != nil {
+			log.Error(err, "unable to create ", "selector from", nc.Spec.AnnotationSelector)
+			return []redhatcopv1alpha1.NamespaceConfig{}, err
+		}
+
+		labelsAslabels := labels.Set(namespace.GetLabels())
+		annotationsAsLabels := labels.Set(namespace.GetAnnotations())
+		if labelSelector.Matches(labelsAslabels) && annotationSelector.Matches(annotationsAsLabels) {
 			result = append(result, nc)
 		}
 	}
 	return result, nil
 }
 
-func (r *ReconcileNamespaceConfig) deleteObjectsOnControlledNamespaces(existingObjects []unstructured.Unstructured, requestedObjects []unstructured.Unstructured, namespaces []corev1.Namespace) {
-	for _, ns := range namespaces {
-		objInNamespace := getObjectsInNamespace(existingObjects, ns)
-		toBeDeletedObjects := leftOuterJoin(objInNamespace, requestedObjects)
-		for _, obj := range toBeDeletedObjects {
-			r.deleteObject(obj)
-		}
-	}
+func isProhibitedNamespaceName(name string) bool {
+	return name == "default" || strings.HasPrefix(name, "openshift") || strings.HasPrefix(name, "kube")
 }
-
-func leftOuterJoin(left []unstructured.Unstructured, right []unstructured.Unstructured) []unstructured.Unstructured {
-	res := []unstructured.Unstructured{}
-	for _, leftObj := range left {
-		for _, rightObj := range right {
-			if sameObj(leftObj, rightObj) {
-				res = append(res, leftObj)
-			}
-		}
-	}
-	return res
-}
-
-func sameObj(left unstructured.Unstructured, right unstructured.Unstructured) bool {
-	return left.GetName() == right.GetName() &&
-		left.GetNamespace() == right.GetNamespace() &&
-		left.GetObjectKind().GroupVersionKind().GroupKind() == right.GetObjectKind().GroupVersionKind().GroupKind()
-}
-
-func getObjectsInNamespace(existingObjects []unstructured.Unstructured, namespace corev1.Namespace) []unstructured.Unstructured {
-	res := []unstructured.Unstructured{}
-	for _, obj := range existingObjects {
-		if obj.GetNamespace() == namespace.Name {
-			res = append(res, obj)
-		}
-	}
-	return res
-}
-
-func (r *ReconcileNamespaceConfig) deleteObject(obj unstructured.Unstructured) {
-	log.Info("removing", "object", obj)
-	err := r.removeManagedObject(&obj)
-	if err != nil {
-		log.Error(err, "unable to renmove obj, ignoring...", "obj", obj)
-		return
-	}
-	log.Info("deleting", "object", obj)
-	err = r.DeleteResource(&obj)
-	if err != nil {
-		log.Error(err, "unable to delete obj, ignoring...", "obj", obj)
-		return
-	}
-}
-
-// DeleteResource deletes an existing resource. It doesn't fail if the resource does not exist
-// func (r *ReconcileNamespaceConfig) DeleteResource(obj metav1.Object) error {
-// 	runtimeObj, ok := (obj).(runtime.Object)
-// 	if !ok {
-// 		return fmt.Errorf("is not a %T a runtime.Object", obj)
-// 	}
-
-// 	err := r.GetClient().Delete(context.TODO(), runtimeObj)
-// 	if err != nil && !apierrors.IsNotFound(err) {
-// 		log.Error(err, "unable to delete object ", "object", runtimeObj)
-// 		return err
-// 	}
-// 	return nil
-// }
-
-func (r *ReconcileNamespaceConfig) deleteObjectsOnUncontrolledNamespaces(objects []unstructured.Unstructured, namespaces []corev1.Namespace) {
-	for _, obj := range objects {
-		if !isNamespaceInSet(namespaces, obj.GetNamespace()) {
-			r.deleteObject(obj)
-		}
-	}
-}
-
-func isNamespaceInSet(namespaces []corev1.Namespace, namespace string) bool {
-	for _, ns := range namespaces {
-		if ns.Name == namespace {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *ReconcileNamespaceConfig) findAllLabeledObjects(resources []metav1.APIResource, selector string) []unstructured.Unstructured {
-	objs := []unstructured.Unstructured{}
-	for _, res := range resources {
-		resIntf, err := r.GetDynamicClientOnAPIResource(res)
-		if err != nil {
-			log.Error(err, "unable to get dynamic client on type, ignoring...", "resource", res)
-			continue
-		}
-		//log.Info("listing", "reource", res, "label selector", selector)
-		unstructs, err := resIntf.List(metav1.ListOptions{
-			LabelSelector: selector,
-		})
-		//log.Info("found", "objs", unstructs)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				log.Error(err, "unable to list resources ignoring...", "resource", res)
-			}
-			continue
-		}
-		objs = append(objs, unstructs.Items...)
-	}
-	return objs
-}
-
-func (r *ReconcileNamespaceConfig) getKnowTypes() (namespaced []metav1.APIResource, clusterLevel []metav1.APIResource, err error) {
-	resListArray, err := r.DiscoveryClient.ServerPreferredResources()
-	if err != nil {
-		log.Error(err, "unable server preferred resources")
-		return namespaced, clusterLevel, err
-	}
-	for _, resList := range resListArray {
-		gv, err := schema.ParseGroupVersion(resList.GroupVersion)
-		if err != nil {
-			log.Error(err, "unable to parse groupversion from, ignoring...", "groupversion", resList.GroupVersion)
-			continue
-		}
-		for _, res := range resList.APIResources {
-			if strings.Contains(res.Name, "/") {
-				//ignoring subresources
-				continue
-			}
-			res.Group = gv.Group
-			res.Version = gv.Version
-			if res.Namespaced {
-				namespaced = append(namespaced, res)
-			} else {
-				clusterLevel = append(clusterLevel, res)
-			}
-		}
-	}
-	return namespaced, clusterLevel, nil
-}
-
-func (r *ReconcileNamespaceConfig) manageError(issue error, instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
-	lastUpdate := instance.Status.LastUpdate.Time
-	lastStatus := instance.Status.Status
-	r.GetRecorder().Event(instance, "Warning", "ProcessingError", issue.Error())
-	status := redhatcopv1alpha1.NamespaceConfigStatus{
-		LastUpdate: metav1.Now(),
-		Reason:     issue.Error(),
-		Status:     "Failure",
-	}
-	instance.Status = status
-	err := r.GetClient().Status().Update(context.Background(), instance)
-	if err != nil {
-		log.Error(err, "unable to update status")
-		return reconcile.Result{
-			RequeueAfter: time.Second,
-			Requeue:      true,
-		}, nil
-	}
-	var retryInterval time.Duration
-	if instance.Status.LastUpdate.IsZero() || lastStatus == "Success" {
-		retryInterval = time.Second
-	} else {
-		retryInterval = status.LastUpdate.Sub(lastUpdate).Round(time.Second)
-	}
-	return reconcile.Result{
-		RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))),
-		Requeue:      true,
-	}, nil
-}
-
-func (r *ReconcileNamespaceConfig) manageSuccess(instance *redhatcopv1alpha1.NamespaceConfig) (reconcile.Result, error) {
-	status := redhatcopv1alpha1.NamespaceConfigStatus{
-		LastUpdate: metav1.Now(),
-		Reason:     "",
-		Status:     "Success",
-	}
-	instance.Status = status
-	err := r.GetClient().Status().Update(context.Background(), instance)
-	if err != nil {
-		log.Error(err, "unable to update status")
-		return reconcile.Result{
-			RequeueAfter: time.Second,
-			Requeue:      true,
-		}, nil
-	}
-	return reconcile.Result{}, nil
-}
-
-type resourceGenerationOrFinalizerChangedPredicate struct {
-	predicate.Funcs
-}
-
-// Update implements default UpdateEvent filter for validating resource version change
-func (resourceGenerationOrFinalizerChangedPredicate) Update(e event.UpdateEvent) bool {
-	if e.MetaOld == nil {
-		log.Error(nil, "UpdateEvent has no old metadata", "event", e)
-		return false
-	}
-	if e.ObjectOld == nil {
-		log.Error(nil, "GenericEvent has no old runtime object to update", "event", e)
-		return false
-	}
-	if e.ObjectNew == nil {
-		log.Error(nil, "GenericEvent has no new runtime object for update", "event", e)
-		return false
-	}
-	if e.MetaNew == nil {
-		log.Error(nil, "UpdateEvent has no new metadata", "event", e)
-		return false
-	}
-	if e.MetaNew.GetGeneration() == e.MetaOld.GetGeneration() && reflect.DeepEqual(e.MetaNew.GetFinalizers(), e.MetaOld.GetFinalizers()) {
-		return false
-	}
-	return true
-}
-
-func (r *ReconcileNamespaceConfig) addManagedObject(object *unstructured.Unstructured) error {
-	log.Info("adding managed object for", "object", object)
-	moold, ok := managedObjects[mutil.GetKeyFromObject(object)]
-	if ok {
-		moold.Stop()
-	}
-	sm, err := mutil.NewStoppableManager(*r.GetManager())
-	if err != nil {
-		log.Error(err, "unable to create new manager")
-		return err
-	}
-	_, err = mutil.NewLockedObjectReconciler(sm.Manager, *object)
-	if err != nil {
-		log.Error(err, "unable to create new NewLockedObjectReconciler on", "object", object)
-		return err
-	}
-	managedObjects[mutil.GetKeyFromObject(object)] = sm
-	sm.Start()
-	return nil
-}
-
-func (r *ReconcileNamespaceConfig) removeManagedObject(object *unstructured.Unstructured) error {
-	log.Info("removing managed object for", "object", object)
-	sm, ok := managedObjects[mutil.GetKeyFromObject(object)]
-	if !ok {
-		return nil
-	}
-	sm.Stop()
-	delete(managedObjects, mutil.GetKeyFromObject(object))
-	return nil
-}
-
-// func (r *ReconcileNamespaceConfig) newManagedObject(object *unstructured.Unstructured) (*mutil.ManagedObject, error) {
-// 	return mutil.NewManagedObject(r.GetRestConfig(), *object, time.Minute)
-// }

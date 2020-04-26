@@ -34,19 +34,23 @@ spec:
   selector:
     matchLabels:
       unprivileged-pods: "true"
-  resources: 
-  - apiVersion: v1
-    kind: ServiceAccount
-    metadata:
-      name: unprivileged-pods
-  - apiVersion: rbac.authorization.k8s.io/v1
-    kind: RoleBinding
-    metadata:
-      name: unprivileged-pods-rb
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: ClusterRole
-      name: forbid-privileged-pods
-    subjects:
-    - kind: ServiceAccount
-      name: unprivileged-pods    
+  templates: 
+  - objectTemplate: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: unprivileged-pods
+        namespace: {{ .Name }}
+  - objectTemplate: |     
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: unprivileged-pods-rb
+        namespace: {{ .Name }}
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: forbid-privileged-pods
+      subjects:
+      - kind: ServiceAccount
+        name: unprivileged-pods    

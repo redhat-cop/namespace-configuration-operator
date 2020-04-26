@@ -1,0 +1,20 @@
+---
+kind: Group
+apiVersion: user.openshift.io/v1
+metadata:
+  name: test-group
+  labels:
+    type: team
+users:
+  - user1
+  - user2
+---
+kind: Group
+apiVersion: user.openshift.io/v1
+metadata:
+  name: test-group2
+  labels:
+    type: team
+users:
+  - user3
+  - user4    

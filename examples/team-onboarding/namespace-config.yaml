@@ -1,0 +1,96 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: build-network-policy
+spec:
+  labelSelector:
+    matchLabels:
+      type: build    
+  templates:
+    - objectTemplate: |
+        kind: EgressNetworkPolicy
+        apiVersion: v1
+        metadata:
+          name: build-egress-policy
+          namespace: {{ .Name }}  
+        spec:
+          egress:
+          - type: Allow
+            to:
+              dnsName: quay.io
+          - type: Allow
+            to:
+              dnsName: corporate.gitlab.com
+          - type: Allow
+            to:
+              dnsName: mvnrepository.com
+          - type: Deny
+            to:
+              cidrSelector: 0.0.0.0/0                                          
+---
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: run-network-policy
+spec:
+  labelSelector:
+    matchLabels:
+      type: run    
+  templates:
+    - objectTemplate: |
+        kind: EgressNetworkPolicy
+        apiVersion: v1
+        metadata:
+          name: run-egress-policy
+          namespace: {{ .Name }}  
+        spec:
+          egress:
+          - type: Allow
+            to:
+              cidrSelector: 10.20.32.0/0            
+          - type: Allow
+            to:
+              cidrSelector: 10.20.0.0/0
+          - type: Deny
+            to:
+              cidrSelector: 0.0.0.0/0
+---
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: team-east-west-network-policy
+spec:
+  labelSelector:
+    matchExpressions:
+      - {key: type, operator: In, values: [run,build]}    
+  templates:
+    - objectTemplate: |          
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: allow-from-same-namespace
+          namespace: {{ .Name }}
+        spec:
+          podSelector:
+          ingress:
+          - from:
+            - podSelector: {}
+          policyTypes:
+            - Ingress   
+    - objectTemplate: |      
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: allow-from-openshift-ingress
+          namespace: {{ .Name }}
+        spec:
+          ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  network.openshift.io/policy-group: ingress
+          podSelector: {}
+          policyTypes:
+          - Ingress               
+
+              
