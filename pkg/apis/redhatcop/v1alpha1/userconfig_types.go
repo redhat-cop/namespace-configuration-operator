@@ -20,24 +20,34 @@ type UserConfigSpec struct {
 
 	// LabelSelector selects Users by label.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// AnnotationSelector selects Users by annotation.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
-	//IdentityExtraSelector allows you to specify a selector for the extra fields of the User's idenitities.
+	//IdentityExtraSelector allows you to specify a selector for the extra fields of the User's identities.
 	//If one of the user identities matches the selector the User is selected
 	//This condition is in OR with ProviderName
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	IdentityExtraFieldSelector metav1.LabelSelector `json:"identityExtraFieldSelector,omitempty"`
 
-	//ProviderName allows you to specify an idenitity provider. If a user logged in with that provider it is selected.
+	//ProviderName allows you to specify an identity provider. If a user logged in with that provider it is selected.
 	//This condition is in OR with IdentityExtraSelector
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:text"
 	ProviderName string `json:"providerName,omitempty"`
 
+	// Templates these are the templates of the resources to be created when a selected user is created/updated
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	Templates []apis.LockedResourceTemplate `json:"templates,omitempty"`
 }
 
@@ -47,6 +57,7 @@ type UserConfigStatus struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	apis.EnforcingReconcileStatus `json:",inline"`
 }
 
@@ -63,6 +74,7 @@ func (m *UserConfig) SetEnforcingReconcileStatus(reconcileStatus apis.EnforcingR
 // UserConfig is the Schema for the userconfigs API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=userconfigs,scope=Cluster
+// +operator-sdk:gen-csv:customresourcedefinitions.displayName="User Config"
 type UserConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

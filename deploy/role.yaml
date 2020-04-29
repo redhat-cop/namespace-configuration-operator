@@ -1,7 +1,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: namespace-configuration-operator
 rules:
 - apiGroups:
@@ -10,28 +9,4 @@ rules:
   - '*'
   verbs:
   - '*'
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
-  - '*'
-  - groupconfigs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - redhat-cop.redhat.io
-  resources:
-  - '*'
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+
