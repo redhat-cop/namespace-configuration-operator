@@ -203,6 +203,7 @@ func (r *ReconcileNamespaceConfig) manageCleanUpLogic(instance *redhatcopv1alpha
 	return nil
 }
 
+// IsInitialized none
 func (r *ReconcileNamespaceConfig) IsInitialized(instance *redhatcopv1alpha1.NamespaceConfig) bool {
 	needsUpdate := true
 	for i := range instance.Spec.Templates {

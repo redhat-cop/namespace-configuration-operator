@@ -18,21 +18,29 @@ type NamespaceConfigSpec struct {
 
 	// LabelSelector selects Namespaces by label.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// AnnotationSelector selects Namespaces by annotation.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
+	// Templates these are the templates of the resources to be created when a selected namespace is created/updated
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	Templates []apis.LockedResourceTemplate `json:"templates,omitempty"`
 }
 
-// NamespaceConfigStatus defines the observed state of NSConfig
+// NamespaceConfigStatus defines the observed state of NamespaceSConfig
 type NamespaceConfigStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	apis.EnforcingReconcileStatus `json:",inline"`
 }
 
@@ -46,9 +54,10 @@ func (m *NamespaceConfig) SetEnforcingReconcileStatus(reconcileStatus apis.Enfor
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NamespaceConfig is the Schema for the nsconfigs API
+// NamespaceConfig is the Schema for the NamespaceSConfig API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=namespaceconfigs,scope=Cluster
+// +operator-sdk:gen-csv:customresourcedefinitions.displayName="Namespace Config"
 type NamespaceConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

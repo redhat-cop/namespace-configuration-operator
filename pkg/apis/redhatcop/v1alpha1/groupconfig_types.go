@@ -18,13 +18,19 @@ type GroupConfigSpec struct {
 
 	// LabelSelector selects Groups by label.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// AnnotationSelector selects Groups by annotation.
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
+	// Templates these are the templates of the resources to be created when a selected groups is created/updated
 	// +kubebuilder:validation:Optional
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	Templates []apis.LockedResourceTemplate `json:"templates,omitempty"`
 }
 
@@ -34,6 +40,7 @@ type GroupConfigStatus struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	apis.EnforcingReconcileStatus `json:",inline"`
 }
 
@@ -50,6 +57,7 @@ func (m *GroupConfig) SetEnforcingReconcileStatus(reconcileStatus apis.Enforcing
 // GroupConfig is the Schema for the groupconfigs API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=groupconfigs,scope=Cluster
+// +operator-sdk:gen-csv:customresourcedefinitions.displayName="Group Config"
 type GroupConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

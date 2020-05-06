@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -54,6 +55,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		err := errs.New("unable to convert to ReconcileUserConfig")
 		log.Error(err, "unable to convert to ReconcileUserConfig from ", "reconciler", r)
 		return err
+	}
+
+	if ok, err := reconcileGroupConfig.IsAPIResourceAvailable(schema.GroupVersionKind{
+		Group:   "user.openshift.io",
+		Version: "v1",
+		Kind:    "Group",
+	}); !ok || err != nil {
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	// Create a new controller
@@ -281,6 +293,7 @@ func (r *ReconcileGroupConfig) findApplicableGroupConfigsFromGroup(group userv1.
 	return applicableGroupConfigs, nil
 }
 
+// IsInitialized none
 func (r *ReconcileGroupConfig) IsInitialized(instance *redhatcopv1alpha1.GroupConfig) bool {
 	needsUpdate := true
 	for i := range instance.Spec.Templates {

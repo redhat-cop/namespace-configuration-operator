@@ -1,7 +1,19 @@
 apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
-  name: example-namespaceconfig
+  name: small-size
 spec:
-  # Add fields here
-  size: 3
+  selector:
+    matchLabels:
+      size: small  
+  templates:
+  - objectTemplate: |  
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: small-size
+        namespace: {{ .Name }}  
+      spec:
+        hard:
+          requests.cpu: "4" 
+          requests.memory: "2Gi" 
