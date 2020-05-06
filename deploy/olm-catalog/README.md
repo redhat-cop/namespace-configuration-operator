@@ -18,7 +18,6 @@ update the [`deploy/operator.yaml`](./deploy/operator.yaml) with the image tag o
 run the following:
 
 ```shell
-operator-sdk olm-catalog gen-csv --csv-version $new_version --from-version $old_version --update-crds
 operator-sdk generate csv --csv-version $new_version --from-version $old_version --update-crds --make-manifests=false
 ```
 
