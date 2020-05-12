@@ -8,16 +8,16 @@ spec:
       multitenant: "true"  
   templates:
   - objectTemplate: |
-    apiVersion: networking.k8s.io/v1
-    kind: NetworkPolicy
-    metadata:
-      name: allow-from-same-namespace
-      namespace: {{ .Name }}
-    spec:
-      podSelector:
-      ingress:
-      - from:
-        - podSelector: {}
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-from-same-namespace
+        namespace: {{ .Name }}
+      spec:
+        podSelector:
+        ingress:
+        - from:
+          - podSelector: {}
   - objectTemplate:  |     
       apiVersion: networking.k8s.io/v1
       kind: NetworkPolicy    
