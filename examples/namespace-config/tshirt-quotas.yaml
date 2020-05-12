@@ -3,7 +3,7 @@ kind: NamespaceConfig
 metadata:
   name: small-size
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       size: small  
   templates:
@@ -23,7 +23,7 @@ kind: NamespaceConfig
 metadata:
   name: large-size
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       size: large  
   templates:

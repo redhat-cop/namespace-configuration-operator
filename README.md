@@ -76,7 +76,7 @@ apiVersion: redhatcop.redhat.io/v1alpha1
 kind: NamespaceConfig
 metadata:
   name: small-namespace
-  selector:
+  labelSelector:
     matchLabels:
       size: small  
   resources:
