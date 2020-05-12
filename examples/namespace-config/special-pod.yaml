@@ -31,7 +31,7 @@ kind: NamespaceConfig
 metadata:
   name: unprivileged-pods
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       unprivileged-pods: "true"
   templates: 

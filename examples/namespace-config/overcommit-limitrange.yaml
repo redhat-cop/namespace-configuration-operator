@@ -3,7 +3,7 @@ kind: NamespaceConfig
 metadata:
   name: overcommit-limitrange
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       overcommit: "limited"  
   templates:

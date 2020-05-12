@@ -28,7 +28,7 @@ kind: NamespaceConfig
 metadata:
   name: small-size
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       size: small  
   templates:
@@ -48,7 +48,7 @@ kind: NamespaceConfig
 metadata:
   name: large-size
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       size: large  
   templates:
@@ -86,7 +86,7 @@ kind: NamespaceConfig
 metadata:
   name: multitenant
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       multitenant: "true"  
   templates:
@@ -136,7 +136,7 @@ kind: NamespaceConfig
 metadata:
   name: overcommit-limitrange
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       overcommit: "limited"  
   templates:
@@ -172,7 +172,7 @@ kind: NamespaceConfig
 metadata:
   name: special-sa
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       special-sa: "true"
   templates:
@@ -260,7 +260,7 @@ kind: NamespaceConfig
 metadata:
   name: unprivileged-pods
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       unprivileged-pods: "true"
   templates:

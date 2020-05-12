@@ -3,7 +3,7 @@ kind: NamespaceConfig
 metadata:
   name: multitenant
 spec:
-  selector:
+  labelSelector:
     matchLabels:
       multitenant: "true"  
   templates:
