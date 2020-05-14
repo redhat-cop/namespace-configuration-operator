@@ -178,7 +178,7 @@ Here are the instructions to install the latest release creating the manifest di
 
 ```shell
 git clone git@github.com:redhat-cop/namespace-configuration-operator.git; cd namespace-configuration-operator
-oc apply -f deploy/crds/redhatcop_v1alpha1_namespaceconfig_crd.yaml
+for crd in $(ls deploy/crds/*crd.yaml);do oc create -f $crd; done
 oc new-project namespace-configuration-operator
 oc -n namespace-configuration-operator apply -f deploy
 ```
