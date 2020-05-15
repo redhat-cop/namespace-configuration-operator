@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: admin-no-builds
+  name: admin-no-build
 aggregationRule:
   clusterRoleSelectors:
   - matchLabels:
