@@ -79,15 +79,17 @@ metadata:
   labelSelector:
     matchLabels:
       size: small  
-  resources:
-  - apiVersion: v1
-    kind: ResourceQuota
-    metadata:
-      name: small-size  
-    spec:
-      hard:
-        requests.cpu: "4"
-        requests.memory: "2Gi"
+  templates:
+  - objectTemplate: |
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: small-size
+        namespace: {{ .Name }}
+      spec:
+        hard:
+          requests.cpu: "4"
+          requests.memory: "2Gi"
 ```
 
 Here is a `NamespaceConfig` object using a `matchExpressions` selector:
