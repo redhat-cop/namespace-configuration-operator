@@ -185,6 +185,34 @@ oc new-project namespace-configuration-operator
 oc -n namespace-configuration-operator apply -f deploy
 ```
 
+### Deploying from OperatorHub
+
+If you want to utilize the Operator Lifecycle Manager (OLM) to install this operator, you can do so in two ways: from the UI or the CLI.
+
+#### Deploying from OperatorHub UI
+
+- If you would like to launch this operator from the UI, you'll need to navigate to the OperatorHub tab in the console.Before starting, make sure you've created the namespace that you want to install this operator to with the following:
+
+```shell
+oc new-project namespace-configuration-operator
+```
+
+- Once there, you can search for this operator by name: `namespace configuration operator`. This will then return an item for our operator and you can select it to get started. Once you've arrived here, you'll be presented with an option to install, which will begin the process.
+- After clicking the install button, you can then select the namespace that you would like to install this to as well as the installation strategy you would like to proceed with (`Automatic` or `Manual`).
+- Once you've made your selection, you can select `Subscribe` and the installation will begin. After a few moments you can go ahead and check your namespace and you should see the operator running.
+
+#### Deploying from OperatorHub using CLI
+
+If you'd like to launch this operator from the command line, you can use the manifests contained in this repository by running the following:
+
+oc new-project namespace-configuration-operator
+
+```shell
+oc apply -f deploy/olm-deploy -n namespace-configuration-operator
+```
+
+This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
+
 ## Local Development
 
 Execute the following steps to develop the functionality locally. It is recommended that development be done using a cluster with `cluster-admin` permissions.
