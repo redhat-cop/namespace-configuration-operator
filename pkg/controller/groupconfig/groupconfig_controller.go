@@ -9,6 +9,7 @@ import (
 	"github.com/redhat-cop/namespace-configuration-operator/pkg/common"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
+	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
 	"github.com/scylladb/go-set/strset"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -205,7 +206,7 @@ func (r *ReconcileGroupConfig) Reconcile(request reconcile.Request) (reconcile.R
 		return r.ManageError(instance, err)
 	}
 
-	err = r.UpdateLockedResources(instance, lockedResources)
+	err = r.UpdateLockedResources(instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
 		return r.ManageError(instance, err)
