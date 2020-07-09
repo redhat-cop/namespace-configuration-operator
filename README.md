@@ -233,7 +233,7 @@ Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), ru
 oc apply -f deploy/crds/redhatcop.redhat.io_namespaceconfigs_crd.yaml
 oc apply -f deploy/crds/redhatcop.redhat.io_groupconfigs_crd.yaml
 oc apply -f deploy/crds/redhatcop.redhat.io_userconfigs_crd.yaml
-OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose run  --local --watch-namespace "" --operator-flags="--zap-level=debug"
+OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose run  local --watch-namespace "" --operator-flags="--zap-level=debug"
 ```
 
 ## Test
