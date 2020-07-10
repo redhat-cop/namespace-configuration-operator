@@ -5,10 +5,7 @@ REPOSITORY ?= $(REGISTRY)/redhat-cop/namespace-configuration-operator
 
 IMG := $(REPOSITORY):latest
 
-TRAVIS_TAG ?= latest
-
-VERSION := $(TRAVIS_TAG)
-
+VERSION := $(shell ./scripts/build/get-build-tag.sh)
 BUILD_COMMIT := $(shell ./scripts/build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./scripts/build/get-build-timestamp.sh)
 BUILD_HOSTNAME := $(shell ./scripts/build/get-build-hostname.sh)
@@ -99,6 +96,11 @@ publish-chart-repo:
 	./scripts/build/build-chart-repo.sh 
 	./scripts/build/push-to-pages.sh 
 
+
+#
+# NOTE:  When ready to remove Travis CI, delete these travis-*-deploy acions
+#
+
 # Travis Latest Tag Deployment
 travis-latest-deploy: docker-login docker-build docker-push-latest
 
@@ -107,3 +109,12 @@ travis-dev-deploy: docker-login docker-build docker-push-dev
 
 # Travis Release
 travis-release-deploy: docker-login docker-build docker-push-release publish-chart-repo
+
+# Github Actions Latest Tag Deployment
+gh-actions-latest-deploy: docker-login docker-build docker-push-latest
+
+# Github Actions Dev Deployment
+gh-actions-dev-deploy: docker-login docker-build docker-push-dev
+
+# Github Actions Release
+gh-actions-release-deploy: docker-login docker-build docker-push-release publish-chart-repo

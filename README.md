@@ -154,8 +154,7 @@ This is a cluster-level operator that you can deploy in any namespace, `namespac
 
 You can either deploy it using [`Helm`](https://helm.sh/) or creating the manifests directly.
 
-NOTE:
-**Given that a number of elevated permissions are required to create resources at a cluster scope, the account you are currently logged in must have elevated rights.**
+NOTE: *Elevated permissions are required to create resources at a cluster scope.  The account used to deploy the operator must have elevated rights.*
 
 ### Deploying with Helm
 

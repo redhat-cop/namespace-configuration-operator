@@ -1,0 +1,34 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master, add-github-workflow ]
+  pull_request:
+    branches: [ master, add-github-workflow ]
+
+jobs:
+  test:
+    runs-on: [ubuntu-latest]
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.13
+      id: go
+
+    - name: Install docker
+      run: |
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        #sudo apt-get -y update
+        #sudo apt-get -y upgrade
+        #sudo apt-get -y install docker.io
+
+    - uses: actions/checkout@v2
+
+    - name: Latest Deploy
+      run: make gh-actions-latest-deploy
+
+    - name: Release Deploy
+      run: make gh-actions-release-deploy

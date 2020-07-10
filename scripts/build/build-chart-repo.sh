@@ -1,7 +1,7 @@
 echo '>> Building charts...'
 find "$HELM_CHARTS_SOURCE" -mindepth 1 -maxdepth 1 -type d | while read chart; do
-  version=${TRAVIS_TAG} envsubst < $chart/values.yaml.tpl > $chart/values.yaml
-  version=${TRAVIS_TAG} envsubst < $chart/Chart.yaml.tpl  > $chart/Chart.yaml
+  version=${VERSION} envsubst < $chart/values.yaml.tpl > $chart/values.yaml
+  version=${VERSION} envsubst < $chart/Chart.yaml.tpl  > $chart/Chart.yaml
   echo ">>> helm lint $chart"
   helm lint "$chart"
   chart_dest=$HELM_CHART_DEST/"`basename "$chart"`"
