@@ -34,7 +34,7 @@ One new way to test is the following:
 
 ```shell
 oc new-project namespace-configuration-operator
-operator-sdk run --olm --olm-namespace openshift-operator-lifecycle-manager --operator-namespace namespace-configuration-operator --install-mode=OwnNamespace=namespace-configuration-operator --operator-version $new_version
+operator-sdk run packagemanifests --operator-version ${new_version} --install-mode=OwnNamespace=namespace-configuration-operator --olm-namespace openshift-operator-lifecycle-manager --operator-namespace namespace-configuration-operator
 ```
 
 Test what the operator would look like in OperatorHub, by going to this [site](https://operatorhub.io/preview) and paste the csv/
