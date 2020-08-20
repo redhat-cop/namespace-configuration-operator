@@ -27,7 +27,7 @@ Policies can be expressed with the following CRDs:
 These CRDs all share some commonalities:
 
 1. [Templated Resources](#Templated-Resources)
-2. [List of ignored jason path](#Excluded-Paths)
+2. [List of ignored json paths](#Excluded-Paths)
 
 ### Templated Resources
 
