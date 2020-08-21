@@ -120,11 +120,11 @@ Although not enforced by the operator, GroupConfig are expected to create cluste
 
 ## UserConfig
 
-In OpenShift an external user is defined by two entities: Users and Identities. There is a relationship of on to many between Users and Identities. Given one user, there can be one Identity per authentication mechanism.
+In OpenShift an external user is defined by two entities: Users and Identities. There is a relationship of one to many between Users and Identities. Given one user, there can be one Identity per authentication mechanism.
 
 The `UserConfig` CR allows specifying one or more objects that will be created in the selected User.
 Users can be selected by label or annotation like `NamespaceConfig` and `UserConfig`.
-USers can also be selected by provider name (the name of the authentication mechanism) and identity extra field.
+Users can also be selected by provider name (the name of the authentication mechanism) and identity extra field.
 
 Here is an example:
 
