@@ -24,7 +24,7 @@ For this scenario we will need to configure several resources. Let's start from 
 oc apply -f ./examples/team-onboarding/admin-no-build.yaml
 ```
 
-## Create the needed UserConfig anf NamespaceConfig
+## Create the needed UserConfig and NamespaceConfig
 
 ```shell
 oc apply -f ./examples/team-onboarding/group-config.yaml
