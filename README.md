@@ -166,7 +166,7 @@ oc new-project namespace-configuration-operator
 
 helm repo add namespace-configuration-operator https://redhat-cop.github.io/namespace-configuration-operator
 helm repo update
-export namespace_configuration_operator_chart_version=$(helm search namespace-configuration-operator/namespace-configuration-operator | grep namespace-configuration-operator/namespace-configuration-operator | awk '{print $2}')
+export namespace_configuration_operator_chart_version=$(helm search repo --max-col-width=65 namespace-configuration-operator/namespace-configuration-operator | grep namespace-configuration-operator/namespace-configuration-operator | awk '{print $2}')
 
 helm fetch namespace-configuration-operator/namespace-configuration-operator --version ${namespace_configuration_operator_chart_version}
 helm template namespace-configuration-operator-${namespace_configuration_operator_chart_version}.tgz --namespace namespace-configuration-operator | oc apply -f - -n namespace-configuration-operator
