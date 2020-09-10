@@ -256,7 +256,7 @@ func (r *ReconcileUserConfig) Reconcile(request reconcile.Request) (reconcile.Re
 func (r *ReconcileUserConfig) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, user := range users {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, user)
+		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), user)
 		if err != nil {
 			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", user)
 			return []lockedresource.LockedResource{}, err

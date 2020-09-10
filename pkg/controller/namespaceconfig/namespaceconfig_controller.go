@@ -229,7 +229,7 @@ func (r *ReconcileNamespaceConfig) IsInitialized(instance *redhatcopv1alpha1.Nam
 func (r *ReconcileNamespaceConfig) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, groups []corev1.Namespace) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, group)
+		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
 		if err != nil {
 			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
 			return []lockedresource.LockedResource{}, err
