@@ -52,6 +52,23 @@ spec:
 
 This create a rule in which every time a user from the `corp-ldap` provider is created, a namespace called `<username>-sandbox` is also created.
 
+More advanced templating functions found in the popular k8s management tool [Helm](https://helm.sh/) is also available. This includes the [Sprig](http://masterminds.github.io/sprig/) templating library and the addition of the [lookup](https://helm.sh/docs/chart_template_guide/functions_and_pipelines/#using-the-lookup-function) function used in Helm which allows for runtime access to cluster resources when processing templates.
+
+```golang
+templates:
+- objectTemplate: |
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        annotations:
+          parentOperatorCreatedOn: '{{ (lookup "v1" "Namespace" "" "namespace-configuration-operator").metadata.creationTimestamp }}'
+          sourceTemplate: "{{ toYaml . | b64enc }}"
+          require: '{{ required "Annotations on the Group are required!" .Annotations.test }}'
+        name: {{ .Name | lower }}
+```
+
+For more information on templates within Helm charts see this Helm [tips and tricks](https://helm.sh/docs/howto/charts_tips_and_tricks/) guide.
+
 ### Excluded Paths
 
 The logic of the `namespace-configuration-operator` is to enforce that the resources resolved by processing the templates "stays in place". In other words if those resources are changed and/or deleted they will be reset by the operator.
