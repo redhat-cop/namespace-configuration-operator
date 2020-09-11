@@ -766,6 +766,8 @@ github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40T
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/redhat-cop/operator-utils v0.3.4 h1:s038D2IZ+iE1C3ndRml3bJeGeC/j9okFdkUv1ZkZh6M=
 github.com/redhat-cop/operator-utils v0.3.4/go.mod h1:b2pQAC6JRaVHOivb1T+cMyC967Y9Rk4/njSEQ/3vKeI=
+github.com/redhat-cop/operator-utils v0.3.5 h1:FS8s6B0zr+AkBVYlc4rNYx7FQ2q0kVtNUnU4lxw6s0M=
+github.com/redhat-cop/operator-utils v0.3.5/go.mod h1:a+teXpeko+1P9TlH99pHNsoPUzA6orltOc9rS74RhP4=
 github.com/remyoudompheng/bigfft v0.0.0-20170806203942-52369c62f446/go.mod h1:uYEyJGbgTkfkS4+E/PavXkNJcbFIpEtjt2B0KDQ5+9M=
 github.com/robfig/cron v0.0.0-20170526150127-736158dc09e1/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=

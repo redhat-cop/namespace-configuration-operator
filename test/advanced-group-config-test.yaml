@@ -1,0 +1,18 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: advanced-test-groupconfig
+spec:
+  labelSelector:
+    matchLabels:
+      type: advancedteam    
+  templates:
+    - objectTemplate: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          annotations:
+            operatorNamespaceCreatedOn: '{{ (lookup "v1" "Namespace" "" "namespace-configuration-operator").metadata.creationTimestamp }}'
+            sourceGroup: "{{ toJson . | b64enc }}"
+            url: '{{ required "URL annotation on the Group is required!" .Annotations.url }}'
+          name: {{ index .Labels "projectname" | lower }}-dev
