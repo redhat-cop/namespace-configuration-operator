@@ -77,7 +77,7 @@ templates:
         annotations:
           parentOperatorCreatedOn: '{{ (lookup "v1" "Namespace" "" "namespace-configuration-operator").metadata.creationTimestamp }}'
           sourceTemplate: "{{ toJson . | b64enc }}"
-          require: '{{ required "Annotations on the Group are required!" .Annotations.test }}'
+          url: '{{ required "URL annotation on the Group is required!" .Annotations.url }}'
         name: {{ .Name | lower }}
 ```
 
