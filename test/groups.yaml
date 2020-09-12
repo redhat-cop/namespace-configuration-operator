@@ -17,4 +17,17 @@ metadata:
     type: team
 users:
   - user3
-  - user4    
+  - user4
+---
+kind: Group
+apiVersion: user.openshift.io/v1
+metadata:
+  name: test-group3
+  annotations:
+    url: "localhost"
+  labels:
+    type: advancedteam
+    projectname: TESTGROUP3
+users:
+  - user4
+  - user5

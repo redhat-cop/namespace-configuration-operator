@@ -52,6 +52,37 @@ spec:
 
 This create a rule in which every time a user from the `corp-ldap` provider is created, a namespace called `<username>-sandbox` is also created.
 
+More advanced templating functions found in the popular k8s management tool [Helm](https://helm.sh/) is also available. These functions are further described in the Helm [templating](https://helm.sh/docs/chart_template_guide/function_list/#kubernetes-and-chart-functions) documentation.
+
+Additionally, there are functions not listed within the Helm documentation that are also available outlined in the table below.
+
+| Function  |  Description |
+|---------|---------|
+| toYaml | takes an interface, marshals it to yaml, and returns a string. |
+| fromYaml | converts a YAML document into a map[string]interface{}. |
+| fromYamlArray | converts a YAML array into a []interface{}. |
+| toToml  | takes an interface, marshals it to toml, and returns a string.|
+| toJson | takes an interface, marshals it to json, and returns a string. |
+| fromJson  | converts a JSON document into a map[string]interface{}. |
+| fromJsonArray | converts a JSON array into a []interface{}. |
+
+An example below of the `lookup`, `toJson`, `b64env`, `required`, and `lower` functions included in the expanded advanced templating functionality.
+
+```golang
+templates:
+- objectTemplate: |
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        annotations:
+          parentOperatorCreatedOn: '{{ (lookup "v1" "Namespace" "" "namespace-configuration-operator").metadata.creationTimestamp }}'
+          sourceTemplate: "{{ toJson . | b64enc }}"
+          url: '{{ required "URL annotation on the Group is required!" .Annotations.url }}'
+        name: {{ .Name | lower }}
+```
+
+For more examples on templates within Helm charts see this Helm [tips and tricks](https://helm.sh/docs/howto/charts_tips_and_tricks/) templating guide.
+
 ### Excluded Paths
 
 The logic of the `namespace-configuration-operator` is to enforce that the resources resolved by processing the templates "stays in place". In other words if those resources are changed and/or deleted they will be reset by the operator.

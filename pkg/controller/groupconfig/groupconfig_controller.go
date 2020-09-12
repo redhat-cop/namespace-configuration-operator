@@ -218,7 +218,7 @@ func (r *ReconcileGroupConfig) Reconcile(request reconcile.Request) (reconcile.R
 func (r *ReconcileGroupConfig) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplates(instance.Spec.Templates, group)
+		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
 		if err != nil {
 			log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
 			return []lockedresource.LockedResource{}, err
