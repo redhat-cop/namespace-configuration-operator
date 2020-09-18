@@ -16,7 +16,7 @@ spec:
       containers:
         - name: namespace-configuration-operator
           # Replace this with the built image name
-          image: quay.io/redhat-cop/namespace-configuration-operator:v0.2.2
+          image: quay.io/redhat-cop/namespace-configuration-operator:v0.2.3
           command:
           - namespace-configuration-operator
           imagePullPolicy: Always
