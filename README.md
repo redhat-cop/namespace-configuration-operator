@@ -50,7 +50,7 @@ spec:
         name: {{ .Name }}-sandbox
 ```
 
-This create a rule in which every time a user from the `corp-ldap` provider is created, a namespace called `<username>-sandbox` is also created.
+This creates a rule in which every time a user from the `corp-ldap` provider is created, a namespace called `<username>-sandbox` is also created.
 
 More advanced templating functions found in the popular k8s management tool [Helm](https://helm.sh/) is also available. These functions are further described in the Helm [templating](https://helm.sh/docs/chart_template_guide/function_list/#kubernetes-and-chart-functions) documentation.
 
