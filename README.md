@@ -33,7 +33,7 @@ These CRDs all share some commonalities:
 
 Each has a parameter called `templatedResources`, which is an array. Each element of the array has two fields `objectTemplate` and `excludedPaths` (see below).
 
-The `objectTemplate` field must contains a [go template](https://golang.org/pkg/text/template/) that resolves to a single API Resource expressed in `yaml`. The template is merged with the object selected by the CR. For example:
+The `objectTemplate` field must contain a [go template](https://golang.org/pkg/text/template/) that resolves to a single API Resource expressed in `yaml`. The template is merged with the object selected by the CR. For example:
 
 ```yaml
 apiVersion: redhatcop.redhat.io/v1alpha1
