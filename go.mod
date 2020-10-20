@@ -3,7 +3,7 @@ module github.com/redhat-cop/namespace-configuration-operator
 require (
 	github.com/openshift/api v0.0.0-20200205133042-34f0ec8dab87
 	github.com/operator-framework/operator-sdk v0.18.1
-	github.com/redhat-cop/operator-utils v0.3.5
+	github.com/redhat-cop/operator-utils v0.3.6
 	github.com/scylladb/go-set v1.0.2
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.18.2
