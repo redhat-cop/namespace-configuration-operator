@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi7-dev-preview/ubi-minimal:7.6
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 ENV OPERATOR=/usr/local/bin/namespace-configuration-operator \
     USER_UID=1001 \
