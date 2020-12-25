@@ -11,7 +11,7 @@ metadata:
     description: This operator provides a facility to define and enforce namespace configurations
     repository: https://github.com/redhat-cop/namespace-configuration-operator
     support: Best Effort
-  name: namespace-configuration-operator
+  name: namespace-configuration-operator.v0.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
