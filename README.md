@@ -1,6 +1,6 @@
 # Namespace Configuration Operator
 
-[![Build Status](https://travis-ci.org/redhat-cop/namespace-configuration-operator.svg?branch=master)](https://travis-ci.org/redhat-cop/namespace-configuration-operator) [![Docker Repository on Quay](https://quay.io/repository/redhat-cop/namespace-configuration-operator/status "Docker Repository on Quay")](https://quay.io/repository/redhat-cop/namespace-configuration-operator)
+![build status](https://github.com/redhat-cop/namespace-configuration-operator/workflows/push/badge.svg)
 
 ## Introduction
 
@@ -184,38 +184,7 @@ User will be selected by this `UserConfig` only if they login via the *okta-prov
 
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
 
-You can either deploy it using [`Helm`](https://helm.sh/) or creating the manifests directly.
-
-NOTE:
-**Given that a number of elevated permissions are required to create resources at a cluster scope, the account you are currently logged in must have elevated rights.**
-
-### Deploying with Helm
-
-Here are the instructions to install the latest release with Helm.
-
-```shell
-oc new-project namespace-configuration-operator
-
-helm repo add namespace-configuration-operator https://redhat-cop.github.io/namespace-configuration-operator
-helm repo update
-helm install namespace-configuration-operator namespace-configuration-operator/namespace-configuration-operator
-```
-This can later be updated with the following commands:
-```shell
-helm repo update
-helm upgrade namespace-configuration-operator namespace-configuration-operator/namespace-configuration-operator
-```
-
-### Deploying directly with manifests
-
-Here are the instructions to install the latest release creating the manifest directly in OCP.
-
-```shell
-git clone git@github.com:redhat-cop/namespace-configuration-operator.git; cd namespace-configuration-operator
-for crd in $(ls deploy/crds/*crd.yaml);do oc create -f $crd; done
-oc new-project namespace-configuration-operator
-oc -n namespace-configuration-operator apply -f deploy
-```
+It is recommended to deploy this operator via [`OperatorHub`](https://operatorhub.io/), but you can also deploy it using [`Helm`](https://helm.sh/).
 
 ### Deploying from OperatorHub
 
@@ -223,68 +192,101 @@ If you want to utilize the Operator Lifecycle Manager (OLM) to install this oper
 
 #### Deploying from OperatorHub UI
 
-- If you would like to launch this operator from the UI, you'll need to navigate to the OperatorHub tab in the console.Before starting, make sure you've created the namespace that you want to install this operator to with the following:
+* If you would like to launch this operator from the UI, you'll need to navigate to the OperatorHub tab in the console.Before starting, make sure you've created the namespace that you want to install this operator to with the following:
 
 ```shell
 oc new-project namespace-configuration-operator
 ```
 
-- Once there, you can search for this operator by name: `namespace configuration operator`. This will then return an item for our operator and you can select it to get started. Once you've arrived here, you'll be presented with an option to install, which will begin the process.
-- After clicking the install button, you can then select the namespace that you would like to install this to as well as the installation strategy you would like to proceed with (`Automatic` or `Manual`).
-- Once you've made your selection, you can select `Subscribe` and the installation will begin. After a few moments you can go ahead and check your namespace and you should see the operator running.
+* Once there, you can search for this operator by name: `keepalived`. This will then return an item for our operator and you can select it to get started. Once you've arrived here, you'll be presented with an option to install, which will begin the process.
+* After clicking the install button, you can then select the namespace that you would like to install this to as well as the installation strategy you would like to proceed with (`Automatic` or `Manual`).
+* Once you've made your selection, you can select `Subscribe` and the installation will begin. After a few moments you can go ahead and check your namespace and you should see the operator running.
+
+![Namespace Configuration Operator](./media/namespace-configuration-operator.png)
 
 #### Deploying from OperatorHub using CLI
 
 If you'd like to launch this operator from the command line, you can use the manifests contained in this repository by running the following:
 
-oc new-project namespace-configuration-operator
-
 ```shell
-oc apply -f deploy/olm-deploy -n namespace-configuration-operator
+oc new-project namespace-configuration-operator
+oc apply -f config/operatorhub -n namespace-configuration-operator
 ```
 
 This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
 
-## Local Development
+### Deploying with Helm
 
-Execute the following steps to develop the functionality locally. It is recommended that development be done using a cluster with `cluster-admin` permissions.
-
-```shell
-go mod download
-```
-
-optionally:
+Here are the instructions to install the latest release with Helm.
 
 ```shell
-go mod vendor
+oc new-project namespace-configuration-operator
+helm repo add namespace-configuration-operator https://redhat-cop.github.io/namespace-configuration-operator
+helm repo update
+helm install namespace-configuration-operator namespace-configuration-operator/namespace-configuration-operator
 ```
 
-Using the [operator-sdk](https://github.com/operator-framework/operator-sdk), run the operator locally:
+This can later be updated with the following commands:
 
 ```shell
-oc apply -f deploy/crds/redhatcop.redhat.io_namespaceconfigs_crd.yaml
-oc apply -f deploy/crds/redhatcop.redhat.io_groupconfigs_crd.yaml
-oc apply -f deploy/crds/redhatcop.redhat.io_userconfigs_crd.yaml
-OPERATOR_NAME='namespace-configuration-operator' operator-sdk --verbose run  local --watch-namespace "" --operator-flags="--zap-level=debug"
+helm repo update
+helm upgrade namespace-configuration-operator namespace-configuration-operator/namespace-configuration-operator
 ```
 
-## Test
+## Development
 
-### Testing NamespaceConfig
+### Running the operator locally
+
+```shell
+make install
+oc new-project namespace-configuration-operator-local
+kustomize build ./config/local-development | oc apply -f - -n namespace-configuration-operator-local
+export token=$(oc serviceaccounts get-token 'default' -n namespace-configuration-operator-local)
+oc login --token ${token}
+make run ENABLE_WEBHOOKS=false
+```
+
+### Building/Pushing the operator image
+
+```shell
+export repo=raffaelespazzoli #replace with yours
+docker login quay.io/$repo/namespace-configuration-operator
+make docker-build IMG=quay.io/$repo/namespace-configuration-operator:latest
+make docker-push IMG=quay.io/$repo/namespace-configuration-operator:latest
+```
+
+### Deploy to OLM via bundle
+
+```shell
+make manifests
+make bundle IMG=quay.io/$repo/namespace-configuration-operator:latest
+operator-sdk bundle validate ./bundle --select-optional name=operatorhub
+make bundle-build BUNDLE_IMG=quay.io/$repo/namespace-configuration-operator-bundle:latest
+docker login quay.io/$repo/namespace-configuration-operator-bundle
+podman push quay.io/$repo/namespace-configuration-operator-bundle:latest
+operator-sdk bundle validate quay.io/$repo/namespace-configuration-operator-bundle:latest --select-optional name=operatorhub
+oc new-project namespace-configuration-operator
+operator-sdk cleanup namespace-configuration-operator -n namespace-configuration-operator
+operator-sdk run bundle --install-mode AllNamespaces -n namespace-configuration-operator quay.io/$repo/namespace-configuration-operator-bundle:latest
+```
+
+### Testing
+
+#### Testing NamespaceConfig
 
 ```shell
 oc apply -f ./test/namespace-config-test.yaml
 oc apply -f ./test/namespaces.yaml
 ```
 
-### Testing GroupConfig
+#### Testing GroupConfig
 
 ```shell
 oc apply -f ./test/group-config-test.yaml
 oc apply -f ./test/groups.yaml
 ```
 
-### Testing UserConfig
+#### Testing UserConfig
 
 ```shell
 oc apply -f ./test/user-config-test.yaml
@@ -296,13 +298,31 @@ cat ./test/identities.yaml | envsubst | oc apply -f -
 done
 ```
 
-## Release Process
-
-To release execute the following:
+### Releasing
 
 ```shell
-git tag -a "<version>" -m "release <version>"
-git push upstream <version>
+git tag -a "<tagname>" -m "<commit message>"
+git push upstream <tagname>
 ```
 
-use this version format: vM.m.z
+If you need to remove a release:
+
+```shell
+git tag -d <tagname>
+git push upstream --delete <tagname>
+```
+
+If you need to "move" a release to the current main
+
+```shell
+git tag -f <tagname>
+git push upstream -f <tagname>
+```
+
+### Cleaning up
+
+```shell
+operator-sdk cleanup namespace-configuration-operator -n namespace-configuration-operator
+oc delete operatorgroup operator-sdk-og
+oc delete catalogsource namespace-configuration-operator-catalog
+```
