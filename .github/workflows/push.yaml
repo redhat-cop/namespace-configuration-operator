@@ -1,0 +1,373 @@
+name: push
+on: 
+  push:
+    branches:
+      - master
+      - main
+    tags:        
+      - v*
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: build
+    steps:
+
+    - name: set repo name
+      shell: bash
+      run: | 
+        echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV    
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.14
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Download operator sdk
+      shell: bash
+      env:
+        RELEASE_VERSION: v1.1.0
+      run: | 
+        curl -LO https://github.com/operator-framework/operator-sdk/releases/download/${RELEASE_VERSION}/operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+        chmod +x operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+        mkdir ${HOME}/bin
+        mv operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu ${HOME}/bin/operator-sdk
+        echo "${HOME}/bin" >> $GITHUB_PATH
+
+    - name: Get the version for tags
+      id: get_version1
+      if: "startsWith(github.ref, 'refs/tags')"
+      shell: bash
+      run: |
+        echo "OPERATOR_IMAGE_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        echo "BUNDLE_IMAGE_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        export TAG=${GITHUB_REF/refs\/tags\//}
+        echo "BUNDLE_VERSION=${TAG:1}" >> $GITHUB_ENV
+        export SEMVER_COMPLIANT=$(echo ${TAG:1} | egrep '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-])(?:\.(?:0|[1-9]\d|\d*[a-zA-Z-][0-9a-zA-Z-]))))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$')
+        if [ -z "$SEMVER_COMPLIANT" ]; then   echo "invalid semver tag ${GITHUB_REF/refs\/tags\//}"; exit 1; fi
+
+
+
+    - name: Get the version for merge
+      id: get_version2
+      if: "! startsWith(github.ref, 'refs/tags')"
+      shell: bash 
+      run: |
+        echo "OPERATOR_IMAGE_TAG=latest" >> $GITHUB_ENV
+        echo "BUNDLE_IMAGE_TAG=v0.0.0" >> $GITHUB_ENV
+        echo "BUNDLE_VERSION=0.0.0" >> $GITHUB_ENV 
+
+    - name: build code
+      run:  make
+      shell: bash
+      
+    - name: build bundle
+      shell: bash 
+      run: |
+        make bundle IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):${OPERATOR_IMAGE_TAG} VERSION=${BUNDLE_VERSION} DEFAULT_CHANNEL=alpha
+
+    - name: verify bundle
+      shell: bash
+      run: operator-sdk bundle validate ./bundle --select-optional name=operatorhub
+
+    - name: build chart
+      shell: bash
+      run: make helmchart VERSION=${BUNDLE_VERSION} IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):${OPERATOR_IMAGE_TAG}      
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    
+    - name: Login to DockerHub
+      uses: docker/login-action@v1 
+      with:
+        registry: quay.io/${{ github.repository_owner }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}      
+
+    - name: "Build and Push Operator Image"
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: "quay.io/${{ github.repository_owner }}/${{ env.REPOSITORY_NAME }}:${{ env.OPERATOR_IMAGE_TAG }}"
+
+    - name: "Build and Push Bundle Image"
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./bundle.Dockerfile
+        push: true
+        tags: "quay.io/${{ github.repository_owner }}/${{ env.REPOSITORY_NAME }}-bundle:${{ env.BUNDLE_IMAGE_TAG }}" 
+
+    - name: "Verify bundle image"
+      shell: bash
+      run: operator-sdk bundle validate quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY)-bundle:${BUNDLE_IMAGE_TAG} --select-optional name=operatorhub    
+      
+  release-helm-chart:
+    name: Helm Chart Release      
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags')"
+    needs: ["build"]
+    steps:
+
+      - name: set repo name
+        shell: bash
+        run: | 
+          echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v2       
+      
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global user.name "$GITHUB_ACTOR"
+          git config --global user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: checkout gh-pages
+        uses: actions/checkout@v2
+        with:
+          path: ./tmp/gh-pages
+          ref: gh-pages
+
+      - name: Build helm chart repo
+        shell: bash
+        run: make helmchart-repo VERSION=${VERSION} IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):${version} CHART_REPO_URL=https://${{ github.repository_owner }}.github.io/$(basename $GITHUB_REPOSITORY) HELM_REPO_DEST=./tmp/gh-pages
+      
+      - name: push helm repo to gh-pages
+        shell: bash
+        run: make helmchart-repo-push VERSION=${VERSION} IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):${version} CHART_REPO_URL=https://${{ github.repository_owner }}.github.io/$(basename $GITHUB_REPOSITORY) HELM_REPO_DEST=./tmp/gh-pages
+
+  release-github:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags')"
+    needs: ["build"]
+    steps:
+
+      - name: set repo name
+        shell: bash
+        run: | 
+          echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v2
+      - run: |
+          git fetch --prune --unshallow
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+      - name: Generate Changelog
+        run: |
+          LATEST_TAG=$(git tag --sort=creatordate | sed '$!d')
+          PREVIOUS_TAG=$(git tag --sort=creatordate | sed 'x;$!d')
+          if [ -z "${PREVIOUS_TAG}" ]; then
+            REV_RANGE=${LATEST_TAG}
+          else
+            REV_RANGE=${PREVIOUS_TAG}..${LATEST_TAG}
+          fi
+          git log --pretty=format:"- %s %H (%aN)" --no-merges ${REV_RANGE} > ${VERSION}-CHANGELOG.txt
+          cat ${VERSION}-CHANGELOG.txt
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: ${{ env.VERSION }}-CHANGELOG.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  release-operatorhub:
+    name: Relase to OperatorHub via community-operators (We don't actually commit in this case)
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags')"
+    needs: ["build"]
+    steps:
+
+      - name: set repo name
+        shell: bash
+        run: | 
+          echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.14
+      - name: Download operator sdk
+        shell: bash
+        env:
+          RELEASE_VERSION: v1.1.0
+        run: | 
+          curl -LO https://github.com/operator-framework/operator-sdk/releases/download/${RELEASE_VERSION}/operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+          chmod +x operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+          mkdir ${HOME}/bin
+          mv operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu ${HOME}/bin/operator-sdk
+          echo "${HOME}/bin" >> $GITHUB_PATH 
+      - name: Get the version
+        id: get_version
+        run: |
+          export TAG=${GITHUB_REF/refs\/tags\//}
+          echo "VERSION=${TAG:1}" >> $GITHUB_ENV
+      - name: checkout community-operators
+        uses: actions/checkout@v2
+        with:
+          repository: operator-framework/community-operators
+          path: ./tmp/community-operators
+
+      - name: check whether it is first release
+        shell: bash
+        run: |
+          echo first_release=$([[ ! -d "./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)" ]] && echo 'true' || echo 'false') >> $GITHUB_ENV
+          echo $first_release
+
+      
+      - name: create and copy bundle to community operators
+        shell: bash
+        run: | 
+          make bundle IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):v${VERSION} VERSION=${VERSION} DEFAULT_CHANNEL=alpha
+          sed  's/bundle\///g' bundle.Dockerfile > bundle/Dockerfile
+          sed -i '/replaces: '"$(basename $GITHUB_REPOSITORY)"'/d' ./bundle/manifests/$(basename $GITHUB_REPOSITORY).clusterserviceversion.yaml
+          mkdir -p ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
+          /bin/cp -v -R ./bundle/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}         
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        if: ${{ startsWith( env.first_release, 'true' ) }}
+        with:
+          path: ./tmp/community-operators
+          commit-message: ${{ env.REPOSITORY_NAME }} release ${{ env.VERSION }}
+          committer: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
+          author: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
+          signoff: true
+          branch: ${{ env.REPOSITORY_NAME }}-${{ env.VERSION }}
+          delete-branch: true
+          push-to-fork: ${{ github.repository_owner }}/community-operators
+          title: ${{ env.REPOSITORY_NAME }} initial commit
+          body: |
+            ### New Submissions
+
+            * [x] Has you operator [nested directory structure](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#create-a-bundle)?
+            * [x] Have you selected the Project *Community Operator Submissions* in your PR on the right-hand menu bar?
+            * [x] Are you familiar with our [contribution guidelines](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md)?
+            * [x] Have you [packaged and deployed](https://github.com/operator-framework/community-operators/blob/master/docs/testing-operators.md) your Operator for Operator Framework?
+            * [x] Have you tested your Operator with all Custom Resource Definitions?
+            * [x] Have you tested your Operator in all supported [installation modes](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/building-your-csv.md#operator-metadata)?
+            * [x] Is your submission [signed](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#sign-your-work)?
+
+            ### Updates to existing Operators
+
+            * [ ] Is your new CSV pointing to the previous version with the `replaces` property?
+            * [ ] Is your new CSV referenced in the [appropriate channel](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#bundle-format) defined in the `package.yaml` ?
+            * [ ] Have you tested an update to your Operator when deployed via OLM?
+            * [ ] Is your submission [signed](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#sign-your-work)?
+
+            ### Your submission should not
+
+            * [x] Modify more than one operator
+            * [x] Modify an Operator you don't own
+            * [x] Rename an operator - please remove and add with a different name instead
+            * [x] Submit operators to both `upstream-community-operators` and `community-operators` at once
+            * [x] Modify any files outside the above mentioned folders
+            * [x] Contain more than one commit. **Please squash your commits.**
+
+            ### Operator Description must contain (in order)
+
+            1. [x] Description about the managed Application and where to find more information
+            2. [x] Features and capabilities of your Operator and how to use it
+            3. [x] Any manual steps about potential pre-requisites for using your Operator
+
+            ### Operator Metadata should contain
+
+            * [x] Human readable name and 1-liner description about your Operator
+            * [x] Valid [category name](https://github.com/operator-framework/community-operators/blob/master/docs/required-fields.md#categories)<sup>1</sup>
+            * [x] One of the pre-defined [capability levels](https://github.com/operator-framework/operator-courier/blob/4d1a25d2c8d52f7de6297ec18d8afd6521236aa2/operatorcourier/validate.py#L556)<sup>2</sup>
+            * [x] Links to the maintainer, source code and documentation
+            * [x] Example templates for all Custom Resource Definitions intended to be used
+            * [x] A quadratic logo
+
+            Remember that you can preview your CSV [here](https://operatorhub.io/preview).
+
+            --
+
+            <sup>1</sup> If you feel your Operator does not fit any of the pre-defined categories, file a PR against this repo and explain your need
+
+            <sup>2</sup> For more information see [here](https://github.com/operator-framework/operator-sdk/blob/master/doc/images/operator-capability-level.svg)
+          token: ${{ secrets.COMMUNITY_OPERATOR_PAT }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        if: ${{ ! startsWith( env.first_release, 'true' ) }} 
+        with:
+          path: ./tmp/community-operators
+          commit-message: ${{ env.REPOSITORY_NAME }} release ${{ env.VERSION }}
+          committer: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
+          author: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
+          signoff: true
+          branch: ${{ env.REPOSITORY_NAME }}-${{ env.VERSION }}
+          delete-branch: true
+          push-to-fork: ${{ github.repository_owner }}/community-operators
+          title: ${{ env.REPOSITORY_NAME }} new version ${{ env.VERSION }}
+          body: |
+            ### New Submissions
+
+            * [ ] Has you operator [nested directory structure](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#create-a-bundle)?
+            * [ ] Have you selected the Project *Community Operator Submissions* in your PR on the right-hand menu bar?
+            * [ ] Are you familiar with our [contribution guidelines](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md)?
+            * [ ] Have you [packaged and deployed](https://github.com/operator-framework/community-operators/blob/master/docs/testing-operators.md) your Operator for Operator Framework?
+            * [ ] Have you tested your Operator with all Custom Resource Definitions?
+            * [ ] Have you tested your Operator in all supported [installation modes](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/building-your-csv.md#operator-metadata)?
+            * [ ] Is your submission [signed](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#sign-your-work)?
+
+            ### Updates to existing Operators
+
+            * [x] Is your new CSV pointing to the previous version with the `replaces` property?
+            * [x] Is your new CSV referenced in the [appropriate channel](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#bundle-format) defined in the `package.yaml` ?
+            * [ ] Have you tested an update to your Operator when deployed via OLM?
+            * [x] Is your submission [signed](https://github.com/operator-framework/community-operators/blob/master/docs/contributing.md#sign-your-work)?
+
+            ### Your submission should not
+
+            * [x] Modify more than one operator
+            * [x] Modify an Operator you don't own
+            * [x] Rename an operator - please remove and add with a different name instead
+            * [x] Submit operators to both `upstream-community-operators` and `community-operators` at once
+            * [x] Modify any files outside the above mentioned folders
+            * [x] Contain more than one commit. **Please squash your commits.**
+
+            ### Operator Description must contain (in order)
+
+            1. [x] Description about the managed Application and where to find more information
+            2. [x] Features and capabilities of your Operator and how to use it
+            3. [x] Any manual steps about potential pre-requisites for using your Operator
+
+            ### Operator Metadata should contain
+
+            * [x] Human readable name and 1-liner description about your Operator
+            * [x] Valid [category name](https://github.com/operator-framework/community-operators/blob/master/docs/required-fields.md#categories)<sup>1</sup>
+            * [x] One of the pre-defined [capability levels](https://github.com/operator-framework/operator-courier/blob/4d1a25d2c8d52f7de6297ec18d8afd6521236aa2/operatorcourier/validate.py#L556)<sup>2</sup>
+            * [x] Links to the maintainer, source code and documentation
+            * [x] Example templates for all Custom Resource Definitions intended to be used
+            * [x] A quadratic logo
+
+            Remember that you can preview your CSV [here](https://operatorhub.io/preview).
+
+            --
+
+            <sup>1</sup> If you feel your Operator does not fit any of the pre-defined categories, file a PR against this repo and explain your need
+
+            <sup>2</sup> For more information see [here](https://github.com/operator-framework/operator-sdk/blob/master/doc/images/operator-capability-level.svg)
+          token:  ${{ secrets.COMMUNITY_OPERATOR_PAT }}         
+     
+

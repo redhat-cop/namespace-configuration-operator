@@ -1,0 +1,50 @@
+name: pull request
+on: 
+  pull_request:
+    branches:
+      - master
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: build
+    steps:
+
+    - name: set repo name
+      shell: bash
+      run: | 
+        echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV    
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.14
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Download operator sdk
+      shell: bash
+      env:
+        RELEASE_VERSION: v1.1.0
+      run: | 
+        curl -LO https://github.com/operator-framework/operator-sdk/releases/download/${RELEASE_VERSION}/operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+        chmod +x operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
+        mkdir ${HOME}/bin
+        mv operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu ${HOME}/bin/operator-sdk 
+        echo "${HOME}/bin" >> $GITHUB_PATH       
+
+    - name: build code
+      shell: bash
+      run:  make VERSION=latest
+      
+    - name: build bundle
+      shell: bash
+      run: make bundle IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):0.0.1 VERSION=0.0.1 DEFAULT_CHANNEL=alpha
+
+    - name: verify bundle
+      shell: bash
+      run: operator-sdk bundle validate ./bundle --select-optional name=operatorhub
+
+    - name: build chart
+      shell: bash
+      run: make helmchart VERSION=0.0.1 IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):0.0.1

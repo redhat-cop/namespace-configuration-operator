@@ -1,0 +1,6 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- redhatcop_v1alpha1_namespaceconfig.yaml
+- redhatcop_v1alpha1_userconfig.yaml
+- redhatcop_v1alpha1_groupconfig.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

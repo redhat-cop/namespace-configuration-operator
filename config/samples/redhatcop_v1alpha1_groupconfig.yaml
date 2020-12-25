@@ -46,4 +46,4 @@ spec:
           selector:
             labels:
               matchLabels:
-                group: {{ .Name }}            
+                group: {{ .Name }}

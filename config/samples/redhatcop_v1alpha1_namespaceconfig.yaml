@@ -32,4 +32,4 @@ spec:
           egress:
           - type: Deny
             to:
-              cidrSelector: 0.0.0.0/0         
+              cidrSelector: 0.0.0.0/0
