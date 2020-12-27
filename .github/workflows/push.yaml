@@ -56,8 +56,8 @@ jobs:
       shell: bash 
       run: |
         echo "OPERATOR_IMAGE_TAG=latest" >> $GITHUB_ENV
-        echo "BUNDLE_IMAGE_TAG=v0.0.0" >> $GITHUB_ENV
-        echo "BUNDLE_VERSION=0.0.0" >> $GITHUB_ENV 
+        echo "BUNDLE_IMAGE_TAG=v0.0.1" >> $GITHUB_ENV
+        echo "BUNDLE_VERSION=0.0.1" >> $GITHUB_ENV 
 
     - name: build code
       run:  make
