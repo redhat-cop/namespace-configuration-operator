@@ -25,7 +25,7 @@ jobs:
     - name: Download operator sdk
       shell: bash
       env:
-        RELEASE_VERSION: v1.1.0
+        RELEASE_VERSION: v1.3.0
       run: | 
         curl -LO https://github.com/operator-framework/operator-sdk/releases/download/${RELEASE_VERSION}/operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
         chmod +x operator-sdk-${RELEASE_VERSION}-x86_64-linux-gnu
