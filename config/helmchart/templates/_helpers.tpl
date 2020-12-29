@@ -2,7 +2,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "namespace-config-operator.name" -}}
+{{- define "namespace-configuration-operator.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -11,7 +11,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "namespace-config-operator.fullname" -}}
+{{- define "namespace-configuration-operator.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -27,16 +27,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "namespace-config-operator.chart" -}}
+{{- define "namespace-configuration-operator.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "namespace-config-operator.labels" -}}
-helm.sh/chart: {{ include "namespace-config-operator.chart" . }}
-{{ include "namespace-config-operator.selectorLabels" . }}
+{{- define "namespace-configuration-operator.labels" -}}
+helm.sh/chart: {{ include "namespace-configuration-operator.chart" . }}
+{{ include "namespace-configuration-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -46,17 +46,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "namespace-config-operator.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "namespace-config-operator.name" . }}
+{{- define "namespace-configuration-operator.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "namespace-configuration-operator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "namespace-config-operator.serviceAccountName" -}}
+{{- define "namespace-configuration-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "namespace-config-operator.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "namespace-configuration-operator.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "namespace-config-operator.fullname" . }}
+  name: {{ include "namespace-configuration-operator.fullname" . }}
   labels:
-    {{- include "namespace-config-operator.labels" . | nindent 4 }}
+    {{- include "namespace-configuration-operator.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "namespace-config-operator.selectorLabels" . | nindent 6 }}
+      {{- include "namespace-configuration-operator.selectorLabels" . | nindent 6 }}
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
@@ -16,13 +16,13 @@ spec:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        {{- include "namespace-config-operator.selectorLabels" . | nindent 8 }}
+        {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "namespace-config-operator.serviceAccountName" . }}    
+      serviceAccountName: {{ include "namespace-configuration-operator.serviceAccountName" . }}    
       containers:
       - command:
         - /manager

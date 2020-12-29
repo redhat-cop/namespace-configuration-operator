@@ -1,8 +1,8 @@
 apiVersion: v1
-name: namespace-config-operator
+name: namespace-configuration-operator
 version: ${version}
 appVersion: ${version}
-description: Helm chart that deploys namespace-config-operator
+description: Helm chart that deploys namespace-configuration-operator
 keywords:
   - volume
   - storage
@@ -10,5 +10,5 @@ keywords:
   - expansion
   - monitoring
 sources:
-  - https://github.com/redhat-cop/namespace-config-operator
+  - https://github.com/redhat-cop/namespace-configuration-operator
 engine: gotpl
