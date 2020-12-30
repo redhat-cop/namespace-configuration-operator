@@ -1,6 +1,8 @@
 # Namespace Configuration Operator
 
 ![build status](https://github.com/redhat-cop/namespace-configuration-operator/workflows/push/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/redhat-cop/namespace-configuration-operator)](https://goreportcard.com/report/github.com/redhat-cop/namespace-configuration-operator)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/redhat-cop/namespace-configuration-operator)
 
 ## Introduction
 
