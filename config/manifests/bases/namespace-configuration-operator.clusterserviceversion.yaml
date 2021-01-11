@@ -68,5 +68,4 @@ spec:
   maturity: alpha
   provider:
     name: Red Hat Community of Practice
-    url: https://github.com/redhat-cop
   version: 0.1.0
