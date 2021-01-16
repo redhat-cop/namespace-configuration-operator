@@ -2,11 +2,27 @@ apiVersion: v1
 entries:
   namespace-configuration-operator:
   - apiVersion: v1
+    appVersion: v1.0.0
+    created: "2021-01-16T19:51:08.974565131Z"
+    description: Helm chart that deploys namespace-configuration-operator
+    digest: 2e021fc1a667716d93b166f8b4c4cb2b9216753fe2d361d44249301dc6de2dce
+    keywords:
+    - volume
+    - storage
+    - csi
+    - expansion
+    - monitoring
+    name: namespace-configuration-operator
+    sources:
+    - https://github.com/redhat-cop/namespace-configuration-operator
+    urls:
+    - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v1.0.0.tgz
+    version: v1.0.0
+  - apiVersion: v1
     appVersion: v0.2.5
-    created: "2020-10-25T00:31:16.002063068Z"
+    created: "2021-01-16T19:51:08.973671416Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: ff6a41b21daeadb2075db4750b8c90ad5cd9444778adb0aa961eafe3aa17c8bc
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -18,10 +34,9 @@ entries:
     version: v0.2.5
   - apiVersion: v1
     appVersion: v0.2.4
-    created: "2020-10-25T00:31:16.00172489Z"
+    created: "2021-01-16T19:51:08.973207008Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: b314259518f249cccec06e343505586026cbc5d4096ff542a62e958467c612fc
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -33,10 +48,9 @@ entries:
     version: v0.2.4
   - apiVersion: v1
     appVersion: v0.2.3
-    created: "2020-10-25T00:31:16.001400455Z"
+    created: "2021-01-16T19:51:08.972810502Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: c36cd7614125054ea7181bab135c51f7d3808b25bd21ed8c0c86da1798807ec4
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -48,10 +62,9 @@ entries:
     version: v0.2.3
   - apiVersion: v1
     appVersion: v0.2.2
-    created: "2020-10-25T00:31:16.000719195Z"
+    created: "2021-01-16T19:51:08.972405295Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 5cf8ed939fb474be0eee3076c9a68b0e9516b167d9a4168e29a9be3618d3e537
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -63,10 +76,9 @@ entries:
     version: v0.2.2
   - apiVersion: v1
     appVersion: v0.2.1
-    created: "2020-10-25T00:31:16.000026292Z"
+    created: "2021-01-16T19:51:08.971938787Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 25f562e3b65a001880270d8dc4e9565f57a83ff90e55835fa5633583078aaf67
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -78,10 +90,9 @@ entries:
     version: v0.2.1
   - apiVersion: v1
     appVersion: v0.2.0
-    created: "2020-10-25T00:31:15.999348906Z"
+    created: "2021-01-16T19:51:08.97151058Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 1340afba588494697126fef367d66627377d073f8f5044af28da72af5e778ba6
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -93,10 +104,9 @@ entries:
     version: v0.2.0
   - apiVersion: v1
     appVersion: v0.1.0
-    created: "2020-10-25T00:31:15.998639159Z"
+    created: "2021-01-16T19:51:08.971067073Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 9a240ad965fc701cf1ffb3854a8c73c89a5e5963b0d3fad08964bf34cf3b5b8e
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -108,10 +118,9 @@ entries:
     version: v0.1.0
   - apiVersion: v1
     appVersion: v0.0.2
-    created: "2020-10-25T00:31:15.997814441Z"
+    created: "2021-01-16T19:51:08.970816569Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: c0df6e91ea00a22bf19411e1363c540739afc431699cfbc58fdeaecbaa800749
-    engine: gotpl
     keywords:
     - certificates
     - operator
@@ -121,4 +130,4 @@ entries:
     urls:
     - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v0.0.2.tgz
     version: v0.0.2
-generated: "2020-10-25T00:31:15.997426675Z"
+generated: "2021-01-16T19:51:08.970423963Z"
