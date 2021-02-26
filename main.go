@@ -83,7 +83,7 @@ func main() {
 	}
 
 	if err = (&controllers.NamespaceConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("NamespaceConfig"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NamespaceConfig")
@@ -91,7 +91,7 @@ func main() {
 	}
 
 	userConfigController := &controllers.UserConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor("UserConfig_controller"), true),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
@@ -112,7 +112,7 @@ func main() {
 	}
 
 	groupConfigController := &controllers.GroupConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetEventRecorderFor("GroupConfig_controller"), true),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("GroupConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 

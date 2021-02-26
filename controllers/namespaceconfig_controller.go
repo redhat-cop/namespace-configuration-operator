@@ -64,7 +64,7 @@ type NamespaceConfigReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("namespaceconfig", req.NamespacedName)
-
+	log.Info("reconciling started")
 	// Fetch the NamespaceConfig instance
 	instance := &redhatcopv1alpha1.NamespaceConfig{}
 	err := r.GetClient().Get(context, req.NamespacedName, instance)
@@ -78,7 +78,6 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
 	if !r.IsInitialized(instance) {
 		err := r.GetClient().Update(context, instance)
 		if err != nil {
@@ -105,9 +104,8 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		}
 		return reconcile.Result{}, nil
 	}
-
-	//get selected users
-	selectedNamespaces, err := r.getSelectedNamespaces(instance)
+	//get selected namespaces
+	selectedNamespaces, err := r.getSelectedNamespaces(context, instance)
 	if err != nil {
 		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
 		return r.ManageError(context, instance, err)
@@ -172,7 +170,7 @@ func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.
 	return lockedresources, nil
 }
 
-func (r *NamespaceConfigReconciler) getSelectedNamespaces(namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {
+func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Context, namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {
 	nl := corev1.NamespaceList{}
 	selector, err := metav1.LabelSelectorAsSelector(&namespaceconfig.Spec.LabelSelector)
 	if err != nil {
@@ -186,7 +184,7 @@ func (r *NamespaceConfigReconciler) getSelectedNamespaces(namespaceconfig *redha
 		return []corev1.Namespace{}, err
 	}
 
-	err = r.GetClient().List(context.TODO(), &nl, &client.ListOptions{LabelSelector: selector})
+	err = r.GetClient().List(context, &nl, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
 		r.Log.Error(err, "unable to list namespaces with selector", "selector", selector)
 		return []corev1.Namespace{}, err
@@ -239,7 +237,7 @@ func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(namespace cor
 }
 
 func isProhibitedNamespaceName(name string) bool {
-	return name == "default" || strings.HasPrefix(name, "openshift") || strings.HasPrefix(name, "kube")
+	return name == "default" || strings.HasPrefix(name, "openshift-") || strings.HasPrefix(name, "kube-")
 }
 
 // SetupWithManager sets up the controller with the Manager.

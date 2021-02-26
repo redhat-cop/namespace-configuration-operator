@@ -107,7 +107,7 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 	}
 
 	//get selected users
-	selectedUsers, err := r.getSelectedUsers(instance)
+	selectedUsers, err := r.getSelectedUsers(context, instance)
 	if err != nil {
 		log.Error(err, "unable to get users selected by", "UserConfig", instance)
 		return r.ManageError(context, instance, err)
@@ -141,17 +141,17 @@ func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserC
 	return lockedresources, nil
 }
 
-func (r *UserConfigReconciler) getSelectedUsers(instance *redhatcopv1alpha1.UserConfig) ([]userv1.User, error) {
+func (r *UserConfigReconciler) getSelectedUsers(context context.Context, instance *redhatcopv1alpha1.UserConfig) ([]userv1.User, error) {
 	userList := &userv1.UserList{}
 	identitiesList := &userv1.IdentityList{}
 
-	err := r.GetClient().List(context.TODO(), userList, &client.ListOptions{})
+	err := r.GetClient().List(context, userList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all users")
 		return []userv1.User{}, err
 	}
 
-	err = r.GetClient().List(context.TODO(), identitiesList, &client.ListOptions{})
+	err = r.GetClient().List(context, identitiesList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all identities")
 		return []userv1.User{}, err

@@ -106,7 +106,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	}
 
 	//get selected users
-	selectedGroups, err := r.getSelectedGroups(instance)
+	selectedGroups, err := r.getSelectedGroups(context, instance)
 	if err != nil {
 		log.Error(err, "unable to get groups selected by", "GroupConfig", instance)
 		return r.ManageError(context, instance, err)
@@ -140,7 +140,7 @@ func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.Grou
 	return lockedresources, nil
 }
 
-func (r *GroupConfigReconciler) getSelectedGroups(instance *redhatcopv1alpha1.GroupConfig) ([]userv1.Group, error) {
+func (r *GroupConfigReconciler) getSelectedGroups(context context.Context, instance *redhatcopv1alpha1.GroupConfig) ([]userv1.Group, error) {
 	groupList := &userv1.GroupList{}
 
 	labelSelector, err := metav1.LabelSelectorAsSelector(&instance.Spec.LabelSelector)
@@ -155,7 +155,7 @@ func (r *GroupConfigReconciler) getSelectedGroups(instance *redhatcopv1alpha1.Gr
 		return []userv1.Group{}, err
 	}
 
-	err = r.GetClient().List(context.TODO(), groupList, &client.ListOptions{
+	err = r.GetClient().List(context, groupList, &client.ListOptions{
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
