@@ -44,8 +44,9 @@ import (
 // NamespaceConfigReconciler reconciles a NamespaceConfig object
 type NamespaceConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
-	Log            logr.Logger
-	controllerName string
+	Log                   logr.Logger
+	controllerName        string
+	AllowSystemNamespaces bool
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=namespaceconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -194,7 +195,7 @@ func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Contex
 
 	for _, namespace := range nl.Items {
 		annotationsAsLabels := labels.Set(namespace.Annotations)
-		if annotationSelector.Matches(annotationsAsLabels) && !isProhibitedNamespaceName(namespace.GetName()) {
+		if annotationSelector.Matches(annotationsAsLabels) && (r.AllowSystemNamespaces || !isProhibitedNamespaceName(namespace.GetName())) {
 			selectedNamespaces = append(selectedNamespaces, namespace)
 		}
 	}
@@ -203,7 +204,7 @@ func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Contex
 }
 
 func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(namespace corev1.Namespace) ([]redhatcopv1alpha1.NamespaceConfig, error) {
-	if isProhibitedNamespaceName(namespace.GetName()) {
+	if !r.AllowSystemNamespaces && isProhibitedNamespaceName(namespace.GetName()) {
 		return []redhatcopv1alpha1.NamespaceConfig{}, nil
 	}
 	//find all the namespaceconfig

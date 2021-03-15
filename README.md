@@ -141,7 +141,7 @@ spec:
 
 Although not enforced by the operator the general expectation is that the NamespaceConfig CR will be used to create objects inside the selected namespace.
 
-The `default` namespace and all namespaces starting with either `kube-` or `openshift-` are never considered by this operator. This is a safety feature to ensure that this operator does not interfere with the core of the system.
+The `default` namespace and all namespaces starting with either `kube-` or `openshift-` are never considered by this operator in default. This is a safety feature to ensure that this operator does not interfere with the core of the system. By setting `ALLOW_SYSTEM_NAMESPACES`(bool) environment variable, you can allow system namespaces consideration if needed.
 
 Examples of NamespaceConfig usages can be found [here](./examples/namespace-config/readme.md)
 
