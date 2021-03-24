@@ -22,7 +22,6 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "namespace-configuration-operator.serviceAccountName" . }}    
       containers:
       - command:
         - /manager
