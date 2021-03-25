@@ -263,13 +263,13 @@ Deploy chart...
 
 ```shell
 make helmchart IMG=${imageRepository} VERSION=${imageTag}
-helm upgrade -i namespace-configuration-operator-helmchart-test charts/namespace-configuration-operator -n namespace-configuration-operator-local --create-namespace
+helm upgrade -i namespace-configuration-operator-local charts/namespace-configuration-operator -n namespace-configuration-operator-local --create-namespace
 ```
 
 Delete...
 
 ```shell
-helm delete namespace-configuration-operator-helmchart-test -n namespace-configuration-operator-local
+helm delete namespace-configuration-operator-local -n namespace-configuration-operator-local
 kubectl delete -f charts/namespace-configuration-operator/crds/crds.yaml
 ```
 
