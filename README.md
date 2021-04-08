@@ -141,7 +141,7 @@ spec:
 
 Although not enforced by the operator the general expectation is that the NamespaceConfig CR will be used to create objects inside the selected namespace.
 
-The `default` namespace and all namespaces starting with either `kube-` or `openshift-` are never considered by this operator. This is a safety feature to ensure that this operator does not interfere with the core of the system.
+The `default` namespace and all namespaces starting with either `kube-` or `openshift-` are never considered by this operator by default. This is a safety feature to ensure that this operator does not interfere with the core of the system. You can override this behavior by setting the `ALLOW_SYSTEM_NAMESPACES` environment variable to true.
 
 Examples of NamespaceConfig usages can be found [here](./examples/namespace-config/readme.md)
 
@@ -218,6 +218,24 @@ oc apply -f config/operatorhub -n namespace-configuration-operator
 ```
 
 This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
+
+You can set `ALLOW_SYSTEM_NAMESPACES` environment variable in `Subscription` like this;
+```
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: namespace-configuration-operator
+spec:
+  channel: alpha
+  config:
+    env:
+    - name: ALLOW_SYSTEM_NAMESPACES
+      value: true
+  installPlanApproval: Automatic
+  name: namespace-configuration-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+```
 
 ### Deploying with Helm
 

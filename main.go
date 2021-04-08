@@ -19,7 +19,7 @@ package main
 import (
 	"flag"
 	"os"
-
+	"strconv"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	userv1 "github.com/openshift/api/user/v1"
@@ -36,6 +36,10 @@ import (
 	"github.com/redhat-cop/namespace-configuration-operator/controllers"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	AllowSystemNamespacesEnvVarKey = "ALLOW_SYSTEM_NAMESPACES"
 )
 
 var (
@@ -83,8 +87,9 @@ func main() {
 	}
 
 	if err = (&controllers.NamespaceConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
-		Log:                 ctrl.Log.WithName("controllers").WithName("NamespaceConfig"),
+		EnforcingReconciler:   lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
+		Log:                   ctrl.Log.WithName("controllers").WithName("NamespaceConfig"),
+		AllowSystemNamespaces: checkNamespaceScope(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NamespaceConfig")
 		os.Exit(1)
@@ -147,4 +152,16 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func checkNamespaceScope() bool {
+	value := os.Getenv(AllowSystemNamespacesEnvVarKey)
+	if len(value) == 0 {
+		return false
+	}
+	res, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return res
 }
