@@ -240,7 +240,8 @@ jobs:
           sed  's/bundle\///g' bundle.Dockerfile > bundle/Dockerfile
           sed -i '/replaces: '"$(basename $GITHUB_REPOSITORY)"'/d' ./bundle/manifests/$(basename $GITHUB_REPOSITORY).clusterserviceversion.yaml
           mkdir -p ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
-          /bin/cp -v -R ./bundle/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}         
+          /bin/cp -v -R ./bundle/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
+          /bin/cp -v -R ./config/community-operators/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)         
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
