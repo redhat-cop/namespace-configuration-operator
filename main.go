@@ -106,6 +106,7 @@ func main() {
 		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 		InitUserCount:       -1,
+		InitIdentityCount:   -1,
 	}
 
 	if !isUserConfigControllerEnabled() {
