@@ -40,6 +40,9 @@ import (
 
 const (
 	AllowSystemNamespacesEnvVarKey = "ALLOW_SYSTEM_NAMESPACES"
+	EnableGroupConfigEnvVarKey     = "ENABLE_GROUPCONFIG_CONTROLLER"
+	EnableUserConfigEnvVarKey      = "ENABLE_USERCONFIG_CONTROLLER"
+	EnableNamespaceConfigEnvVarKey = "ENABLE_NAMESPACECONFIG_CONTROLLER"
 )
 
 var (
@@ -86,10 +89,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.NamespaceConfigReconciler{
+	if !isNamespaceConfigControllerEnabled() {
+		setupLog.Info("NamespaceConfig controller disabled!")
+
+	} else if err = (&controllers.NamespaceConfigReconciler{
 		EnforcingReconciler:   lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
 		Log:                   ctrl.Log.WithName("controllers").WithName("NamespaceConfig"),
 		AllowSystemNamespaces: checkNamespaceScope(),
+		InitNamespaceCount:    -1,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NamespaceConfig")
 		os.Exit(1)
@@ -98,9 +105,12 @@ func main() {
 	userConfigController := &controllers.UserConfigReconciler{
 		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
+		InitUserCount:       -1,
 	}
 
-	if ok, err := userConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if !isUserConfigControllerEnabled() {
+		setupLog.Info("UserConfig controller disabled!")
+	} else if ok, err := userConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "User",
@@ -119,9 +129,12 @@ func main() {
 	groupConfigController := &controllers.GroupConfigReconciler{
 		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("GroupConfig_controller"), true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
+		InitGroupCount:      -1,
 	}
 
-	if ok, err := groupConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if !isGroupConfigControllerEnabled() {
+		setupLog.Info("GroupConfig controller disabled!")
+	} else if ok, err := groupConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "Group",
@@ -152,6 +165,42 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func isGroupConfigControllerEnabled() bool {
+	value := os.Getenv(EnableGroupConfigEnvVarKey)
+	if len(value) == 0 {
+		return true
+	}
+	res, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return res
+}
+
+func isUserConfigControllerEnabled() bool {
+	value := os.Getenv(EnableUserConfigEnvVarKey)
+	if len(value) == 0 {
+		return true
+	}
+	res, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return res
+}
+
+func isNamespaceConfigControllerEnabled() bool {
+	value := os.Getenv(EnableNamespaceConfigEnvVarKey)
+	if len(value) == 0 {
+		return true
+	}
+	res, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return res
 }
 
 func checkNamespaceScope() bool {
