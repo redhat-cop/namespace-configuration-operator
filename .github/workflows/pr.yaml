@@ -39,7 +39,7 @@ jobs:
       
     - name: build bundle
       shell: bash
-      run: make bundle IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):0.0.1 VERSION=0.0.1 DEFAULT_CHANNEL=alpha
+      run: make bundle IMG=${{ secrets.STAKATER_NEXUS_PROD_REGISTRY }}/${{ github.repository }}:0.0.1 VERSION=0.0.1 DEFAULT_CHANNEL=alpha
 
     - name: verify bundle
       shell: bash
@@ -47,4 +47,4 @@ jobs:
 
     - name: build chart
       shell: bash
-      run: make helmchart VERSION=0.0.1 IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):0.0.1
+      run: make helmchart VERSION=0.0.1 IMG=${{ secrets.STAKATER_NEXUS_PROD_REGISTRY }}/${{ github.repository }}:0.0.1
