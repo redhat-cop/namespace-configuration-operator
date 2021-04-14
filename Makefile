@@ -126,7 +126,6 @@ bundle-build:
 
 # Generate helm chart
 helmchart: kustomize
-	$(KUSTOMIZE) version
 	mkdir -p ./charts/${OPERATOR_NAME}/templates
 	mkdir -p ./charts/${OPERATOR_NAME}/crds
 	cp ./config/helmchart/templates/* ./charts/${OPERATOR_NAME}/templates
