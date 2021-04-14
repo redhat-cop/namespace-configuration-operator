@@ -8,5 +8,5 @@ roleRef:
   name: leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: namespace-configuration-operator
+  name: sa
   namespace: system
