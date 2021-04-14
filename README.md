@@ -263,7 +263,7 @@ helm upgrade namespace-configuration-operator namespace-configuration-operator/n
 make install
 oc new-project namespace-configuration-operator-local
 kustomize build ./config/local-development | oc apply -f - -n namespace-configuration-operator-local
-export token=$(oc serviceaccounts get-token 'default' -n namespace-configuration-operator-local)
+export token=$(oc serviceaccounts get-token 'namespace-configuration-operator' -n namespace-configuration-operator-local)
 oc login --token ${token}
 make run ENABLE_WEBHOOKS=false
 ```
@@ -274,7 +274,7 @@ Define an image and tag. For example...
 
 ```shell
 export imageRepository="quay.io/redhat-cop/namespace-configuration-operator"
-export imageTag="v1.0.2"
+export imageTag="v1.0.3"
 ```
 
 Deploy chart...

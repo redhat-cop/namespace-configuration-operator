@@ -18,6 +18,7 @@ spec:
       labels:
         {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: namespace-configuration-operator
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
