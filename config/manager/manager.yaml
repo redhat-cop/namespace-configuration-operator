@@ -22,7 +22,7 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-      serviceAccountName: namespace-configuration-operator-sa
+      serviceAccountName: controller-manager
       containers:
       - command:
         - /manager

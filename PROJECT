@@ -3,19 +3,31 @@ layout: go.kubebuilder.io/v3
 projectName: namespace-configuration-operator
 repo: github.com/redhat-cop/namespace-configuration-operator
 resources:
-- crdVersion: v1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: redhat.io
   group: redhatcop
   kind: NamespaceConfig
+  path: github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1
   version: v1alpha1
-- crdVersion: v1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: redhat.io
   group: redhatcop
   kind: UserConfig
+  path: github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1
   version: v1alpha1
-- crdVersion: v1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: redhat.io
   group: redhatcop
   kind: GroupConfig
+  path: github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1
   version: v1alpha1
-version: 3-alpha
+version: "3"
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
