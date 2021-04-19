@@ -9,6 +9,7 @@ metadata:
     containerImage: quay.io/redhat-cop/namespace-configuration-operator
     createdAt: 5/28/2019
     description: This operator provides a facility to define and enforce namespace configurations
+    operatorframework.io/suggested-namespace: namespace-configuration-operator
     repository: https://github.com/redhat-cop/namespace-configuration-operator
     support: Best Effort
   name: namespace-configuration-operator.v0.0.0
