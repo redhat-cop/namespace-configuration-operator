@@ -13,7 +13,7 @@ image:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
-
+env: []
 podAnnotations: {}
 
 resources:
