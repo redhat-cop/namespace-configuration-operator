@@ -316,7 +316,7 @@ make bundle IMG=quay.io/$repo/namespace-configuration-operator:latest
 operator-sdk bundle validate ./bundle --select-optional name=operatorhub
 make bundle-build BUNDLE_IMG=quay.io/$repo/namespace-configuration-operator-bundle:latest
 docker login quay.io/$repo/namespace-configuration-operator-bundle
-podman push quay.io/$repo/namespace-configuration-operator-bundle:latest
+docker push quay.io/$repo/namespace-configuration-operator-bundle:latest
 operator-sdk bundle validate quay.io/$repo/namespace-configuration-operator-bundle:latest --select-optional name=operatorhub
 oc new-project namespace-configuration-operator
 operator-sdk cleanup namespace-configuration-operator -n namespace-configuration-operator

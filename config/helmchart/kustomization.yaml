@@ -29,8 +29,3 @@ vars:
     name: controller-manager-metrics
   fieldref:
     fieldpath: metadata.namespace
-- name: ROLE_NAME
-  objref:
-    kind: Role
-    apiVersion: rbac.authorization.k8s.io/v1
-    name: prometheus-k8s
