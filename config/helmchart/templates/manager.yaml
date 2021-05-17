@@ -17,6 +17,7 @@ spec:
     {{- end }}
       labels:
         {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
+        control-plane: controller-manager
     spec:
       serviceAccountName: namespace-configuration-operator-controller-manager
       {{- with .Values.imagePullSecrets }}
@@ -24,6 +25,21 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --tls-cert-file=/etc/certs/tls/tls.crt
+        - --tls-private-key-file=/etc/certs/tls/tls.key
+        - --v=10
+        image: quay.io/coreos/kube-rbac-proxy:v0.5.0
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+        volumeMounts:
+        - mountPath: /etc/certs/tls
+          name: tls-cert  
       - command:
         - /manager
         args:
@@ -61,3 +77,8 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+      - name: tls-cert
+        secret:
+          defaultMode: 420
+          secretName: namespace-configuration-operator-certs

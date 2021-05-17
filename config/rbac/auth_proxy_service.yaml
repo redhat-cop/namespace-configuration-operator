@@ -3,7 +3,9 @@ kind: Service
 metadata:
   labels:
     control-plane: controller-manager
-  name: controller-manager-metrics-service
+  annotations:
+    service.alpha.openshift.io/serving-cert-secret-name: namespace-configuration-operator-certs
+  name: controller-manager-metrics
   namespace: system
 spec:
   ports:

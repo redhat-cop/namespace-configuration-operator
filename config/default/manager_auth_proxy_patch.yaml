@@ -15,7 +15,12 @@ spec:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8080/"
         - "--logtostderr=true"
+        - "--tls-cert-file=/etc/certs/tls/tls.crt"
+        - "--tls-private-key-file=/etc/certs/tls/tls.key"
         - "--v=10"
+        volumeMounts:
+          - mountPath: /etc/certs/tls
+            name: tls-cert
         ports:
         - containerPort: 8443
           name: https
@@ -24,3 +29,8 @@ spec:
         - "--health-probe-bind-address=:8081"
         - "--metrics-bind-address=127.0.0.1:8080"
         - "--leader-elect"
+      volumes:
+      - name: tls-cert
+        secret:
+          defaultMode: 420
+          secretName: namespace-configuration-operator-certs

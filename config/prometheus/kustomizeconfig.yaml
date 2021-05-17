@@ -1,0 +1,4 @@
+---
+varReference:
+- path: spec/endpoints/tlsConfig/serverName
+  kind: ServiceMonitor
