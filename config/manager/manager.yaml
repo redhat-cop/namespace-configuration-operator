@@ -12,16 +12,16 @@ metadata:
   name: controller-manager
   namespace: system
   labels:
-    control-plane: controller-manager
+    operator: namespace-configuration-operator
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      operator: namespace-configuration-operator
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        operator: namespace-configuration-operator
     spec:
       serviceAccountName: controller-manager
       containers:
