@@ -4,7 +4,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
-    control-plane: controller-manager
+    operator: namespace-configuration-operator
   name: controller-manager-metrics-monitor
   namespace: system
 spec:
@@ -18,4 +18,4 @@ spec:
         serverName: $(METRICS_SERVICE_NAME).$(METRICS_SERVICE_NAMESPACE).svc
   selector:
     matchLabels:
-      control-plane: controller-manager
+      operator: namespace-configuration-operator

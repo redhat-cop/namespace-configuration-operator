@@ -17,7 +17,7 @@ spec:
     {{- end }}
       labels:
         {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
-        control-plane: controller-manager
+        operator: namespace-configuration-operator
     spec:
       serviceAccountName: namespace-configuration-operator-controller-manager
       {{- with .Values.imagePullSecrets }}
