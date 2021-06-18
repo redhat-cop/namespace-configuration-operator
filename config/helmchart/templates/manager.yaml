@@ -32,14 +32,17 @@ spec:
         - --tls-cert-file=/etc/certs/tls/tls.crt
         - --tls-private-key-file=/etc/certs/tls/tls.key
         - --v=10
-        image: quay.io/coreos/kube-rbac-proxy:v0.5.0
+        image: "{{ .Values.kube_rbac_proxy.image.repository }}:{{ .Values.kube_rbac_proxy.image.tag | default "v0.5.0" }}"
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
           name: https
         volumeMounts:
         - mountPath: /etc/certs/tls
-          name: tls-cert  
+          name: tls-cert
+        imagePullPolicy: {{ .Values.kube_rbac_proxy.image.pullPolicy }}
+        resources:
+          {{- toYaml .Values.kube_rbac_proxy.resources | nindent 10 }}
       - command:
         - /manager
         args:
@@ -52,7 +55,7 @@ spec:
         {{- end }}
         name: {{ .Chart.Name }} 
         resources:
-          {{- toYaml .Values.resources | nindent 12 }}
+          {{- toYaml .Values.resources | nindent 10 }}
         livenessProbe:
           httpGet:
             path: /healthz
