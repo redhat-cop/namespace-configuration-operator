@@ -32,7 +32,7 @@ spec:
         - --tls-cert-file=/etc/certs/tls/tls.crt
         - --tls-private-key-file=/etc/certs/tls/tls.key
         - --v=10
-        image: "{{ .Values.kube_rbac_proxy.image.repository }}:{{ .Values.kube_rbac_proxy.image.tag | default "v0.5.0" }}"
+        image: "{{ .Values.kube_rbac_proxy.image.repository }}:{{ .Values.kube_rbac_proxy.image.tag }}"
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
