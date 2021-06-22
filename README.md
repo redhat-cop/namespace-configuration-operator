@@ -282,7 +282,7 @@ Define an image and tag. For example...
 
 ```shell
 export imageRepository="quay.io/redhat-cop/namespace-configuration-operator"
-export imageTag="$(git describe --tags --abbrev=0)" # grabs the most recent git tag, which should match the image tag
+export imageTag="$(git -c 'versionsort.suffix=-' ls-remote --exit-code --refs --sort='version:refname' --tags https://github.com/redhat-cop/namespace-configuration-operator.git '*.*.*' | tail --lines=1 | cut --delimiter='/' --fields=3)"
 ```
 
 Deploy chart...
@@ -356,7 +356,6 @@ done
 ```sh
 export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
 oc label namespace ${operatorNamespace} openshift.io/cluster-monitoring="true"
-
 oc rsh -n openshift-monitoring -c prometheus prometheus-k8s-0 /bin/bash
 export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
 curl -v -s -k -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://namespace-configuration-operator-controller-manager-metrics.${operatorNamespace}.svc.cluster.local:8443/metrics
