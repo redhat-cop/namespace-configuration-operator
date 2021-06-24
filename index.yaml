@@ -2,8 +2,25 @@ apiVersion: v1
 entries:
   namespace-configuration-operator:
   - apiVersion: v1
+    appVersion: v1.0.7
+    created: "2021-06-24T12:30:03.233648534Z"
+    description: Helm chart that deploys namespace-configuration-operator
+    digest: 9538a6a4412c658e16bb3cf5fdf1074e7b541370648ad495f9428c0ea6567766
+    keywords:
+    - volume
+    - storage
+    - csi
+    - expansion
+    - monitoring
+    name: namespace-configuration-operator
+    sources:
+    - https://github.com/redhat-cop/namespace-configuration-operator
+    urls:
+    - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v1.0.7.tgz
+    version: v1.0.7
+  - apiVersion: v1
     appVersion: v1.0.6
-    created: "2021-06-11T04:10:11.798916505Z"
+    created: "2021-06-24T12:30:03.23256842Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 698c27898af4c3b1ba6a7799f0854c0cd6890e418761745809d06d11ea78bf18
     keywords:
@@ -20,7 +37,7 @@ entries:
     version: v1.0.6
   - apiVersion: v1
     appVersion: v1.0.5
-    created: "2021-06-11T04:10:11.798316605Z"
+    created: "2021-06-24T12:30:03.231863512Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 366eaaa51b4f376eec9c4666a005bc5678621c45eb863b52d7025500e506fb86
     keywords:
@@ -37,7 +54,7 @@ entries:
     version: v1.0.5
   - apiVersion: v1
     appVersion: v1.0.4
-    created: "2021-06-11T04:10:11.797744905Z"
+    created: "2021-06-24T12:30:03.231431606Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 9b8c92e0128044516eb5e786cedabfe9153bc2d9906313e933f341ed1bb1ce68
     keywords:
@@ -54,7 +71,7 @@ entries:
     version: v1.0.4
   - apiVersion: v1
     appVersion: v1.0.3
-    created: "2021-06-11T04:10:11.797221604Z"
+    created: "2021-06-24T12:30:03.231021701Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 1bd9d6bdb71e3481379b58a8b41f5745bbfe607b4e935fb17542b5f025e8ebe7
     keywords:
@@ -71,7 +88,7 @@ entries:
     version: v1.0.3
   - apiVersion: v1
     appVersion: v1.0.2
-    created: "2021-06-11T04:10:11.796690904Z"
+    created: "2021-06-24T12:30:03.230612096Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 700dad5ce9aa23352b0d2deaa26eab358157cca5157cec4fa95db9bab45efd75
     keywords:
@@ -88,7 +105,7 @@ entries:
     version: v1.0.2
   - apiVersion: v1
     appVersion: v1.0.1
-    created: "2021-06-11T04:10:11.796285704Z"
+    created: "2021-06-24T12:30:03.230285292Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 807149d123a0084ee2397af293116f98d62fb17c3bce2635149bcb35d53be2dc
     keywords:
@@ -105,7 +122,7 @@ entries:
     version: v1.0.1
   - apiVersion: v1
     appVersion: v1.0.0
-    created: "2021-06-11T04:10:11.795890204Z"
+    created: "2021-06-24T12:30:03.229946588Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 2e021fc1a667716d93b166f8b4c4cb2b9216753fe2d361d44249301dc6de2dce
     keywords:
@@ -122,7 +139,7 @@ entries:
     version: v1.0.0
   - apiVersion: v1
     appVersion: v0.2.5
-    created: "2021-06-11T04:10:11.794557304Z"
+    created: "2021-06-24T12:30:03.229611584Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: ff6a41b21daeadb2075db4750b8c90ad5cd9444778adb0aa961eafe3aa17c8bc
     keywords:
@@ -136,7 +153,7 @@ entries:
     version: v0.2.5
   - apiVersion: v1
     appVersion: v0.2.4
-    created: "2021-06-11T04:10:11.793827904Z"
+    created: "2021-06-24T12:30:03.229198579Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: b314259518f249cccec06e343505586026cbc5d4096ff542a62e958467c612fc
     keywords:
@@ -150,7 +167,7 @@ entries:
     version: v0.2.4
   - apiVersion: v1
     appVersion: v0.2.3
-    created: "2021-06-11T04:10:11.793047403Z"
+    created: "2021-06-24T12:30:03.228812174Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: c36cd7614125054ea7181bab135c51f7d3808b25bd21ed8c0c86da1798807ec4
     keywords:
@@ -164,7 +181,7 @@ entries:
     version: v0.2.3
   - apiVersion: v1
     appVersion: v0.2.2
-    created: "2021-06-11T04:10:11.791919103Z"
+    created: "2021-06-24T12:30:03.22847187Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 5cf8ed939fb474be0eee3076c9a68b0e9516b167d9a4168e29a9be3618d3e537
     keywords:
@@ -178,7 +195,7 @@ entries:
     version: v0.2.2
   - apiVersion: v1
     appVersion: v0.2.1
-    created: "2021-06-11T04:10:11.791427603Z"
+    created: "2021-06-24T12:30:03.228124565Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 25f562e3b65a001880270d8dc4e9565f57a83ff90e55835fa5633583078aaf67
     keywords:
@@ -192,7 +209,7 @@ entries:
     version: v0.2.1
   - apiVersion: v1
     appVersion: v0.2.0
-    created: "2021-06-11T04:10:11.790952003Z"
+    created: "2021-06-24T12:30:03.227766261Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 1340afba588494697126fef367d66627377d073f8f5044af28da72af5e778ba6
     keywords:
@@ -206,7 +223,7 @@ entries:
     version: v0.2.0
   - apiVersion: v1
     appVersion: v0.1.0
-    created: "2021-06-11T04:10:11.790540903Z"
+    created: "2021-06-24T12:30:03.227423357Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: 9a240ad965fc701cf1ffb3854a8c73c89a5e5963b0d3fad08964bf34cf3b5b8e
     keywords:
@@ -220,7 +237,7 @@ entries:
     version: v0.1.0
   - apiVersion: v1
     appVersion: v0.0.2
-    created: "2021-06-11T04:10:11.790251903Z"
+    created: "2021-06-24T12:30:03.227175453Z"
     description: Helm chart that deploys namespace-configuration-operator
     digest: c0df6e91ea00a22bf19411e1363c540739afc431699cfbc58fdeaecbaa800749
     keywords:
@@ -232,4 +249,4 @@ entries:
     urls:
     - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-v0.0.2.tgz
     version: v0.0.2
-generated: "2021-06-11T04:10:11.789772303Z"
+generated: "2021-06-24T12:30:03.226763748Z"
