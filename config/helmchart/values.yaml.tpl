@@ -10,6 +10,8 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: ${version}
 
+customLabels: {}
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
