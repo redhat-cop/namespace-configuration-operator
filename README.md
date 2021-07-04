@@ -263,6 +263,17 @@ Prometheus compatible metrics are exposed by the Operator and can be integrated 
 oc label namespace <namespace> openshift.io/cluster-monitoring="true"
 ```
 
+### Testing metrics
+
+```sh
+export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
+oc label namespace ${operatorNamespace} openshift.io/cluster-monitoring="true"
+oc rsh -n openshift-monitoring -c prometheus prometheus-k8s-0 /bin/bash
+export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
+curl -v -s -k -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://namespace-configuration-operator-controller-manager-metrics.${operatorNamespace}.svc.cluster.local:8443/metrics
+exit
+```
+
 ## Development
 
 ### Running the operator locally
@@ -349,17 +360,6 @@ export username
 export uid=$(oc get user $username -o jsonpath='{.metadata.uid}')
 cat ./test/identities.yaml | envsubst | oc apply -f -
 done
-```
-
-#### Testing metrics
-
-```sh
-export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
-oc label namespace ${operatorNamespace} openshift.io/cluster-monitoring="true"
-oc rsh -n openshift-monitoring -c prometheus prometheus-k8s-0 /bin/bash
-export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
-curl -v -s -k -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://namespace-configuration-operator-controller-manager-metrics.${operatorNamespace}.svc.cluster.local:8443/metrics
-exit
 ```
 
 ### Releasing
