@@ -1,3 +1,7 @@
+CHART_REPO_URL ?= http://example.com
+HELM_REPO_DEST ?= /tmp/gh-pages
+OPERATOR_NAME ?=$(shell basename -z `pwd`)
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -29,7 +33,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # example.com/memcached-operator-bundle:$VERSION and example.com/memcached-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= example.com/memcached-operator
+IMAGE_TAG_BASE ?= quay.io/redhat-cop/$(OPERATOR_NAME)
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -52,10 +56,6 @@ endif
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
-
-CHART_REPO_URL ?= http://example.com
-HELM_REPO_DEST ?= /tmp/gh-pages
-OPERATOR_NAME ?=$(shell basename -z `pwd`)
 
 all: build
 
