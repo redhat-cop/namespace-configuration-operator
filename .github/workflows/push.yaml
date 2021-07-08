@@ -73,7 +73,7 @@ jobs:
       run: operator-sdk bundle validate ./bundle --select-optional name=operatorhub
 
     - name: process bundle for disconnected support
-      uses: redhat-cop/github-actions/disconnected-csv@main
+      uses: redhat-cop/github-actions/disconnected-csv@master
       with:
         CSV_FILE: bundle/manifests/namespace-configuration-operator.clusterserviceversion.yaml
         TAGS_TO_DIGESTS: ${OPERATOR_IMAGE_TAG}
