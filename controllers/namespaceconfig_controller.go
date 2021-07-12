@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/types"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -32,7 +33,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +47,8 @@ type NamespaceConfigReconciler struct {
 	Log                   logr.Logger
 	controllerName        string
 	AllowSystemNamespaces bool
+	InitNamespaceCount    int16
+	namespaceCounter      int16
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=namespaceconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -251,8 +253,25 @@ func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				Kind: "Namespace",
 			},
 		}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+			// Skip watching pre-existing namespaces
+			if r.InitNamespaceCount == -1 {
+				nl := &corev1.NamespaceList{}
+				if err := r.GetClient().List(context.TODO(), nl); err != nil {
+					r.Log.Error(err, "unable to list namespaces")
+					return []reconcile.Request{}
+				}
+				r.InitNamespaceCount = int16(len(nl.Items))
+			}
+			if r.namespaceCounter < r.InitNamespaceCount {
+				r.namespaceCounter++
+				return []reconcile.Request{}
+			}
+
+			// Main watcher
 			res := []reconcile.Request{}
 			ns := a.(*corev1.Namespace)
+
+			r.Log.Info("namespace watcher:" + ns.Name)
 			ncl, err := r.findApplicableNameSpaceConfigs(*ns)
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable NamespaceConfig for namespace", "namespace", ns.Name)
