@@ -13,6 +13,7 @@ metadata:
     operatorframework.io/suggested-namespace: namespace-configuration-operator
     repository: https://github.com/redhat-cop/namespace-configuration-operator
     support: Best Effort
+    operators.openshift.io/infrastructure-features: '["Disconnected"]'
   name: namespace-configuration-operator.v0.0.0
   namespace: placeholder
 spec:

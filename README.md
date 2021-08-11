@@ -192,6 +192,8 @@ It is recommended to deploy this operator via [`OperatorHub`](https://operatorhu
 
 ### Deploying from OperatorHub
 
+> **Note**: This operator supports being installed disconnected environments
+
 If you want to utilize the Operator Lifecycle Manager (OLM) to install this operator, you can do so in two ways: from the UI or the CLI.
 
 #### Deploying from OperatorHub UI

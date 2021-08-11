@@ -22,6 +22,7 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ^1.16
+
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
 
@@ -48,8 +49,6 @@ jobs:
         export SEMVER_COMPLIANT=$(echo ${TAG:1} | egrep '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-])(?:\.(?:0|[1-9]\d|\d*[a-zA-Z-][0-9a-zA-Z-]))))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$')
         if [ -z "$SEMVER_COMPLIANT" ]; then   echo "invalid semver tag ${GITHUB_REF/refs\/tags\//}"; exit 1; fi
 
-
-
     - name: Get the version for merge
       id: get_version2
       if: "! startsWith(github.ref, 'refs/tags')"
@@ -72,12 +71,6 @@ jobs:
       shell: bash
       run: operator-sdk bundle validate ./bundle --select-optional name=operatorhub
 
-    - name: process bundle for disconnected support
-      uses: redhat-cop/github-actions/disconnected-csv@master
-      with:
-        CSV_FILE: bundle/manifests/namespace-configuration-operator.clusterserviceversion.yaml
-        TAGS_TO_DIGESTS: ${OPERATOR_IMAGE_TAG}
-
     - name: build chart
       shell: bash
       run: make helmchart VERSION=${BUNDLE_VERSION} IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):${OPERATOR_IMAGE_TAG}      
@@ -87,7 +80,7 @@ jobs:
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
-    
+      
     - name: Login to DockerHub
       uses: docker/login-action@v1 
       with:
@@ -114,7 +107,13 @@ jobs:
     - name: "Verify bundle image"
       shell: bash
       run: operator-sdk bundle validate quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY)-bundle:${BUNDLE_IMAGE_TAG} --select-optional name=operatorhub    
-      
+
+    - name: process bundle for disconnected support
+      uses: redhat-cop/github-actions/disconnected-csv@master
+      with:
+        CSV_FILE: bundle/manifests/${{ env.REPOSITORY_NAME }}.clusterserviceversion.yaml
+        TAGS_TO_DIGESTS: ${OPERATOR_IMAGE_TAG}
+
   release-helm-chart:
     name: Helm Chart Release      
     runs-on: ubuntu-latest
@@ -168,11 +167,13 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v2
+
       - run: |
           git fetch --prune --unshallow
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+
       - name: Generate Changelog
         run: |
           LATEST_TAG=$(git tag --sort=creatordate | sed '$!d')
@@ -184,6 +185,7 @@ jobs:
           fi
           git log --pretty=format:"- %s %H (%aN)" --no-merges ${REV_RANGE} > ${VERSION}-CHANGELOG.txt
           cat ${VERSION}-CHANGELOG.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -204,13 +206,16 @@ jobs:
         shell: bash
         run: | 
           echo "REPOSITORY_NAME=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
+          echo "CONTEXT_PATH="
 
       - name: Checkout
         uses: actions/checkout@v2
+
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
         with:
           go-version: ^1.16
+
       - name: Download operator sdk
         shell: bash
         env:
@@ -221,23 +226,24 @@ jobs:
           mkdir ${HOME}/bin
           mv operator-sdk_linux_amd64 ${HOME}/bin/operator-sdk
           echo "${HOME}/bin" >> $GITHUB_PATH
+
       - name: Get the version
         id: get_version
         run: |
           export TAG=${GITHUB_REF/refs\/tags\//}
           echo "VERSION=${TAG:1}" >> $GITHUB_ENV
-      - name: checkout community-operators
+
+      - name: checkout community-operators-prod
         uses: actions/checkout@v2
         with:
-          repository: operator-framework/community-operators
-          path: ./tmp/community-operators
+          repository: redhat-openshift-ecosystem/community-operators-prod
+          path: ./tmp/community-operators-prod
 
       - name: check whether it is first release
         shell: bash
         run: |
-          echo first_release=$([[ ! -d "./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)" ]] && echo 'true' || echo 'false') >> $GITHUB_ENV
+          echo first_release=$([[ ! -d "./tmp/community-operators-prod/operators/$(basename $GITHUB_REPOSITORY)" ]] && echo 'true' || echo 'false') >> $GITHUB_ENV
           echo $first_release
-
       
       - name: create and copy bundle to community operators
         shell: bash
@@ -245,22 +251,28 @@ jobs:
           make bundle IMG=quay.io/${{ github.repository_owner }}/$(basename $GITHUB_REPOSITORY):v${VERSION} VERSION=${VERSION} DEFAULT_CHANNEL=alpha
           sed  's/bundle\///g' bundle.Dockerfile > bundle/Dockerfile
           sed -i '/replaces: '"$(basename $GITHUB_REPOSITORY)"'/d' ./bundle/manifests/$(basename $GITHUB_REPOSITORY).clusterserviceversion.yaml
-          mkdir -p ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
-          /bin/cp -v -R ./bundle/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
-          /bin/cp -v -R ./config/community-operators/* ./tmp/community-operators/community-operators/$(basename $GITHUB_REPOSITORY)         
+          mkdir -p ./tmp/community-operators-prod/operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
+          /bin/cp -v -R ./bundle/* ./tmp/community-operators-prod/operators/$(basename $GITHUB_REPOSITORY)/${VERSION}
+          /bin/cp -v -R ./config/community-operators/* ./tmp/community-operators-prod/operators/$(basename $GITHUB_REPOSITORY)       
+
+      - name: process bundle for disconnected support
+        uses: redhat-cop/github-actions/disconnected-csv@master
+        with:
+          CSV_FILE: "./tmp/community-operators-prod/operators/${{ env.REPOSITORY_NAME }}/${{ env.VERSION }}/manifests/${{ env.REPOSITORY_NAME }}.clusterserviceversion.yaml"
+          TAGS_TO_DIGESTS: ${OPERATOR_IMAGE_TAG}
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         if: ${{ startsWith( env.first_release, 'true' ) }}
         with:
-          path: ./tmp/community-operators
+          path: ./tmp/community-operators-prod
           commit-message: ${{ env.REPOSITORY_NAME }} release ${{ env.VERSION }}
           committer: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
           author: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
           signoff: true
           branch: ${{ env.REPOSITORY_NAME }}-${{ env.VERSION }}
           delete-branch: true
-          push-to-fork: ${{ github.repository_owner }}/community-operators
+          push-to-fork: ${{ github.repository_owner }}/community-operators-prod
           title: ${{ env.REPOSITORY_NAME }} initial commit
           body: |
             ### New Submissions
@@ -317,14 +329,14 @@ jobs:
         uses: peter-evans/create-pull-request@v3
         if: ${{ ! startsWith( env.first_release, 'true' ) }} 
         with:
-          path: ./tmp/community-operators
+          path: ./tmp/community-operators-prod
           commit-message: ${{ env.REPOSITORY_NAME }} release ${{ env.VERSION }}
           committer: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
           author: ${{ github.actor }} <raffaele.spazzoli@gmail.com>
           signoff: true
           branch: ${{ env.REPOSITORY_NAME }}-${{ env.VERSION }}
           delete-branch: true
-          push-to-fork: ${{ github.repository_owner }}/community-operators
+          push-to-fork: ${{ github.repository_owner }}/community-operators-prod
           title: ${{ env.REPOSITORY_NAME }} new version ${{ env.VERSION }}
           body: |
             ### New Submissions
@@ -375,6 +387,4 @@ jobs:
             <sup>1</sup> If you feel your Operator does not fit any of the pre-defined categories, file a PR against this repo and explain your need
 
             <sup>2</sup> For more information see [here](https://github.com/operator-framework/operator-sdk/blob/master/doc/images/operator-capability-level.svg)
-          token:  ${{ secrets.COMMUNITY_OPERATOR_PAT }}         
-     
-
+          token:  ${{ secrets.COMMUNITY_OPERATOR_PAT }}
