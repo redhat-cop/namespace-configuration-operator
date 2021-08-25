@@ -200,10 +200,10 @@ If you want to utilize the Operator Lifecycle Manager (OLM) to install this oper
 
 | Arch  | Support  |
 |:-:|:-:|
-| amd64  | &#x2611; |
-| arm64  | &#x2611;  |
-| ppc64le  | &#x2611;  |
-| s390x  | &#x2611;  |
+| amd64  | ✅ |
+| arm64  | ✅  |
+| ppc64le  | ✅  |
+| s390x  | ❌  |
 
 #### Deploying from OperatorHub UI
 
