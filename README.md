@@ -231,7 +231,8 @@ oc apply -f config/operatorhub -n namespace-configuration-operator
 This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
 
 You can set `ALLOW_SYSTEM_NAMESPACES` environment variable in `Subscription` like this;
-```
+
+```yaml
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
