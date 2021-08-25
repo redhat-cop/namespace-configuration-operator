@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
       - name: kube-rbac-proxy
-        image: quay.io/coreos/kube-rbac-proxy:v0.5.0
+        image: registry.redhat.io/openshift4/ose-kube-rbac-proxy@sha256:6d57bfd91fac9b68eb72d27226bc297472ceb136c996628b845ecc54a48b31cb
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8080/"
