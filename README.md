@@ -196,6 +196,15 @@ It is recommended to deploy this operator via [`OperatorHub`](https://operatorhu
 
 If you want to utilize the Operator Lifecycle Manager (OLM) to install this operator, you can do so in two ways: from the UI or the CLI.
 
+### Multiarch Support
+
+| Arch  | Support  |
+|:-:|:-:|
+| amd64  | ✅ |
+| arm64  | ✅  |
+| ppc64le  | ✅  |
+| s390x  | ❌  |
+
 #### Deploying from OperatorHub UI
 
 * If you would like to launch this operator from the UI, you'll need to navigate to the OperatorHub tab in the console.Before starting, make sure you've created the namespace that you want to install this operator to with the following:
@@ -222,7 +231,8 @@ oc apply -f config/operatorhub -n namespace-configuration-operator
 This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
 
 You can set `ALLOW_SYSTEM_NAMESPACES` environment variable in `Subscription` like this;
-```
+
+```yaml
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
