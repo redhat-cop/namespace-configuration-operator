@@ -44,8 +44,12 @@ import (
 // UserConfigReconciler reconciles a UserConfig object
 type UserConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
-	Log            logr.Logger
-	controllerName string
+	Log               logr.Logger
+	controllerName    string
+	InitUserCount     int16
+	userCounter       int16
+	InitIdentityCount int16
+	identityCounter   int16
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=userconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -288,6 +292,22 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					Kind: "User",
 				},
 			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+
+			// Skip watching pre-existing namespaces
+			if r.InitUserCount == -1 {
+				ul := &userv1.UserList{}
+				if err := r.GetClient().List(context.TODO(), ul); err != nil {
+					r.Log.Error(err, "unable to list groups")
+					return []reconcile.Request{}
+				}
+				r.InitUserCount = int16(len(ul.Items))
+			}
+			if r.userCounter < r.InitUserCount {
+				r.userCounter++
+				return []reconcile.Request{}
+			}
+
+			// Main watcher
 			reconcileRequests := []reconcile.Request{}
 			user := a.(*userv1.User)
 			userConfigs, err := r.findApplicableUserConfigsFromUser(user)
@@ -311,6 +331,22 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					Kind: "Identity",
 				},
 			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+
+			// Skip watching pre-existing namespaces
+			if r.InitIdentityCount == -1 {
+				il := &userv1.IdentityList{}
+				if err := r.GetClient().List(context.TODO(), il); err != nil {
+					r.Log.Error(err, "unable to list groups")
+					return []reconcile.Request{}
+				}
+				r.InitIdentityCount = int16(len(il.Items))
+			}
+			if r.identityCounter < r.InitIdentityCount {
+				r.identityCounter++
+				return []reconcile.Request{}
+			}
+
+			// Main watcher
 			reconcileRequests := []reconcile.Request{}
 			identity := a.(*userv1.Identity)
 			user, err := r.findUserFromIdentity(identity)

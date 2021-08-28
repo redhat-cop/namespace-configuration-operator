@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
@@ -45,6 +44,8 @@ type GroupConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
 	Log            logr.Logger
 	controllerName string
+	InitGroupCount int16
+	groupCounter   int16
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=groupconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -249,6 +250,22 @@ func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					Kind: "Group",
 				},
 			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+
+			// Skip watching pre-existing namespaces
+			if r.InitGroupCount == -1 {
+				gl := &userv1.GroupList{}
+				if err := r.GetClient().List(context.TODO(), gl); err != nil {
+					r.Log.Error(err, "unable to list groups")
+					return []reconcile.Request{}
+				}
+				r.InitGroupCount = int16(len(gl.Items))
+			}
+			if r.groupCounter < r.InitGroupCount {
+				r.groupCounter++
+				return []reconcile.Request{}
+			}
+
+			// Main watcher
 			reconcileRequests := []reconcile.Request{}
 			group := a.(*userv1.Group)
 			groupConfigs, err := r.findApplicableGroupConfigsFromGroup(*group)
