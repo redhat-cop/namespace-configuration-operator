@@ -20,6 +20,7 @@ import (
 	"flag"
 	"os"
 	"strconv"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	userv1 "github.com/openshift/api/user/v1"
@@ -87,7 +88,7 @@ func main() {
 	}
 
 	if err = (&controllers.NamespaceConfigReconciler{
-		EnforcingReconciler:   lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true),
+		EnforcingReconciler:   lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("NamespaceConfig_controller"), true, true),
 		Log:                   ctrl.Log.WithName("controllers").WithName("NamespaceConfig"),
 		AllowSystemNamespaces: checkNamespaceScope(),
 	}).SetupWithManager(mgr); err != nil {
@@ -96,7 +97,7 @@ func main() {
 	}
 
 	userConfigController := &controllers.UserConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true, true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
@@ -117,7 +118,7 @@ func main() {
 	}
 
 	groupConfigController := &controllers.GroupConfigReconciler{
-		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("GroupConfig_controller"), true),
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("GroupConfig_controller"), true, true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 
