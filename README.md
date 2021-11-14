@@ -184,6 +184,10 @@ spec:
 
 User will be selected by this `UserConfig` only if they login via the *okta-provider* and if the extra field was populate with the label `sandbox_enabled: "true"`. Note that not all authentication provider allow populating the extra fields in the Identity object.
 
+## CR status
+
+The CR status will display the outcome of the last reconcile cycle, plus any error regarding specific resources. Notice that in the past the operator was displaying also successful reconcile statuses for watched resources. Removing the status about successful resources allows for the operator to manage more resources with a single configuration (there is a limit to how big a CR can be).
+
 ## Deploying the Operator
 
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
