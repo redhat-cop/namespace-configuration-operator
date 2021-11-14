@@ -11,16 +11,16 @@ metadata:
     description: This operator provides a facility to define and enforce namespace
       configurations
     operatorframework.io/suggested-namespace: namespace-configuration-operator
+    operators.openshift.io/infrastructure-features: '["Disconnected"]'
     repository: https://github.com/redhat-cop/namespace-configuration-operator
     support: Best Effort
-    operators.openshift.io/infrastructure-features: '["Disconnected"]'
-  name: namespace-configuration-operator.v0.0.0
-  namespace: placeholder
   labels:
-    operatorframework.io/os.linux: supported
     operatorframework.io/arch.amd64: supported
     operatorframework.io/arch.arm64: supported
     operatorframework.io/arch.ppc64le: supported
+    operatorframework.io/os.linux: supported
+  name: namespace-configuration-operator.v0.0.0
+  namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
