@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: release-namespace
+
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
@@ -11,6 +11,9 @@ namePrefix: namespace-configuration-operator-
 # Labels to add to all resources and selectors.
 #commonLabels:
 #  someName: someValue
+
+resources: 
+- service-account.yaml
 
 bases:
 - ../rbac
