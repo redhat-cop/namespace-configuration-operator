@@ -1,0 +1,34 @@
+# Adds namespace to all resources.
+namespace: namespace-configuration-operator
+
+# Labels to add to all resources and selectors.
+#commonLabels:
+#  someName: someValue
+
+bases:
+- ../../default
+- ./service-account.yaml
+
+
+patchesJson6902:
+- target:
+    group: admissionregistration.k8s.io
+    version: v1
+    kind: MutatingWebhookConfiguration
+    name: namespace-configuration-operator-mutating-webhook-configuration
+  path: ./ca-injection.yaml
+- target:
+    group: admissionregistration.k8s.io
+    version: v1
+    kind: ValidatingWebhookConfiguration
+    name: namespace-configuration-operator-validating-webhook-configuration
+  path: ./ca-injection.yaml
+- target:
+    group: ""
+    version: v1
+    kind: Service
+    name: namespace-configuration-operator-webhook-service
+  path: ./secret-injection.yaml
+
+patchesStrategicMerge:
+- replace-image.yaml
