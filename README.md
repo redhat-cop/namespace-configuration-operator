@@ -207,7 +207,7 @@ If you want to utilize the Operator Lifecycle Manager (OLM) to install this oper
 | amd64  | ✅ |
 | arm64  | ✅  |
 | ppc64le  | ✅  |
-| s390x  | ❌  |
+| s390x  | ✅  |
 
 #### Deploying from OperatorHub UI
 
@@ -295,12 +295,12 @@ exit
 ### Running the operator locally
 
 ```shell
-make install
-oc new-project namespace-configuration-operator-local
-kustomize build ./config/local-development | oc apply -f - -n namespace-configuration-operator-local
-export token=$(oc serviceaccounts get-token 'namespace-configuration-controller-manager' -n namespace-configuration-operator-local)
-oc login --token ${token}
-make run ENABLE_WEBHOOKS=false
+export repo=raffaelespazzoli
+docker login quay.io/$repo
+oc new-project namespace-configuration-operator
+oc project namespace-configuration-operator
+envsubst < config/local-development/tilt/env-replace-image.yaml > config/local-development/tilt/replace-image.yaml
+tilt up
 ```
 
 ### Test helm chart locally
@@ -346,6 +346,7 @@ docker login quay.io/$repo/namespace-configuration-operator-bundle
 docker push quay.io/$repo/namespace-configuration-operator-bundle:latest
 operator-sdk bundle validate quay.io/$repo/namespace-configuration-operator-bundle:latest --select-optional name=operatorhub
 oc new-project namespace-configuration-operator
+oc label namespace namespace-configuration-operator openshift.io/cluster-monitoring="true"
 operator-sdk cleanup namespace-configuration-operator -n namespace-configuration-operator
 operator-sdk run bundle --install-mode AllNamespaces -n namespace-configuration-operator quay.io/$repo/namespace-configuration-operator-bundle:latest
 ```

@@ -8,6 +8,7 @@ spec:
   selector:
     matchLabels:
       {{- include "namespace-configuration-operator.selectorLabels" . | nindent 6 }}
+      control-plane: namespace-configuration-operator
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
@@ -17,9 +18,9 @@ spec:
     {{- end }}
       labels:
         {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
-        operator: namespace-configuration-operator
+        control-plane: namespace-configuration-operator
     spec:
-      serviceAccountName: namespace-configuration-operator-controller-manager
+      serviceAccountName: controller-manager
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -39,7 +40,7 @@ spec:
           name: https
         volumeMounts:
         - mountPath: /etc/certs/tls
-          name: tls-cert
+          name: namespace-configuration-operator-certs
         imagePullPolicy: {{ .Values.kube_rbac_proxy.image.pullPolicy }}
         resources:
           {{- toYaml .Values.kube_rbac_proxy.resources | nindent 10 }}
@@ -49,6 +50,10 @@ spec:
         - --leader-elect
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: webhook-server-cert
+          readOnly: true
+          mountPath: /tmp/k8s-webhook-server/serving-certs        
         {{- with .Values.env }}
         env:
          {{- toYaml . | nindent 8 }}
@@ -81,7 +86,11 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
-      - name: tls-cert
+      - name: namespace-configuration-operator-certs
         secret:
           defaultMode: 420
-          secretName: namespace-configuration-operator-certs
+          secretName: namespace-configuration-operator-certs  
+      - name: webhook-server-cert
+        secret:
+          secretName: webhook-server-cert
+          defaultMode: 420

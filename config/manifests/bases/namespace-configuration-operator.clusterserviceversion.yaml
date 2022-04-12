@@ -10,6 +10,7 @@ metadata:
     createdAt: 5/28/2019
     description: This operator provides a facility to define and enforce namespace
       configurations
+    operatorframework.io/cluster-monitoring: "true"
     operatorframework.io/suggested-namespace: namespace-configuration-operator
     operators.openshift.io/infrastructure-features: '["Disconnected"]'
     repository: https://github.com/redhat-cop/namespace-configuration-operator
@@ -18,6 +19,7 @@ metadata:
     operatorframework.io/arch.amd64: supported
     operatorframework.io/arch.arm64: supported
     operatorframework.io/arch.ppc64le: supported
+    operatorframework.io/arch.s390x: supported
     operatorframework.io/os.linux: supported
   name: namespace-configuration-operator.v0.0.0
   namespace: placeholder

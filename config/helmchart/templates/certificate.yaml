@@ -1,0 +1,34 @@
+{{ if .Values.enableCertManager }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: serving-cert
+spec:
+  dnsNames:
+  - namespace-configuration-operator-webhook-service.{{ .Release.Namespace }}.svc
+  - namespace-configuration-operator-webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: metrics-serving-cert
+spec:
+  dnsNames:
+  - namespace-configuration-operator-metrics-service.{{ .Release.Namespace }}.svc
+  - namespace-configuration-operator-metrics-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: namespace-configuration-operator-certs
+{{ end }}
