@@ -2,23 +2,6 @@ apiVersion: v1
 entries:
   namespace-configuration-operator:
   - apiVersion: v1
-    appVersion: 1.2.3
-    created: "2022-04-12T23:14:29.590066991Z"
-    description: Helm chart that deploys namespace-configuration-operator
-    digest: 52dcb3e2863a4915a9e527c298bb017f0ee15bcdfd456859c4a4137fdac0fb5b
-    keywords:
-    - volume
-    - storage
-    - csi
-    - expansion
-    - monitoring
-    name: namespace-configuration-operator
-    sources:
-    - https://github.com/redhat-cop/namespace-configuration-operator
-    urls:
-    - https://redhat-cop.github.io/namespace-configuration-operator/namespace-configuration-operator/namespace-configuration-operator-1.2.3.tgz
-    version: 1.2.3
-  - apiVersion: v1
     appVersion: v1.2.3
     created: "2022-04-12T23:14:29.600461175Z"
     description: Helm chart that deploys namespace-configuration-operator
