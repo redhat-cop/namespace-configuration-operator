@@ -1,6 +1,6 @@
 module github.com/redhat-cop/namespace-configuration-operator
 
-go 1.16
+go 1.21
 
 require (
 	github.com/go-logr/logr v0.4.0

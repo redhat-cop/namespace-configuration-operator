@@ -17,6 +17,7 @@ jobs:
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
     with:
       PR_ACTOR: "raffaele.spazzoli@gmail.com"
+      GO_VERSION: "~1.21"
       RUN_UNIT_TESTS: true
       RUN_INTEGRATION_TESTS: true
       RUN_HELMCHART_TEST: true
