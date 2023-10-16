@@ -3,7 +3,7 @@ module github.com/redhat-cop/namespace-configuration-operator
 go 1.16
 
 require (
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.4
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0
 	github.com/openshift/api v3.9.0+incompatible
