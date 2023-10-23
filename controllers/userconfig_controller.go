@@ -215,9 +215,9 @@ func (r *UserConfigReconciler) findApplicableUserConfigsFromIdentities(user *use
 	return applicableUserConfigs, nil
 }
 
-func (r *UserConfigReconciler) findApplicableUserConfigsFromUser(user *userv1.User) ([]redhatcopv1alpha1.UserConfig, error) {
+func (r *UserConfigReconciler) findApplicableUserConfigsFromUser(ctx context.Context, user *userv1.User) ([]redhatcopv1alpha1.UserConfig, error) {
 	identitiesList := &userv1.IdentityList{}
-	err := r.GetClient().List(context.TODO(), identitiesList, &client.ListOptions{})
+	err := r.GetClient().List(ctx, identitiesList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all identities")
 		return []redhatcopv1alpha1.UserConfig{}, err
@@ -261,9 +261,9 @@ func (r *UserConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.Us
 	return nil
 }
 
-func (r *UserConfigReconciler) findUserFromIdentity(identity *userv1.Identity) (*userv1.User, error) {
+func (r *UserConfigReconciler) findUserFromIdentity(ctx context.Context, identity *userv1.Identity) (*userv1.User, error) {
 	userList := &userv1.UserList{}
-	err := r.GetClient().List(context.TODO(), userList, &client.ListOptions{})
+	err := r.GetClient().List(ctx, userList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all users")
 		return &userv1.User{}, err
@@ -283,15 +283,14 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.controllerName = "userconfig-controller"
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&redhatcopv1alpha1.UserConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
-		Watches(&source.Kind{
-			Type: &userv1.User{
-				TypeMeta: metav1.TypeMeta{
-					Kind: "User",
-				},
-			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+		Watches(&userv1.User{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "User",
+			},
+		}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			user := a.(*userv1.User)
-			userConfigs, err := r.findApplicableUserConfigsFromUser(user)
+			userConfigs, err := r.findApplicableUserConfigsFromUser(ctx, user)
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable UserConfigs for", "user", user)
 				return []reconcile.Request{}
@@ -306,15 +305,14 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return reconcileRequests
 		})).
-		Watches(&source.Kind{
-			Type: &userv1.Identity{
-				TypeMeta: metav1.TypeMeta{
-					Kind: "Identity",
-				},
-			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+		Watches(&userv1.Identity{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Identity",
+			},
+		}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			identity := a.(*userv1.Identity)
-			user, err := r.findUserFromIdentity(identity)
+			user, err := r.findUserFromIdentity(ctx, identity)
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable User for", "identity", identity)
 				return []reconcile.Request{}
@@ -334,6 +332,6 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return reconcileRequests
 		})).
-		Watches(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

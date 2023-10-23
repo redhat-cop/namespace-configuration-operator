@@ -203,14 +203,14 @@ func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Contex
 	return selectedNamespaces, nil
 }
 
-func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(namespace corev1.Namespace) ([]redhatcopv1alpha1.NamespaceConfig, error) {
+func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(ctx context.Context, namespace corev1.Namespace) ([]redhatcopv1alpha1.NamespaceConfig, error) {
 	if !r.AllowSystemNamespaces && isProhibitedNamespaceName(namespace.GetName()) {
 		return []redhatcopv1alpha1.NamespaceConfig{}, nil
 	}
 	//find all the namespaceconfig
 	result := []redhatcopv1alpha1.NamespaceConfig{}
 	ncl := redhatcopv1alpha1.NamespaceConfigList{}
-	err := r.GetClient().List(context.TODO(), &ncl, &client.ListOptions{})
+	err := r.GetClient().List(ctx, &ncl, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to retrieve the list of namespace configs")
 		return []redhatcopv1alpha1.NamespaceConfig{}, err
@@ -246,14 +246,14 @@ func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.controllerName = "namespaceconfig-controller"
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&redhatcopv1alpha1.NamespaceConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
-		Watches(&source.Kind{Type: &corev1.Namespace{
+		Watches(&corev1.Namespace{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Namespace",
 			},
-		}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+		}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
 			res := []reconcile.Request{}
 			ns := a.(*corev1.Namespace)
-			ncl, err := r.findApplicableNameSpaceConfigs(*ns)
+			ncl, err := r.findApplicableNameSpaceConfigs(ctx, *ns)
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable NamespaceConfig for namespace", "namespace", ns.Name)
 				return []reconcile.Request{}
@@ -268,6 +268,6 @@ func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return res
 		})).
-		Watches(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
