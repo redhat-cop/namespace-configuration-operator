@@ -76,13 +76,12 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                     scheme,
-		MetricsBindAddress:         metricsAddr,
-		Port:                       9443,
-		HealthProbeBindAddress:     probeAddr,
-		LeaderElection:             enableLeaderElection,
-		LeaderElectionID:           "b0b2f089.redhat.io",
-		LeaderElectionResourceLock: "configmaps",
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		Port:                   9443,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "b0b2f089.redhat.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -103,7 +102,9 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
-	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
+	ctx := context.WithValue(context.TODO(), "restConfig", userConfigController.GetRestConfig())
+
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "User",
@@ -124,7 +125,7 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 
-	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "Group",
