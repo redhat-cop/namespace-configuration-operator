@@ -1,10 +1,12 @@
 domain: redhat.io
-layout: go.kubebuilder.io/v3
+layout: 
+- go.kubebuilder.io/v3
 projectName: namespace-configuration-operator
 repo: github.com/redhat-cop/namespace-configuration-operator
 resources:
 - api:
     crdVersion: v1
+    namespaced: false
   controller: true
   domain: redhat.io
   group: redhatcop
@@ -13,6 +15,7 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
+    namespaced: false
   controller: true
   domain: redhat.io
   group: redhatcop
@@ -21,6 +24,7 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
+    namespaced: false
   controller: true
   domain: redhat.io
   group: redhatcop

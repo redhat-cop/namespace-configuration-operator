@@ -1,16 +1,19 @@
 # Adds namespace to all resources.
 namespace: release-namespace
 
-# Value of this field is prepended to the
-# names of all resources, e.g. a deployment named
-# "wordpress" becomes "alices-wordpress".
-# Note that it should also match with the prefix (text before '-') of the namespace
-# field above.
-namePrefix: namespace-configuration-operator-
-
-# Labels to add to all resources and selectors.
-#commonLabels:
-#  someName: someValue
-
 bases:
-- ../rbac
+- ../local-development/tilt
+
+patchesJson6902:
+- target:
+    group: admissionregistration.k8s.io
+    version: v1
+    kind: MutatingWebhookConfiguration
+    name: namespace-configuration-operator-mutating-webhook-configuration
+  path: ./cert-manager-ca-injection.yaml
+- target:
+    group: admissionregistration.k8s.io
+    version: v1
+    kind: ValidatingWebhookConfiguration
+    name: namespace-configuration-validating-webhook-configuration
+  path: ./cert-manager-ca-injection.yaml

@@ -2,7 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
-    control-plane: controller-manager
+    control-plane: namespace-configuration-operator
+    openshift.io/cluster-monitoring: "true"
   name: system
 ---
 apiVersion: apps/v1
@@ -11,18 +12,17 @@ metadata:
   name: controller-manager
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: namespace-configuration-operator
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: namespace-configuration-operator
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        control-plane: namespace-configuration-operator
     spec:
-      serviceAccountName: controller-manager
       containers:
       - command:
         - /manager
@@ -36,16 +36,19 @@ spec:
           httpGet:
             path: /healthz
             port: 8081
+            scheme: HTTP
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8081
+            scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 10
         resources:
           requests:
             cpu: 100m
             memory: 20Mi
+      serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

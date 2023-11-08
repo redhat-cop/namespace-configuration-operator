@@ -1,0 +1,4 @@
+- op: add
+  path: /metadata/annotations
+  value:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/serving-cert"

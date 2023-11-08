@@ -4,13 +4,22 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
-    control-plane: controller-manager
+    control-plane: namespace-configuration-operator
   name: controller-manager-metrics-monitor
   namespace: system
 spec:
   endpoints:
-    - path: /metrics
+    - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      interval: 30s
       port: https
+      scheme: https
+      tlsConfig:
+        ca: 
+          secret:
+            key: 'tls.crt'
+            name: namespace-configuration-operator-certs
+            optional: false
+        serverName: $(METRICS_SERVICE_NAME).$(METRICS_SERVICE_NAMESPACE).svc
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: namespace-configuration-operator

@@ -8,6 +8,7 @@ spec:
   selector:
     matchLabels:
       {{- include "namespace-configuration-operator.selectorLabels" . | nindent 6 }}
+      control-plane: namespace-configuration-operator
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
@@ -17,22 +18,49 @@ spec:
     {{- end }}
       labels:
         {{- include "namespace-configuration-operator.selectorLabels" . | nindent 8 }}
+        control-plane: namespace-configuration-operator
     spec:
-      serviceAccountName: namespace-configuration-operator-controller-manager
+      serviceAccountName: controller-manager
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --tls-cert-file=/etc/certs/tls/tls.crt
+        - --tls-private-key-file=/etc/certs/tls/tls.key
+        - --v=10
+        image: "{{ .Values.kube_rbac_proxy.image.repository }}:{{ .Values.kube_rbac_proxy.image.tag }}"
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+        volumeMounts:
+        - mountPath: /etc/certs/tls
+          name: namespace-configuration-operator-certs
+        imagePullPolicy: {{ .Values.kube_rbac_proxy.image.pullPolicy }}
+        resources:
+          {{- toYaml .Values.kube_rbac_proxy.resources | nindent 10 }}
       - command:
         - /manager
         args:
         - --leader-elect
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: webhook-server-cert
+          readOnly: true
+          mountPath: /tmp/k8s-webhook-server/serving-certs        
+        {{- with .Values.env }}
+        env:
+         {{- toYaml . | nindent 8 }}
+        {{- end }}
         name: {{ .Chart.Name }} 
         resources:
-          {{- toYaml .Values.resources | nindent 12 }}
+          {{- toYaml .Values.resources | nindent 10 }}
         livenessProbe:
           httpGet:
             path: /healthz
@@ -57,3 +85,12 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+      - name: namespace-configuration-operator-certs
+        secret:
+          defaultMode: 420
+          secretName: namespace-configuration-operator-certs  
+      - name: webhook-server-cert
+        secret:
+          secretName: webhook-server-cert
+          defaultMode: 420

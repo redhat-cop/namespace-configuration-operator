@@ -224,7 +224,8 @@ func (r *UserConfigReconciler) findApplicableUserConfigsFromUser(user *userv1.Us
 	}
 	matchingIdentities := []userv1.Identity{}
 	for _, identity := range identitiesList.Items {
-		matchingIdentities = append(matchingIdentities, identity)
+		cidentity := identity.DeepCopy()
+		matchingIdentities = append(matchingIdentities, *cidentity)
 	}
 	return r.findApplicableUserConfigsFromIdentities(user, matchingIdentities)
 }

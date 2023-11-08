@@ -1,0 +1,72 @@
+# Taken from https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml
+
+## Configuration for alertmanager
+## ref: https://prometheus.io/docs/alerting/alertmanager/
+##
+alertmanager:
+
+  ## Deploy alertmanager
+  ##
+  enabled: false
+
+## Using default values from https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+##
+grafana:
+  enabled: false
+
+## Component scraping kube state metrics
+##
+kubeStateMetrics:
+  enabled: false
+
+## Deploy node exporter as a daemonset to all nodes
+##
+nodeExporter:
+  enabled: false
+
+## Deploy a Prometheus instance
+##
+prometheus:
+
+  ## Settings affecting prometheusSpec
+  ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#prometheusspec
+  ##
+  prometheusSpec:
+
+    ## If true, a nil or {} value for prometheus.prometheusSpec.serviceMonitorSelector will cause the
+    ## prometheus resource to be created with selectors based on values in the helm deployment,
+    ## which will also match the servicemonitors created
+    ##
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    ## Containers allows injecting additional containers. This is meant to allow adding an authentication proxy to a Prometheus pod.
+    ## if using proxy extraContainer update targetPort with proxy container port
+
+    ## The test-metrics sidecar will become ready when metrics are available.
+    containers: 
+      - image: busybox:latest
+        name: test-metrics
+        command: 
+        - /bin/sh
+        - -c
+        - | 
+            while true; do
+              out=$(wget -O - --post-data="query=controller_runtime_active_workers%7Bnamespace%3D%22namespace-configuration-operator-local%22%7D%0A" localhost:9090/api/v1/query)
+              if [[ -z "$(echo ${out})" || "$(echo $out | grep -F '{"status":"success","data":{"resultType":"vector","result":[]}}')" ]]; then
+                echo "No Metrics yet..."
+                echo "${out}"
+              else
+                echo "Metrics is working..."
+                echo "${out}" > /tmp/ready
+                cat /tmp/ready
+              fi
+              sleep 5s
+            done
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /tmp/ready
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 30

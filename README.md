@@ -184,6 +184,10 @@ spec:
 
 User will be selected by this `UserConfig` only if they login via the *okta-provider* and if the extra field was populate with the label `sandbox_enabled: "true"`. Note that not all authentication provider allow populating the extra fields in the Identity object.
 
+## CR status
+
+The CR status will display the outcome of the last reconcile cycle, plus any error regarding specific resources. Notice that in the past the operator was displaying also successful reconcile statuses for watched resources. Removing the status about successful resources allows for the operator to manage more resources with a single configuration (there is a limit to how big a CR can be).
+
 ## Deploying the Operator
 
 This is a cluster-level operator that you can deploy in any namespace, `namespace-configuration-operator` is recommended.
@@ -192,7 +196,18 @@ It is recommended to deploy this operator via [`OperatorHub`](https://operatorhu
 
 ### Deploying from OperatorHub
 
+> **Note**: This operator supports being installed disconnected environments
+
 If you want to utilize the Operator Lifecycle Manager (OLM) to install this operator, you can do so in two ways: from the UI or the CLI.
+
+### Multiarch Support
+
+| Arch  | Support  |
+|:-:|:-:|
+| amd64  | ✅ |
+| arm64  | ✅  |
+| ppc64le  | ✅  |
+| s390x  | ✅  |
 
 #### Deploying from OperatorHub UI
 
@@ -220,7 +235,8 @@ oc apply -f config/operatorhub -n namespace-configuration-operator
 This will create the appropriate OperatorGroup and Subscription and will trigger OLM to launch the operator in the specified namespace.
 
 You can set `ALLOW_SYSTEM_NAMESPACES` environment variable in `Subscription` like this;
-```
+
+```yaml
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
@@ -255,17 +271,36 @@ helm repo update
 helm upgrade namespace-configuration-operator namespace-configuration-operator/namespace-configuration-operator
 ```
 
+## Metrics
+
+Prometheus compatible metrics are exposed by the Operator and can be integrated into OpenShift's default cluster monitoring. To enable OpenShift cluster monitoring, label the namespace the operator is deployed in with the label `openshift.io/cluster-monitoring="true"`.
+
+```shell
+oc label namespace <namespace> openshift.io/cluster-monitoring="true"
+```
+
+### Testing metrics
+
+```sh
+export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
+oc label namespace ${operatorNamespace} openshift.io/cluster-monitoring="true"
+oc rsh -n openshift-monitoring -c prometheus prometheus-k8s-0 /bin/bash
+export operatorNamespace=namespace-configuration-operator-local # or namespace-configuration-operator
+curl -v -s -k -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://namespace-configuration-operator-controller-manager-metrics.${operatorNamespace}.svc.cluster.local:8443/metrics
+exit
+```
+
 ## Development
 
 ### Running the operator locally
 
 ```shell
-make install
-oc new-project namespace-configuration-operator-local
-kustomize build ./config/local-development | oc apply -f - -n namespace-configuration-operator-local
-export token=$(oc serviceaccounts get-token 'namespace-configuration-operator-controller-manager' -n namespace-configuration-operator-local)
-oc login --token ${token}
-make run ENABLE_WEBHOOKS=false
+export repo=raffaelespazzoli
+docker login quay.io/$repo
+oc new-project namespace-configuration-operator
+oc project namespace-configuration-operator
+envsubst < config/local-development/tilt/env-replace-image.yaml > config/local-development/tilt/replace-image.yaml
+tilt up
 ```
 
 ### Test helm chart locally
@@ -274,7 +309,7 @@ Define an image and tag. For example...
 
 ```shell
 export imageRepository="quay.io/redhat-cop/namespace-configuration-operator"
-export imageTag="$(git describe --tags --abbrev=0)" # grabs the most recent git tag, which should match the image tag
+export imageTag="$(git -c 'versionsort.suffix=-' ls-remote --exit-code --refs --sort='version:refname' --tags https://github.com/redhat-cop/namespace-configuration-operator.git '*.*.*' | tail --lines=1 | cut --delimiter='/' --fields=3)"
 ```
 
 Deploy chart...
@@ -308,9 +343,10 @@ make bundle IMG=quay.io/$repo/namespace-configuration-operator:latest
 operator-sdk bundle validate ./bundle --select-optional name=operatorhub
 make bundle-build BUNDLE_IMG=quay.io/$repo/namespace-configuration-operator-bundle:latest
 docker login quay.io/$repo/namespace-configuration-operator-bundle
-podman push quay.io/$repo/namespace-configuration-operator-bundle:latest
+docker push quay.io/$repo/namespace-configuration-operator-bundle:latest
 operator-sdk bundle validate quay.io/$repo/namespace-configuration-operator-bundle:latest --select-optional name=operatorhub
 oc new-project namespace-configuration-operator
+oc label namespace namespace-configuration-operator openshift.io/cluster-monitoring="true"
 operator-sdk cleanup namespace-configuration-operator -n namespace-configuration-operator
 operator-sdk run bundle --install-mode AllNamespaces -n namespace-configuration-operator quay.io/$repo/namespace-configuration-operator-bundle:latest
 ```
