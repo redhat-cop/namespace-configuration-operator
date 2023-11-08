@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/redhat-cop/operator-utils/pkg/util/apis"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

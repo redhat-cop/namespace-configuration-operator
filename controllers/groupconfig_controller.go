@@ -174,9 +174,9 @@ func (r *GroupConfigReconciler) getSelectedGroups(context context.Context, insta
 	return selectedGroups, nil
 }
 
-func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(group userv1.Group) ([]redhatcopv1alpha1.GroupConfig, error) {
+func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.Context, group userv1.Group) ([]redhatcopv1alpha1.GroupConfig, error) {
 	groupConfigList := &redhatcopv1alpha1.GroupConfigList{}
-	err := r.GetClient().List(context.TODO(), groupConfigList, &client.ListOptions{})
+	err := r.GetClient().List(ctx, groupConfigList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all userconfigs")
 		return []redhatcopv1alpha1.GroupConfig{}, err
@@ -243,15 +243,14 @@ func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&redhatcopv1alpha1.GroupConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
-		Watches(&source.Kind{
-			Type: &userv1.Group{
-				TypeMeta: metav1.TypeMeta{
-					Kind: "Group",
-				},
-			}}, handler.EnqueueRequestsFromMapFunc(func(a client.Object) []reconcile.Request {
+		Watches(&userv1.Group{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Group",
+			},
+		}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
 			reconcileRequests := []reconcile.Request{}
 			group := a.(*userv1.Group)
-			groupConfigs, err := r.findApplicableGroupConfigsFromGroup(*group)
+			groupConfigs, err := r.findApplicableGroupConfigsFromGroup(ctx, *group)
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable GroupConfigs for", "group", group)
 				return []reconcile.Request{}
@@ -266,6 +265,6 @@ func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return reconcileRequests
 		})).
-		Watches(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strconv"
@@ -35,6 +36,7 @@ import (
 
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers"
+	"github.com/redhat-cop/operator-utils/pkg/util/discoveryclient"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	// +kubebuilder:scaffold:imports
 )
@@ -101,7 +103,7 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
-	if ok, err := userConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "User",
@@ -122,7 +124,7 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 
-	if ok, err := groupConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "Group",
