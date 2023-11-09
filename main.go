@@ -17,9 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strconv"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -35,6 +37,7 @@ import (
 
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers"
+	"github.com/redhat-cop/operator-utils/pkg/util/discoveryclient"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	// +kubebuilder:scaffold:imports
 )
@@ -73,14 +76,24 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	var syncPeriod = 36000 * time.Second //Defaults to every 10Hrs
+	if syncPeriodSeconds, ok := os.LookupEnv("SYNC_PERIOD_SECONDS"); ok && syncPeriodSeconds != "" {
+		if syncPeriodSecondsInt, err := strconv.ParseInt(syncPeriodSeconds, 10, 64); err == nil {
+			syncPeriod = time.Duration(syncPeriodSecondsInt) * time.Second
+		} else if err != nil {
+			setupLog.Error(err, "unable to start manager")
+			os.Exit(1)
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                     scheme,
-		MetricsBindAddress:         metricsAddr,
-		Port:                       9443,
-		HealthProbeBindAddress:     probeAddr,
-		LeaderElection:             enableLeaderElection,
-		LeaderElectionID:           "b0b2f089.redhat.io",
-		LeaderElectionResourceLock: "configmaps",
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		Port:                   9443,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "b0b2f089.redhat.io",
+		SyncPeriod:             &syncPeriod,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -95,19 +108,20 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NamespaceConfig")
 		os.Exit(1)
 	}
+	ctx := context.WithValue(context.TODO(), "restConfig", mgr.GetConfig())
 
 	userConfigController := &controllers.UserConfigReconciler{
 		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true, true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
-	if ok, err := userConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "User",
 	}); !ok || err != nil {
 		if err != nil {
-			setupLog.Error(err, "unable to set check wheter resource User.user.openshift.io exists")
+			setupLog.Error(err, "unable to set check whether resource User.user.openshift.io exists")
 			os.Exit(1)
 		}
 	} else {
@@ -122,7 +136,7 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 
-	if ok, err := groupConfigController.IsAPIResourceAvailable(schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "Group",
