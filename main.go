@@ -108,19 +108,20 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NamespaceConfig")
 		os.Exit(1)
 	}
+	ctx := context.WithValue(context.TODO(), "restConfig", mgr.GetConfig())
 
 	userConfigController := &controllers.UserConfigReconciler{
 		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig(), mgr.GetAPIReader(), mgr.GetEventRecorderFor("UserConfig_controller"), true, true),
 		Log:                 ctrl.Log.WithName("controllers").WithName("UserConfig"),
 	}
 
-	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "User",
 	}); !ok || err != nil {
 		if err != nil {
-			setupLog.Error(err, "unable to set check wheter resource User.user.openshift.io exists")
+			setupLog.Error(err, "unable to set check whether resource User.user.openshift.io exists")
 			os.Exit(1)
 		}
 	} else {
@@ -135,7 +136,7 @@ func main() {
 		Log:                 ctrl.Log.WithName("controllers").WithName("GroupConfig"),
 	}
 
-	if ok, err := discoveryclient.IsGVKDefined(context.TODO(), schema.GroupVersionKind{
+	if ok, err := discoveryclient.IsGVKDefined(ctx, schema.GroupVersionKind{
 		Group:   "user.openshift.io",
 		Version: "v1",
 		Kind:    "Group",
