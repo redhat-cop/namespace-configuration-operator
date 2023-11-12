@@ -346,7 +346,6 @@ ifeq (,$(wildcard $(KUBECTL)))
 	}
 endif
 
-
 .PHONY: helm
 HELM ?= $(LOCALBIN)/helm
 helm: ## Download helm locally if necessary.
