@@ -345,7 +345,6 @@ ifeq (,$(wildcard $(KUBECTL)))
 	chmod +x ${KUBECTL} ;\
 	}
 endif
-endif
 
 .PHONY: helm
 HELM ?= $(LOCALBIN)/helm
