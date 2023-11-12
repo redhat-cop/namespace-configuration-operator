@@ -46,6 +46,17 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # example.com/memcached-operator-bundle:$VERSION and example.com/memcached-operator-catalog:$VERSION.
 IMAGE_TAG_BASE ?= quay.io/redhat-cop/$(OPERATOR_NAME)
 
+# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+
+# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
+# You can enable this value if you would like to use SHA Based Digests
+# To enable set flag to true
+USE_IMAGE_DIGESTS ?= false
+ifeq ($(USE_IMAGE_DIGESTS), true)
+	BUNDLE_GEN_FLAGS += --use-image-digests
+endif
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
@@ -56,6 +67,11 @@ IMG ?= controller:latest
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.21
+
+## Tool Binaries
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -70,6 +86,7 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+.PHONY: all
 all: build
 
 ##@ General
@@ -88,6 +105,7 @@ all: build
 .PHONY: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	
 ##@ Development
 
 .PHONY: manifests
@@ -119,43 +137,48 @@ kind-setup: kind kubectl helm
 
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
+.PHONY: build
+build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
+.PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
+.PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
+.PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
 ##@ Deployment
 
+ifndef ignore-not-found
+  ignore-not-found = false
+endif
+
+.PHONY: install
 install: manifests kustomize kubectl ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
+.PHONY: uninstall
 uninstall: manifests kustomize kubectl ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete -f -
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: deploy
 deploy: manifests kustomize kubectl ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
+.PHONY: undeploy
 undeploy: kustomize kubectl ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete -f -
+	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
-
-## Tool Binaries
-KUSTOMIZE ?= $(LOCALBIN)/kustomize
-CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-ENVTEST ?= $(LOCALBIN)/setup-envtest
-
-
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -247,7 +270,8 @@ catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 # Generate helm chart
-helmchart: kustomize helm
+.PHONY: helmchart
+helmchart: helmchart-clean kustomize helm
 	mkdir -p ./charts/${OPERATOR_NAME}/templates
 	mkdir -p ./charts/${OPERATOR_NAME}/crds
 	repo=${OPERATOR_NAME} envsubst < ./config/local-development/tilt/env-replace-image.yaml > ./config/local-development/tilt/replace-image.yaml
@@ -262,11 +286,13 @@ helmchart: kustomize helm
 	echo {{ end }} >> ./charts/${OPERATOR_NAME}/templates/monitoring.coreos.com_v1_servicemonitor_${OPERATOR_NAME}-controller-manager-metrics-monitor.yaml
 	$(HELM) lint ./charts/${OPERATOR_NAME}	
 
+.PHONY: helmchart-repo
 helmchart-repo: helmchart
 	mkdir -p ${HELM_REPO_DEST}/${OPERATOR_NAME}
 	$(HELM) package -d ${HELM_REPO_DEST}/${OPERATOR_NAME} ./charts/${OPERATOR_NAME}
 	$(HELM) repo index --url ${CHART_REPO_URL} ${HELM_REPO_DEST}
 
+.PHONY: helmchart-repo-push
 helmchart-repo-push: helmchart-repo	
 	git -C ${HELM_REPO_DEST} add .
 	git -C ${HELM_REPO_DEST} status
@@ -296,46 +322,40 @@ helmchart-test: kind-setup helmchart
 	$(KUBECTL) wait --namespace default --for=condition=ready pod prometheus-kube-prometheus-stack-prometheus-0 --timeout=180s
 	$(KUBECTL) exec prometheus-kube-prometheus-stack-prometheus-0 -n default -c test-metrics -- /bin/sh -c "echo 'Example metrics...' && cat /tmp/ready"
 
+.PHONY: helmchart-clean
+helmchart-clean:
+	rm -rf ./charts
+
 .PHONY: kind
-KIND = ./bin/kind
-kind: ## Download kind locally if necessary.
-ifeq (,$(wildcard $(KIND)))
-ifeq (,$(shell which kind 2>/dev/null))
-	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@${KIND_VERSION})
-else
-KIND = $(shell which kind)
-endif
-endif
+KIND ?= $(LOCALBIN)/kind
+kind: $(KIND) ## Download kind locally if necessary.
+$(KIND): $(LOCALBIN)
+	test -s $(LOCALBIN)/kind || echo "Downloading kind to ${KIND}..." && GOBIN=$(LOCALBIN) go install sigs.k8s.io/kind@${KIND_VERSION}
 
 .PHONY: kubectl
-KUBECTL = ./bin/kubectl
+KUBECTL ?= $(LOCALBIN)/kubectl
 kubectl: ## Download kubectl locally if necessary.
 ifeq (,$(wildcard $(KUBECTL)))
-ifeq (,$(shell which kubectl 2>/dev/null))
-	echo "Downloading ${KUBECTL} for managing k8s resources."
+	@{ \
+	set -e ;\
+	echo "Downloading kubectl to ${KUBECTL}..." ;\
 	OS=$(shell go env GOOS) ;\
 	ARCH=$(shell go env GOARCH) ;\
 	curl --create-dirs -sSLo ${KUBECTL} https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/$${OS}/$${ARCH}/kubectl ;\
-	chmod +x ${KUBECTL}
-else
-KUBECTL = $(shell which kubectl)
-endif
+	chmod +x ${KUBECTL} ;\
+	}
 endif
 
 .PHONY: helm
-HELM = ./bin/helm
+HELM ?= $(LOCALBIN)/helm
 helm: ## Download helm locally if necessary.
 ifeq (,$(wildcard $(HELM)))
-ifeq (,$(shell which helm 2>/dev/null))
-	echo "Downloading ${HELM}."
+	echo "Downloading helm to ${HELM}..."
 	OS=$(shell go env GOOS) ;\
 	ARCH=$(shell go env GOARCH) ;\
 	curl --create-dirs -sSLo ${HELM}.tar.gz https://get.helm.sh/helm-${HELM_VERSION}-$${OS}-$${ARCH}.tar.gz ;\
-	tar -xf ${HELM}.tar.gz -C ./bin/ ;\
+	tar -xf ${HELM}.tar.gz -C $(LOCALBIN)/ ;\
 	mv ./bin/$${OS}-$${ARCH}/helm ${HELM}
-else
-HELM = $(shell which helm)
-endif
 endif
 
 .PHONY: operator-sdk
