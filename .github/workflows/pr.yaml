@@ -14,4 +14,4 @@ jobs:
       RUN_INTEGRATION_TESTS: true
       RUN_HELMCHART_TEST: true
       GO_VERSION: ~1.21
-      OPERATOR_SDK_VERSION: v1.25.3      
+      OPERATOR_SDK_VERSION: v1.31.0
