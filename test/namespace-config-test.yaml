@@ -21,15 +21,4 @@ spec:
             requests.ephemeral-storage: 2Gi 
             limits.cpu: "2" 
             limits.memory: 2Gi 
-            limits.ephemeral-storage: 4Gi
-    - objectTemplate: |
-        kind: EgressNetworkPolicy
-        apiVersion: network.openshift.io/v1
-        metadata:
-          name: air-gapped
-          namespace: {{ .Name }}  
-        spec:
-          egress:
-          - type: Deny
-            to:
-              cidrSelector: 0.0.0.0/0         
+            limits.ephemeral-storage: 4Gi       

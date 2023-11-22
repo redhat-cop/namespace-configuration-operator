@@ -212,8 +212,8 @@ github.com/prometheus/common v0.44.0 h1:+5BrQJwiBB9xsMygAB3TNvpQKOwlkc25LbISbrdO
 github.com/prometheus/common v0.44.0/go.mod h1:ofAIvZbQ1e/nugmZGz4/qCb9Ap1VoSTIO7x0VV9VvuY=
 github.com/prometheus/procfs v0.10.1 h1:kYK1Va/YMlutzCGazswoHKo//tZVlFpKYh+PymziUAg=
 github.com/prometheus/procfs v0.10.1/go.mod h1:nwNm2aOCAYw8uTR/9bWRREkZFxAUcWzPHWJq+XBB/FM=
-github.com/redhat-cop/operator-utils v1.3.7 h1:RNOa+PP+Rdlg8uAhDvHGnZ+UkPSJzXwG9bbQBajkXoo=
-github.com/redhat-cop/operator-utils v1.3.7/go.mod h1:s4R0YY8lVlHkC78GLV20PPuZmywjSbTwZKCHwWUQ3P8=
+github.com/redhat-cop/operator-utils v1.3.8 h1:xhoMBg2snSzNdcxT53lSBr7PRXxrzP1cDi51NPBLaT4=
+github.com/redhat-cop/operator-utils v1.3.8/go.mod h1:s4R0YY8lVlHkC78GLV20PPuZmywjSbTwZKCHwWUQ3P8=
 github.com/redhat-cop/vault-config-operator v0.8.24 h1:5jyIvdcX9OcikBsJURTHxov8tMpPubpHICqwAccoDdI=
 github.com/redhat-cop/vault-config-operator v0.8.24/go.mod h1:/L88OzBlgorRu6dfrZoyt67/0kXJ0Vr6hNtzINEgFiA=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
