@@ -38,3 +38,6 @@ kube_rbac_proxy:
       memory: 20Mi
 
 enableMonitoring: true
+
+logging:
+  Development: false
