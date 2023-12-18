@@ -216,6 +216,8 @@ github.com/redhat-cop/operator-utils v1.3.8 h1:xhoMBg2snSzNdcxT53lSBr7PRXxrzP1cD
 github.com/redhat-cop/operator-utils v1.3.8/go.mod h1:s4R0YY8lVlHkC78GLV20PPuZmywjSbTwZKCHwWUQ3P8=
 github.com/redhat-cop/vault-config-operator v0.8.24 h1:5jyIvdcX9OcikBsJURTHxov8tMpPubpHICqwAccoDdI=
 github.com/redhat-cop/vault-config-operator v0.8.24/go.mod h1:/L88OzBlgorRu6dfrZoyt67/0kXJ0Vr6hNtzINEgFiA=
+github.com/redhat-cop/vault-config-operator v0.8.25 h1:hMquMRavhC+JIzEAYfRUla9VAZpbz33gHUpluJLv9vE=
+github.com/redhat-cop/vault-config-operator v0.8.25/go.mod h1:/L88OzBlgorRu6dfrZoyt67/0kXJ0Vr6hNtzINEgFiA=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
 github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncjaFoBhdsK/akog=
 github.com/ryanuber/columnize v2.1.0+incompatible/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
