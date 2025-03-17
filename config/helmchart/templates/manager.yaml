@@ -4,6 +4,7 @@ metadata:
   name: {{ include "namespace-configuration-operator.fullname" . }}
   labels:
     {{- include "namespace-configuration-operator.labels" . | nindent 4 }}
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
