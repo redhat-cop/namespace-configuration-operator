@@ -10,6 +10,7 @@ require (
 	github.com/onsi/gomega v1.27.10
 	github.com/openshift/api v0.0.0-20231020115248-f404f2bc3524
 	github.com/redhat-cop/operator-utils v1.3.8
+	github.com/redhat-cop/operator-utils/v2 v2.0.0
 	github.com/redhat-cop/vault-config-operator v0.8.24
 	github.com/scylladb/go-set v1.0.2
 	k8s.io/api v0.28.2
