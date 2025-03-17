@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/redhat-cop/namespace-configuration-operator
-  newTag: latest
+  newTag: latest@sha256:8d5a8cbc5263e7d9b3cfdce7c26392bdd0ded74c670f8c58f19b2dd9e7cd3ba9
