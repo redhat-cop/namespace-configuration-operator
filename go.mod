@@ -12,9 +12,9 @@ require (
 	github.com/redhat-cop/operator-utils v1.3.8
 	github.com/redhat-cop/vault-config-operator v0.8.24
 	github.com/scylladb/go-set v1.0.2
-	k8s.io/api v0.28.2
-	k8s.io/apimachinery v0.28.2
-	k8s.io/client-go v0.28.2
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
+	k8s.io/client-go v0.32.3
 	sigs.k8s.io/controller-runtime v0.15.2
 )
 
