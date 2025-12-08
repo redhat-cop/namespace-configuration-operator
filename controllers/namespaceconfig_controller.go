@@ -18,11 +18,13 @@ package controllers
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
@@ -195,17 +197,172 @@ func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.Na
 	return needsUpdate
 }
 
-func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, groups []corev1.Namespace) ([]lockedresource.LockedResource, error) {
+func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, namespaces []corev1.Namespace) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
-		if err != nil {
-			r.Log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
-			return []lockedresource.LockedResource{}, err
+	for _, namespace := range namespaces {
+		// Filter templates that are applicable to this namespace BEFORE processing
+		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, namespace)
+
+		// Only process templates that are actually applicable
+		if len(applicableTemplates) > 0 {
+			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), namespace)
+			if err != nil {
+				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", namespace)
+				return []lockedresource.LockedResource{}, err
+			}
+			lockedresources = append(lockedresources, lrs...)
 		}
-		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
+}
+
+// Dynamic template filtering based on extracted patterns from template content
+func (r *NamespaceConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, namespace corev1.Namespace) []apis.LockedResourceTemplate {
+	applicableTemplates := []apis.LockedResourceTemplate{}
+
+	for _, template := range templates {
+		if r.isTemplateApplicableToNamespace(template, namespace) {
+			applicableTemplates = append(applicableTemplates, template)
+		}
+	}
+
+	return applicableTemplates
+}
+
+// Dynamically check if template is applicable by extracting patterns from template content
+func (r *NamespaceConfigReconciler) isTemplateApplicableToNamespace(template apis.LockedResourceTemplate, namespace corev1.Namespace) bool {
+	templateContent := template.ObjectTemplate
+	namespaceName := namespace.Name
+
+	// Extract both hasSuffix and contains patterns
+	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
+	containsPatterns := r.extractContainsPatterns(templateContent)
+
+	// Debug logging for template filtering (V(2) - only shown with --zap-log-level=2 or higher)
+	// To enable: ./bin/manager --zap-log-level=2
+	// Or set environment variable: ZAP_LOG_LEVEL=2
+	r.Log.V(2).Info("checking template applicability",
+		"namespace", namespaceName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns,
+		"templatePreview", func() string {
+			if len(templateContent) > 100 {
+				return templateContent[:100] + "..."
+			}
+			return templateContent
+		}())
+
+	// If no conditional patterns found, template applies to all namespaces
+	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		r.Log.V(2).Info("template has no patterns, applying to all namespaces", "namespace", namespaceName)
+		return true
+	}
+
+	// Detect if template uses AND logic (requires all conditions to match)
+	// vs OR logic (requires any condition to match)
+	// Look for "and" keyword in conditional statements
+	usesAndLogic := strings.Contains(templateContent, "{{- if and") || strings.Contains(templateContent, "{{ if and")
+
+	if usesAndLogic {
+		// AND logic: ALL patterns must match
+		allSuffixMatch := true
+		if len(suffixPatterns) > 0 {
+			for _, pattern := range suffixPatterns {
+				if !strings.HasSuffix(namespaceName, pattern) {
+					allSuffixMatch = false
+					break
+				}
+			}
+		} else {
+			// If no suffix patterns are defined, they are considered to match if no other patterns are defined.
+			// If there are contains patterns, this will be handled below.
+			// If there are no patterns at all, it would have returned true earlier.
+			allSuffixMatch = true
+		}
+
+		allContainsMatch := true
+		if len(containsPatterns) > 0 {
+			for _, pattern := range containsPatterns {
+				if !strings.Contains(namespaceName, pattern) {
+					allContainsMatch = false
+					break
+				}
+			}
+		} else {
+			allContainsMatch = true
+		}
+
+		if allSuffixMatch && allContainsMatch {
+			r.Log.V(2).Info("namespace matches all AND logic patterns", "namespace", namespaceName)
+			return true
+		}
+		r.Log.V(2).Info("namespace does not match all AND logic patterns", "namespace", namespaceName)
+		return false
+
+	} else {
+		// OR logic: ANY pattern can match (original behavior)
+		// Check hasSuffix patterns
+		for _, pattern := range suffixPatterns {
+			if strings.HasSuffix(namespaceName, pattern) {
+				r.Log.V(2).Info("namespace matches hasSuffix pattern",
+					"namespace", namespaceName,
+					"pattern", pattern)
+				return true
+			}
+		}
+
+		// Check contains patterns
+		for _, pattern := range containsPatterns {
+			if strings.Contains(namespaceName, pattern) {
+				r.Log.V(2).Info("namespace matches contains pattern",
+					"namespace", namespaceName,
+					"pattern", pattern)
+				return true
+			}
+		}
+	}
+
+	// Namespace doesn't match any patterns
+	r.Log.V(2).Info("namespace does not match any template patterns",
+		"namespace", namespaceName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns)
+	return false
+}
+
+// Extract all hasSuffix patterns from template content
+func (r *NamespaceConfigReconciler) extractHasSuffixPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: hasSuffix "some-pattern" or hasSuffix "-some-pattern"
+	// Handles both: {{- if hasSuffix "-cluster-admin" .Name }} and similar patterns
+	re := regexp.MustCompile(`hasSuffix\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
+}
+
+// Extract contains patterns for templates using 'contains' instead of 'hasSuffix'
+func (r *NamespaceConfigReconciler) extractContainsPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: contains "some-pattern" or contains "-some-pattern"
+	re := regexp.MustCompile(`contains\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
 }
 
 func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Context, namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {

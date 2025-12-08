@@ -19,11 +19,14 @@ package controllers
 import (
 	"context"
 	errs "errors"
+	"regexp"
+	"strings"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
@@ -156,14 +159,164 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, user := range users {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), user)
-		if err != nil {
-			r.Log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", user)
-			return []lockedresource.LockedResource{}, err
+		// Filter templates that are applicable to this user BEFORE processing
+		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, user)
+
+		// Only process templates that are actually applicable
+		if len(applicableTemplates) > 0 {
+			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), user)
+			if err != nil {
+				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", user)
+				return []lockedresource.LockedResource{}, err
+			}
+			lockedresources = append(lockedresources, lrs...)
 		}
-		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
+}
+
+// Filter templates that are applicable to the given user based on template conditionals
+func (r *UserConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, user userv1.User) []apis.LockedResourceTemplate {
+	applicableTemplates := []apis.LockedResourceTemplate{}
+
+	for _, template := range templates {
+		if r.isTemplateApplicableToUser(template, user) {
+			applicableTemplates = append(applicableTemplates, template)
+		}
+	}
+
+	return applicableTemplates
+}
+
+// Dynamically check if template is applicable by extracting patterns from template content
+func (r *UserConfigReconciler) isTemplateApplicableToUser(template apis.LockedResourceTemplate, user userv1.User) bool {
+	templateContent := template.ObjectTemplate
+	userName := user.Name
+
+	// Extract both hasSuffix and contains patterns
+	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
+	containsPatterns := r.extractContainsPatterns(templateContent)
+
+	// Debug logging for template filtering (V(2) - only shown with --zap-log-level=2 or higher)
+	r.Log.V(2).Info("checking template applicability",
+		"user", userName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns,
+		"templatePreview", func() string {
+			if len(templateContent) > 100 {
+				return templateContent[:100] + "..."
+			}
+			return templateContent
+		}())
+
+	// If no conditional patterns found, template applies to all users
+	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		r.Log.V(2).Info("template has no patterns, applying to all users", "user", userName)
+		return true
+	}
+
+	// Detect if template uses AND logic (requires all conditions to match)
+	// vs OR logic (requires any condition to match)
+	// Look for "and" keyword in conditional statements
+	usesAndLogic := strings.Contains(templateContent, "{{- if and") || strings.Contains(templateContent, "{{ if and")
+
+	if usesAndLogic {
+		// AND logic: ALL patterns must match
+		allSuffixMatch := true
+		if len(suffixPatterns) > 0 {
+			for _, pattern := range suffixPatterns {
+				if !strings.HasSuffix(userName, pattern) {
+					allSuffixMatch = false
+					break
+				}
+			}
+		} else {
+			allSuffixMatch = true
+		}
+
+		allContainsMatch := true
+		if len(containsPatterns) > 0 {
+			for _, pattern := range containsPatterns {
+				if !strings.Contains(userName, pattern) {
+					allContainsMatch = false
+					break
+				}
+			}
+		} else {
+			allContainsMatch = true
+		}
+
+		if allSuffixMatch && allContainsMatch {
+			r.Log.V(2).Info("user matches all AND logic patterns", "user", userName)
+			return true
+		}
+		r.Log.V(2).Info("user does not match all AND logic patterns", "user", userName)
+		return false
+
+	} else {
+		// OR logic: ANY pattern can match (original behavior)
+		// Check hasSuffix patterns
+		for _, pattern := range suffixPatterns {
+			if strings.HasSuffix(userName, pattern) {
+				r.Log.V(2).Info("user matches hasSuffix pattern",
+					"user", userName,
+					"pattern", pattern)
+				return true
+			}
+		}
+
+		// Check contains patterns
+		for _, pattern := range containsPatterns {
+			if strings.Contains(userName, pattern) {
+				r.Log.V(2).Info("user matches contains pattern",
+					"user", userName,
+					"pattern", pattern)
+				return true
+			}
+		}
+	}
+
+	// User doesn't match any patterns
+	r.Log.V(2).Info("user does not match any template patterns",
+		"user", userName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns)
+	return false
+}
+
+// Extract all hasSuffix patterns from template content
+func (r *UserConfigReconciler) extractHasSuffixPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: hasSuffix "some-pattern" or hasSuffix "-some-pattern"
+	// Handles both: {{- if hasSuffix "-cluster-admin" .Name }} and similar patterns
+	re := regexp.MustCompile(`hasSuffix\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
+}
+
+// Extract contains patterns for templates using 'contains' instead of 'hasSuffix'
+func (r *UserConfigReconciler) extractContainsPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: contains "some-pattern" or contains "-some-pattern"
+	re := regexp.MustCompile(`contains\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
 }
 
 func (r *UserConfigReconciler) getSelectedUsers(context context.Context, instance *redhatcopv1alpha1.UserConfig) ([]userv1.User, error) {
