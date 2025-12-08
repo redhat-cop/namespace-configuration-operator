@@ -38,4 +38,11 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 
+# Set default log level via environment variables
+# These can be overridden at runtime via Deployment env section or ConfigMap
+# See: https://sdk.operatorframework.io/docs/building-operators/golang/references/logging/
+# Production defaults: info level, JSON format (ZAP_DEVEL=false)
+ENV ZAP_LOG_LEVEL=info
+ENV ZAP_DEVEL=false
+
 ENTRYPOINT ["/manager"]
