@@ -86,6 +86,70 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Container runtime detection and execution functions
+define detect_container_runtime
+	@echo "🔍 Detecting container runtime..."
+	@if podman info >/dev/null 2>&1; then \
+		echo "✅ Podman daemon detected and running"; \
+		echo "Using: podman"; \
+	elif docker info >/dev/null 2>&1; then \
+		echo "✅ Docker daemon detected and running"; \
+		echo "Using: docker"; \
+	else \
+		echo "❌ No container runtime detected"; \
+		echo "Please start either:"; \
+		echo "  - Podman: podman machine start (if using podman machine)"; \
+		echo "  - Docker: Start Docker Desktop or docker daemon"; \
+		exit 1; \
+	fi
+endef
+
+# Execute container build command with detected runtime
+define container_build
+	$(call detect_container_runtime)
+	@BUILD_VERSION=$${VERSION:-$$(git describe --tags --always --dirty 2>/dev/null || echo "$(VERSION)")}; \
+	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	if podman info >/dev/null 2>&1; then \
+		podman build --build-arg VERSION=$$BUILD_VERSION --build-arg COMMIT=$$COMMIT --build-arg BUILD_DATE=$$BUILD_DATE -t "$(1)" .; \
+	elif docker info >/dev/null 2>&1; then \
+		docker build --build-arg VERSION=$$BUILD_VERSION --build-arg COMMIT=$$COMMIT --build-arg BUILD_DATE=$$BUILD_DATE -t "$(1)" .; \
+	fi
+endef
+
+# Execute container push command with detected runtime
+define container_push
+	$(call detect_container_runtime)
+	@if podman info >/dev/null 2>&1; then \
+		podman push $(1); \
+	elif docker info >/dev/null 2>&1; then \
+		docker push $(1); \
+	fi
+endef
+
+# Execute container login command with detected runtime
+define container_login
+	$(call detect_container_runtime)
+	@echo "Logging into registry: $(3)..."
+	@if podman info >/dev/null 2>&1; then \
+		if [ -n "$(2)" ]; then \
+			echo "Using password from environment variable"; \
+			echo "$(2)" | podman login --username $(1) --password-stdin $(3); \
+		else \
+			echo "Password not set in environment, prompting..."; \
+			podman login --username $(1) $(3); \
+		fi; \
+	elif docker info >/dev/null 2>&1; then \
+		if [ -n "$(2)" ]; then \
+			echo "Using password from environment variable"; \
+			echo "$(2)" | docker login --username $(1) --password-stdin $(3); \
+		else \
+			echo "Password not set in environment, prompting..."; \
+			docker login --username $(1) $(3); \
+		fi; \
+	fi
+endef
+
 .PHONY: all
 all: build
 
@@ -148,13 +212,176 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
+# Optional: Set SKIP_TESTS=false to run tests before building (default: skip tests)
+SKIP_TESTS ?= true
+ifeq ($(SKIP_TESTS),false)
+PODMAN_BUILD_DEPS := test
+else
+PODMAN_BUILD_DEPS :=
+endif
+
+.PHONY: podman-build
+podman-build: $(PODMAN_BUILD_DEPS) ## Build image with detected container runtime (podman/docker). Tests are skipped by default. Use SKIP_TESTS=false to run tests.
+	$(call container_build,${IMG})
+
+.PHONY: podman-push
+podman-push: ## Push image with detected container runtime (podman/docker)
+	$(call container_push,${IMG})
+
+# Backward compatibility aliases
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+docker-build: podman-build ## Alias for podman-build (backward compatibility)
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+docker-push: podman-push ## Alias for podman-push (backward compatibility)
+
+##@ Internal Registry Build & Push
+
+# Internal OpenShift Registry variables - defaults (can be overridden)
+INTERNAL_REGISTRY ?= default-route-openshift-image-registry.apps-crc.testing
+PROJECT ?= namespace-configuration-operator
+IMAGE_NAME ?= namespace-configuration-operator
+INTERNAL_TAG ?= latest
+INTERNAL_IMG ?= ${INTERNAL_REGISTRY}/${PROJECT}/${IMAGE_NAME}:${INTERNAL_TAG}
+
+.PHONY: internal-registry-login
+internal-registry-login: ## Login to internal OpenShift registry with detected runtime (requires oc login first)
+	@echo "Logging into internal OpenShift registry..."
+	@if ! oc whoami >/dev/null 2>&1; then \
+		echo "ERROR: Not authenticated to OpenShift cluster"; \
+		echo "Please run 'oc login' first to authenticate against your OpenShift cluster"; \
+		echo "Example: oc login -u kubeadmin -p <password> https://api.crc.testing:6443"; \
+		exit 1; \
+	fi
+	@echo "OpenShift user: $$(oc whoami)"
+	@echo "Registry: ${INTERNAL_REGISTRY}"
+	$(call detect_container_runtime)
+	@if podman info >/dev/null 2>&1; then \
+		podman login -u $$(oc whoami) -p $$(oc whoami -t) ${INTERNAL_REGISTRY}; \
+	elif docker info >/dev/null 2>&1; then \
+		docker login -u $$(oc whoami) -p $$(oc whoami -t) ${INTERNAL_REGISTRY}; \
+	fi
+
+.PHONY: container-runtime-check
+container-runtime-check: ## Check which container runtime is available
+	$(call detect_container_runtime)
+
+.PHONY: oc-check
+oc-check: ## Check OpenShift authentication status
+	@if oc whoami >/dev/null 2>&1; then \
+		echo "✅ Authenticated to OpenShift as: $$(oc whoami)"; \
+		echo "Cluster: $$(oc whoami --show-server)"; \
+	else \
+		echo "❌ Not authenticated to OpenShift cluster"; \
+		echo "Please run: oc login -u kubeadmin -p <password> https://api.crc.testing:6443"; \
+	fi
+
+.PHONY: internal-registry-login-command
+internal-registry-login-command: ## Output the internal registry login command
+	@echo "To login to internal OpenShift registry:"
+	@echo "1. First authenticate to OpenShift cluster:"
+	@echo "   oc login -u kubeadmin -p <password> https://api.crc.testing:6443"
+	@echo "2. Then login to registry:"
+	@echo "   podman login -u \$$(oc whoami) -p \$$(oc whoami -t) ${INTERNAL_REGISTRY}"
+	@echo "3. Or use the make target: make -f PodmanMakefile internal-registry-login"
+
+.PHONY: internal-build
+internal-build: $(PODMAN_BUILD_DEPS) ## Build image for internal registry with detected runtime. Tests are skipped by default. Use SKIP_TESTS=false to run tests.
+	$(call container_build,${INTERNAL_IMG})
+
+.PHONY: internal-push
+internal-push: ## Push image to internal registry with detected runtime
+	$(call container_push,${INTERNAL_IMG})
+
+.PHONY: internal-deploy
+internal-deploy: internal-registry-login internal-build internal-push ## Complete build and push to internal registry
+	@echo "Successfully built and pushed ${INTERNAL_IMG}"
+
+.PHONY: internal-clean
+internal-clean: ## Remove local internal registry image with detected runtime
+	@if podman info >/dev/null 2>&1; then \
+		podman rmi ${INTERNAL_IMG} || true; \
+	elif docker info >/dev/null 2>&1; then \
+		docker rmi ${INTERNAL_IMG} || true; \
+	fi
+
+##@ External Registry Build & Push
+
+# External Registry variables - defaults to Docker Hub (can be overridden)
+EXTERNAL_REGISTRY ?= docker.io
+EXTERNAL_USERNAME ?= ephico2real@gmail.com #replaceme
+EXTERNAL_USER ?= ephico2real #replaceme
+EXTERNAL_PASSWORD ?= 
+EXTERNAL_IMG ?= $(strip ${EXTERNAL_REGISTRY})/$(strip ${EXTERNAL_USER})/$(strip ${IMAGE_NAME}):latest
+
+.PHONY: external-login
+external-login: ## Login to external registry with detected runtime (uses env EXTERNAL_PASSWORD or prompts)
+	$(call container_login,${EXTERNAL_USERNAME},${EXTERNAL_PASSWORD},${EXTERNAL_REGISTRY})
+
+.PHONY: external-login-command
+external-login-command: ## Output the external registry login command
+	@echo "To login to external registry (${EXTERNAL_REGISTRY}), you have two options:"
+	@echo "1. Set password in environment and run: EXTERNAL_PASSWORD=your_password make -f PodmanMakefile external-login"
+	@echo "2. Run interactively (will prompt): make -f PodmanMakefile external-login"
+	@if podman info >/dev/null 2>&1; then \
+		echo "Manual command: podman login --username ${EXTERNAL_USERNAME} ${EXTERNAL_REGISTRY}"; \
+	elif docker info >/dev/null 2>&1; then \
+		echo "Manual command: docker login --username ${EXTERNAL_USERNAME} ${EXTERNAL_REGISTRY}"; \
+	else \
+		echo "Manual command: [start podman or docker first]"; \
+	fi
+
+.PHONY: external-build
+external-build: $(PODMAN_BUILD_DEPS) ## Build image for external registry with detected runtime. Tests are skipped by default. Use SKIP_TESTS=false to run tests.
+	$(call container_build,${EXTERNAL_IMG})
+
+.PHONY: external-push
+external-push: ## Push image to external registry with detected runtime
+	$(call container_push,${EXTERNAL_IMG})
+
+.PHONY: external-deploy
+external-deploy: external-login external-build external-push ## Complete build and push to external registry
+	@echo "Successfully built and pushed ${EXTERNAL_IMG}"
+
+.PHONY: external-clean
+external-clean: ## Remove local external registry image with detected runtime
+	@if podman info >/dev/null 2>&1; then \
+		podman rmi ${EXTERNAL_IMG} || true; \
+	elif docker info >/dev/null 2>&1; then \
+		docker rmi ${EXTERNAL_IMG} || true; \
+	fi
+
+# Podman-specific aliases (for consistency)
+.PHONY: podman-login
+podman-login: external-login ## Alias for external-login (podman consistency)
+
+.PHONY: podman-login-command
+podman-login-command: external-login-command ## Alias for external-login-command (podman consistency)
+
+.PHONY: podman-deploy
+podman-deploy: external-deploy ## Alias for external-deploy (podman consistency)
+
+.PHONY: podman-clean
+podman-clean: external-clean ## Alias for external-clean (podman consistency)
+
+# Backward compatibility aliases for Docker Hub
+.PHONY: dockerhub-login
+dockerhub-login: external-login ## Alias for external-login (Docker Hub compatibility)
+
+.PHONY: dockerhub-login-command
+dockerhub-login-command: external-login-command ## Alias for external-login-command (Docker Hub compatibility)
+
+.PHONY: dockerhub-build
+dockerhub-build: external-build ## Alias for external-build (Docker Hub compatibility)
+
+.PHONY: dockerhub-push
+dockerhub-push: external-push ## Alias for external-push (Docker Hub compatibility)
+
+.PHONY: dockerhub-deploy
+dockerhub-deploy: external-deploy ## Alias for external-deploy (Docker Hub compatibility)
+
+.PHONY: dockerhub-clean
+dockerhub-clean: external-clean ## Alias for external-clean (Docker Hub compatibility)
 
 ##@ Deployment
 
@@ -225,11 +452,11 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	podman build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
-	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
+	$(MAKE) -f PodmanMakefile podman-push IMG=$(BUNDLE_IMG)
 
 .PHONY: opm
 OPM ?= $(LOCALBIN)/opm
@@ -265,12 +492,12 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool podman --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+	$(MAKE) -f PodmanMakefile podman-push IMG=$(CATALOG_IMG)
 
 # Generate helm chart
 .PHONY: helmchart
@@ -309,9 +536,9 @@ HELM_TEST_IMG_TAG ?= helmchart-test
 # If the test-metrics sidecar in the prometheus pod is ready, the metrics work and the test is successful.
 .PHONY: helmchart-test
 helmchart-test: kind-setup helmchart
-	$(MAKE) IMG=${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} docker-build
-	docker tag ${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} docker.io/library/${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG}
-	$(KIND) load docker-image ${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} docker.io/library/${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG}
+	$(MAKE) -f PodmanMakefile IMG=${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} podman-build
+	podman tag ${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} docker.io/library/${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG}
+	podman save ${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG} | $(KIND) load docker-image docker.io/library/${HELM_TEST_IMG_NAME}:${HELM_TEST_IMG_TAG}
 	$(HELM) repo add jetstack https://charts.jetstack.io
 	$(HELM) install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.7.1 --set installCRDs=true
 	$(HELM) repo add prometheus-community https://prometheus-community.github.io/helm-charts

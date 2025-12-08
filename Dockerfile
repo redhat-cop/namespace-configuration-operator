@@ -13,9 +13,23 @@ RUN go mod download
 COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
+COPY internal/ internal/
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o manager main.go
+# Build with version information
+# Note: These args should be passed at build time for accurate version info.
+# The Makefile handles this automatically. For manual builds, use:
+#   podman build --build-arg VERSION=$(git describe --tags --always --dirty) \
+#                --build-arg COMMIT=$(git rev-parse --short HEAD) \
+#                --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+#                -t myimage .
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN CGO_ENABLED=0 GOOS=linux go build -a \
+    -ldflags "-X github.com/redhat-cop/namespace-configuration-operator/internal/version.Version=${VERSION} \
+              -X github.com/redhat-cop/namespace-configuration-operator/internal/version.Commit=${COMMIT} \
+              -X github.com/redhat-cop/namespace-configuration-operator/internal/version.BuildDate=${BUILD_DATE}" \
+    -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
