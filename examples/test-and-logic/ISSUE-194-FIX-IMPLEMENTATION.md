@@ -69,3 +69,29 @@ TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M%S 9569465257c1804
 # Compose: v0.0.0-<timestamp>-<12-char-commit>
 # v0.0.0-20251208075852-9569465257c1
 ```
+
+Appendix: Pseudo-version derivation (step-by-step)
+
+Short answer on the pseudo-version
+- It’s a Go modules pseudo-version composed from the commit’s UTC timestamp and hash:
+  `v0.0.0-YYYYMMDDHHMMSS-<12-char-commit>`
+
+How I derived `v0.0.0-20251208075852-9569465257c1`
+1) Get the exact commit for the fix:
+   - `cd /Users/olasumbo/gitRepos/operator-utils-fork`
+   - `git rev-parse HEAD`
+   - `9569465257c18041b4a4483c90aebfc278882387`
+
+2) Get that commit’s UTC timestamp in the required format:
+   - `TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M%S 9569465257c18041b4a4483c90aebfc278882387`
+   - `20251208075852`
+
+3) Compose the pseudo-version:
+   - `v0.0.0-20251208075852-9569465257c1`
+     - `v0.0.0` because we’re pinning to a commit (no tag baseline)
+     - `20251208075852` is the UTC commit time
+     - `9569465257c1` is the first 12 hex chars of the commit
+
+Tip: you can also let Go generate it by running:
+- `go get github.com/ephico2real2/operator-utils@9569465257c18041b4a4483c90aebfc278882387`
+  and Go will record the matching pseudo-version in go.mod.
