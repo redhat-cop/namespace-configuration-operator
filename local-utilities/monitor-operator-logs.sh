@@ -9,6 +9,8 @@
 #   --since <duration>           Show logs since duration (e.g., 5m, 1h, 2d)
 #   --tail <lines>               Number of lines to show from end (default: 100)
 #   -g, --grep <pattern>         Filter logs by pattern
+#   --pretty-json                Pretty-print JSON logs (default: auto-detect)
+#   --no-pretty-json             Don't pretty-print JSON logs
 #   --no-color                   Disable colored output
 #   -h, --help                   Show this help message
 
@@ -22,6 +24,7 @@ TAIL=100
 GREP_PATTERN=""
 USE_COLOR=true
 SHOW_HELP=false
+PRETTY_JSON="auto"  # auto, true, false
 
 # Colors
 if [[ -t 1 ]]; then
@@ -86,6 +89,14 @@ while [[ $# -gt 0 ]]; do
             GREP_PATTERN="$2"
             shift 2
             ;;
+        --pretty-json)
+            PRETTY_JSON="true"
+            shift
+            ;;
+        --no-pretty-json)
+            PRETTY_JSON="false"
+            shift
+            ;;
         --no-color)
             USE_COLOR=false
             RED=''
@@ -122,6 +133,8 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  --since <duration>           Show logs since duration (e.g., 5m, 1h, 2d)"
     echo "  --tail <lines>               Number of lines to show from end (default: 100)"
     echo "  -g, --grep <pattern>         Filter logs by pattern"
+    echo "  --pretty-json                Pretty-print JSON logs (default: auto-detect)"
+    echo "  --no-pretty-json             Don't pretty-print JSON logs"
     echo "  --no-color                   Disable colored output"
     echo "  -h, --help                   Show this help message"
     echo ""
@@ -131,6 +144,8 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  $0 -g 'GroupConfig'                   # Filter for GroupConfig logs"
     echo "  $0 --tail 50 --no-follow              # Show last 50 lines and exit"
     echo "  $0 -n my-namespace --grep 'error'     # Monitor errors in custom namespace"
+    echo "  $0 --pretty-json                      # Force pretty-print JSON logs"
+    echo "  $0 --no-pretty-json                   # Disable JSON pretty-printing"
     exit 0
 fi
 
@@ -168,6 +183,65 @@ find_operator_pod() {
     fi
     
     echo "$pod"
+}
+
+# Function to check if jq is available
+check_jq() {
+    if ! command -v jq &> /dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Function to detect if a line is JSON
+is_json_line() {
+    local line="$1"
+    # Check if line starts with { and ends with } (basic JSON detection)
+    if [[ "$line" =~ ^\{.*\}$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to pretty-print JSON logs
+pretty_print_json() {
+    if [ "$PRETTY_JSON" = "false" ] || ! check_jq; then
+        # Don't pretty-print or jq not available, just pass through
+        cat
+        return
+    fi
+    
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines
+        if [ -z "$line" ]; then
+            echo
+            continue
+        fi
+        
+        # Determine if we should try to pretty-print this line
+        local should_pretty=false
+        if [ "$PRETTY_JSON" = "true" ]; then
+            should_pretty=true
+        elif [ "$PRETTY_JSON" = "auto" ] && is_json_line "$line"; then
+            should_pretty=true
+        fi
+        
+        if [ "$should_pretty" = true ]; then
+            # Try to pretty-print with jq (with color support)
+            # jq -C enables color output, . pretty-prints
+            if echo "$line" | jq -C '.' 2>/dev/null; then
+                # Successfully pretty-printed JSON
+                continue
+            else
+                # Not valid JSON or jq failed, print as-is
+                echo "$line"
+            fi
+        else
+            # Not JSON or auto-detect said no, print as-is
+            echo "$line"
+        fi
+    done
 }
 
 # Function to colorize log lines
@@ -222,13 +296,33 @@ echo -e "${BLUE}📋 Executing: $LOG_CMD${NC}"
 if [ -n "$GREP_PATTERN" ]; then
     echo -e "${BLUE}🔍 Filtering for pattern: $GREP_PATTERN${NC}"
 fi
+if [ "$PRETTY_JSON" != "false" ]; then
+    if check_jq; then
+        if [ "$PRETTY_JSON" = "true" ]; then
+            echo -e "${BLUE}✨ Pretty-printing JSON logs (forced)${NC}"
+        else
+            echo -e "${BLUE}✨ Pretty-printing JSON logs (auto-detect)${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  jq not found - JSON pretty-printing disabled. Install jq for better log formatting.${NC}"
+        echo -e "${YELLOW}   Install: brew install jq (macOS) or apt-get install jq (Linux)${NC}"
+    fi
+fi
 echo ""
 echo -e "${CYAN}================================================${NC}"
 echo ""
 
-# Execute logs command with optional grep and colorization
+# Execute logs command with optional grep, JSON pretty-printing, and colorization
 if [ -n "$GREP_PATTERN" ]; then
+    if [ "$PRETTY_JSON" != "false" ] && check_jq; then
+        eval "$LOG_CMD" | grep --line-buffered "$GREP_PATTERN" | pretty_print_json | colorize_logs
+    else
     eval "$LOG_CMD" | grep --line-buffered "$GREP_PATTERN" | colorize_logs
+    fi
+else
+    if [ "$PRETTY_JSON" != "false" ] && check_jq; then
+        eval "$LOG_CMD" | pretty_print_json | colorize_logs
 else
     eval "$LOG_CMD" | colorize_logs
+    fi
 fi

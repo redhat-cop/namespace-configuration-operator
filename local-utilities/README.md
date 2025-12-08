@@ -79,33 +79,57 @@ Monitor namespace-configuration-operator logs with filtering and formatting.
 - `--since <duration>` - Show logs since duration (e.g., 5m, 1h, 2d)
 - `--tail <lines>` - Number of lines to show from end (default: 100)
 - `-g, --grep <pattern>` - Filter logs by pattern
+- `--pretty-json` - Force pretty-print JSON logs (requires `jq`)
+- `--no-pretty-json` - Disable JSON pretty-printing
 - `--no-color` - Disable colored output
 - `-h, --help` - Show help message
 
 **Examples:**
 ```bash
-# Follow logs with defaults (last 100 lines)
+# Follow logs in real-time with pretty-printed JSON (default behavior)
 ./local-utilities/monitor-operator-logs.sh
 
 # Show logs from last 5 minutes
 ./local-utilities/monitor-operator-logs.sh --since 5m
 
-# Filter for GroupConfig related logs
-./local-utilities/monitor-operator-logs.sh -g 'GroupConfig'
-
 # Show last 50 lines and exit (no follow)
 ./local-utilities/monitor-operator-logs.sh --tail 50 --no-follow
 
+# Filter for specific patterns (e.g., reconcile, GroupConfig, error)
+./local-utilities/monitor-operator-logs.sh -g 'reconcile'
+./local-utilities/monitor-operator-logs.sh -g 'GroupConfig'
+./local-utilities/monitor-operator-logs.sh -g 'error'
+
 # Monitor errors in custom namespace
-./local-utilities/monitor-operator-logs.sh -n my-namespace --grep 'error'
+./local-utilities/monitor-operator-logs.sh -n my-namespace -g 'error'
+
+# Force pretty-print JSON logs (auto-detection is default)
+./local-utilities/monitor-operator-logs.sh --pretty-json
+
+# Disable JSON pretty-printing (show raw JSON)
+./local-utilities/monitor-operator-logs.sh --no-pretty-json
 ```
+
+**Usage Tips:**
+1. **Follow logs in real-time** - The default behavior follows logs as they're generated, with automatic JSON pretty-printing
+2. **Show specific number of lines** - Use `--tail <number>` with `--no-follow` to see a snapshot
+3. **Filter logs** - Use `-g` or `--grep` to filter for specific patterns (controller names, log levels, etc.)
+4. **Pretty-printing is automatic** - JSON logs are automatically detected and formatted by default (requires `jq`)
+5. **Disable pretty-printing** - Use `--no-pretty-json` if you prefer raw JSON output
 
 **Features:**
 - Automatic pod discovery using label selectors
+- **JSON pretty-printing** - Automatically detects and pretty-prints JSON log lines (requires `jq`)
 - Color-coded log levels (ERROR=red, WARN=yellow, INFO=green, DEBUG=blue)
 - Highlights key terms (reconciling, NamespaceConfig, GroupConfig, UserConfig)
 - Authentication check before executing
 - Graceful error handling
+
+**JSON Pretty-Printing:**
+- By default, the script auto-detects JSON log lines and pretty-prints them using `jq`
+- This makes the structured JSON logs from the operator much more readable
+- Requires `jq` to be installed: `brew install jq` (macOS) or `apt-get install jq` (Linux)
+- Use `--pretty-json` to force pretty-printing, or `--no-pretty-json` to disable
 
 **Prerequisites:**
 - Authenticated to OpenShift cluster (`oc login`)
