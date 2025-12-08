@@ -26,6 +26,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	userv1 "github.com/openshift/api/user/v1"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -69,11 +70,57 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	// Configure zap logger options
+	// See: https://sdk.operatorframework.io/docs/building-operators/golang/references/logging/
 	opts := zap.Options{
 		Development: true,
 	}
+
+	// Support environment variables for containerized deployments
+	// These can be set in Kubernetes Deployment env section or ConfigMap
+	// Note: Official SDK recommendation is to use --zap-* flags in container args,
+	// but environment variables provide more flexibility for ConfigMap-based configuration
+	// Priority: Command line flags > Environment variables > Defaults
+	if zapLogLevel := os.Getenv("ZAP_LOG_LEVEL"); zapLogLevel != "" {
+		// Parse log level from environment variable
+		// Valid values: "error", "info", "debug", or integer "0"-"10"
+		// See: https://sdk.operatorframework.io/docs/building-operators/golang/references/logging/
+		var level zapcore.Level
+		if err := level.UnmarshalText([]byte(zapLogLevel)); err == nil {
+			// Successfully parsed as string ("error", "info", "debug")
+			opts.Level = level
+		} else {
+			// Try parsing as integer for custom debug levels
+			// Integer values > 0 correspond to custom debug levels of increasing verbosity
+			if intLevel, err := strconv.Atoi(zapLogLevel); err == nil && intLevel >= 0 {
+				// For custom debug levels, use negative values (zap convention)
+				// Note: zap.Options.Level uses zapcore.Level which can be negative for debug
+				opts.Level = zapcore.Level(-intLevel)
+			}
+		}
+	}
+
+	// Check for ZAP_DEVEL environment variable (true/false)
+	// Development mode: console encoder, debug level, stacktraces on warnings
+	// Production mode: JSON encoder, info level, stacktraces on errors
+	if zapDevel := os.Getenv("ZAP_DEVEL"); zapDevel != "" {
+		if zapDevel == "false" || zapDevel == "0" {
+			opts.Development = false
+		} else if zapDevel == "true" || zapDevel == "1" {
+			opts.Development = true
+		}
+	}
+
+	// Bind zap flags to command line (--zap-log-level, --zap-devel, etc.)
+	// Flags take precedence over environment variables
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// Log level can be controlled via (in order of precedence):
+	// 1. Command line flags: --zap-log-level=info --zap-devel=false (highest priority)
+	//    Recommended for cluster deployments: use args in Deployment spec
+	// 2. Environment variables: ZAP_LOG_LEVEL and ZAP_DEVEL (for ConfigMap-based config)
+	// 3. Defaults: Development=true, Level=Debug
 
 	// Print startup banner with version and commit info
 	version.PrintStartupBanner()
