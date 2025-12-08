@@ -254,6 +254,11 @@ func (r *NamespaceConfigReconciler) isTemplateApplicableToNamespace(template api
 
 	// If no conditional patterns found, template applies to all namespaces
 	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		// Check for unrecognized conditional logic
+		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
+			r.Log.V(2).Info("template contains unrecognized conditional logic, applying to all namespaces (relying on template rendering)", "namespace", namespaceName)
+			return true
+		}
 		r.Log.V(2).Info("template has no patterns, applying to all namespaces", "namespace", namespaceName)
 		return true
 	}

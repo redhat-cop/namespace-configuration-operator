@@ -321,6 +321,11 @@ func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.Locked
 
 	// If no conditional patterns found, template applies to all groups
 	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		// Check for unrecognized conditional logic
+		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
+			r.Log.V(2).Info("template contains unrecognized conditional logic, applying to all groups (relying on template rendering)", "group", groupName)
+			return true
+		}
 		r.Log.V(2).Info("template has no patterns, applying to all groups", "group", groupName)
 		return true
 	}

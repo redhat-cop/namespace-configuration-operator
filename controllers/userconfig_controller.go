@@ -211,6 +211,11 @@ func (r *UserConfigReconciler) isTemplateApplicableToUser(template apis.LockedRe
 
 	// If no conditional patterns found, template applies to all users
 	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		// Check for unrecognized conditional logic
+		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
+			r.Log.V(2).Info("template contains unrecognized conditional logic, applying to all users (relying on template rendering)", "user", userName)
+			return true
+		}
 		r.Log.V(2).Info("template has no patterns, applying to all users", "user", userName)
 		return true
 	}
