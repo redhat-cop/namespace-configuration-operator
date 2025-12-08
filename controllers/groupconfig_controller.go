@@ -305,14 +305,32 @@ func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.Locked
 	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
 	containsPatterns := r.extractContainsPatterns(templateContent)
 
+	// Debug logging for template filtering (V(2) - only shown with --zap-log-level=2 or higher)
+	// To enable: ./bin/manager --zap-log-level=2
+	// Or set environment variable: ZAP_LOG_LEVEL=2
+	r.Log.V(2).Info("checking template applicability",
+		"group", groupName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns,
+		"templatePreview", func() string {
+			if len(templateContent) > 100 {
+				return templateContent[:100] + "..."
+			}
+			return templateContent
+		}())
+
 	// If no conditional patterns found, template applies to all groups
 	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		r.Log.V(2).Info("template has no patterns, applying to all groups", "group", groupName)
 		return true
 	}
 
 	// Check hasSuffix patterns
 	for _, pattern := range suffixPatterns {
 		if strings.HasSuffix(groupName, pattern) {
+			r.Log.V(2).Info("group matches hasSuffix pattern",
+				"group", groupName,
+				"pattern", pattern)
 			return true
 		}
 	}
@@ -320,11 +338,18 @@ func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.Locked
 	// Check contains patterns
 	for _, pattern := range containsPatterns {
 		if strings.Contains(groupName, pattern) {
+			r.Log.V(2).Info("group matches contains pattern",
+				"group", groupName,
+				"pattern", pattern)
 			return true
 		}
 	}
 
 	// Group doesn't match any patterns
+	r.Log.V(2).Info("group does not match any template patterns",
+		"group", groupName,
+		"suffixPatterns", suffixPatterns,
+		"containsPatterns", containsPatterns)
 	return false
 }
 
