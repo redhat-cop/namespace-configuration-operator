@@ -1,0 +1,256 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: replace-quay-with-dockerhub
+  annotations:
+    policies.kyverno.io/title: Replace Quay.io Images With Docker Hub
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: Image Registry
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod,Deployment,StatefulSet,DaemonSet,ReplicaSet
+    kyverno.io/kyverno-version: 1.11.4
+    kyverno.io/kubernetes-version: "1.27"
+    policies.kyverno.io/description: >-
+      Automatically replaces quay.io/*/namespace-configuration-operator images with 
+      Docker Hub images to use public registry with proper pull secrets.
+      This specifically targets namespace-configuration-operator images from any quay.io repository.
+      NOTE: Replace all instances of ${DOCKERHUB_USERNAME} with your Docker Hub username before applying
+spec:
+  rules:
+    - name: redirect-quay-namespace-operator-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - namespace-configuration-operator
+              operations:
+                - CREATE
+                - UPDATE
+      mutate:
+        foreach:
+          # digest form
+          - list: request.object.spec.initContainers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: Contains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator@{{imageData.identifier}}
+                    imagePullPolicy: Always
+                imagePullSecrets:
+                  - name: dockerhub-secret
+          # tag form
+          - list: request.object.spec.initContainers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: NotContains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator:{{imageData.identifier}}
+                    imagePullPolicy: Always
+                imagePullSecrets:
+                  - name: dockerhub-secret
+          # digest form
+          - list: request.object.spec.containers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: Contains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator@{{imageData.identifier}}
+                    imagePullPolicy: Always
+                imagePullSecrets:
+                  - name: dockerhub-secret
+          # tag form
+          - list: request.object.spec.containers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: NotContains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator:{{imageData.identifier}}
+                    imagePullPolicy: Always
+                imagePullSecrets:
+                  - name: dockerhub-secret
+
+    - name: redirect-quay-namespace-operator-deployments
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              names:
+                - namespace-configuration-operator-controller-manager
+              namespaces:
+                - namespace-configuration-operator
+              operations:
+                - CREATE
+                - UPDATE
+      mutate:
+        foreach:
+          # digest form
+          - list: request.object.spec.template.spec.initContainers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: Contains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    initContainers:
+                      - name: "{{ element.name }}"
+                        image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator@{{imageData.identifier}}
+                        imagePullPolicy: Always
+                    imagePullSecrets:
+                      - name: dockerhub-secret
+          # tag form
+          - list: request.object.spec.template.spec.initContainers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: NotContains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    initContainers:
+                      - name: "{{ element.name }}"
+                        image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator:{{imageData.identifier}}
+                        imagePullPolicy: Always
+                    imagePullSecrets:
+                      - name: dockerhub-secret
+          # digest form
+          - list: request.object.spec.template.spec.containers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: Contains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: "{{ element.name }}"
+                        image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator@{{imageData.identifier}}
+                        imagePullPolicy: Always
+                    imagePullSecrets:
+                      - name: dockerhub-secret
+          # tag form
+          - list: request.object.spec.template.spec.containers[]
+            context:
+              - name: imageData
+                imageRegistry:
+                  reference: "{{ element.image }}"
+            preconditions:
+              all:
+                - key: "{{imageData.registry}}"
+                  operator: Equals
+                  value: quay.io
+                - key: "{{imageData.repository}}"
+                  operator: Equals
+                  value: redhat-cop/namespace-configuration-operator
+                - key: "{{imageData.identifier}}"
+                  operator: NotContains
+                  value: "sha256:"
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: "{{ element.name }}"
+                        image: docker.io/${DOCKERHUB_USERNAME}/namespace-configuration-operator:{{imageData.identifier}}
+                        imagePullPolicy: Always
+                    imagePullSecrets:
+                      - name: dockerhub-secret

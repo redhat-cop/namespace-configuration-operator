@@ -1,0 +1,63 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: replace-operator-image-to-dockerhub
+  annotations:
+    policies.kyverno.io/title: Replace operator manager image to Docker Hub latest
+    policies.kyverno.io/category: Image Registry
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Deployment,Pod
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  background: false
+  rules:
+    # Mutate Pods in namespace-configuration-operator (covers direct Pod updates, if any)
+    - name: rewrite-operator-pod-manager-to-dockerhub
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [namespace-configuration-operator]
+              operations: [CREATE, UPDATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.containers[]
+            preconditions:
+              all:
+                - key: "{{ element.name }}"
+                  operator: Equals
+                  value: manager
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: manager
+                    image: docker.io/ephico2real/namespace-configuration-operator:latest
+                    imagePullPolicy: Always
+    # Mutate the operator Deployment to always use Docker Hub latest for the manager container
+    - name: rewrite-operator-deployment-manager-to-dockerhub
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [namespace-configuration-operator-controller-manager]
+              namespaces: [namespace-configuration-operator]
+              operations: [CREATE, UPDATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers[]
+            preconditions:
+              all:
+                - key: "{{ element.name }}"
+                  operator: Equals
+                  value: manager
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: manager
+                        image: docker.io/ephico2real/namespace-configuration-operator:latest
+                        imagePullPolicy: Always
+                    imagePullSecrets:
+                      - name: dockerhub-secret
+
