@@ -26,4 +26,6 @@ testbin/*
 
 bundle/
 bundle.Dockerfile
-charts/
+charts/REVIEW-REDUNDANCY.md
+issues-193.md
+WARP.md
