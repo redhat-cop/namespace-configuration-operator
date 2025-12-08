@@ -37,6 +37,7 @@ import (
 
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers"
+	"github.com/redhat-cop/namespace-configuration-operator/internal/version"
 	"github.com/redhat-cop/operator-utils/pkg/util/discoveryclient"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	// +kubebuilder:scaffold:imports
@@ -73,6 +74,9 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// Print startup banner with version and commit info
+	version.PrintStartupBanner()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
