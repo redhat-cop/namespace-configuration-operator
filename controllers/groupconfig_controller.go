@@ -325,23 +325,67 @@ func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.Locked
 		return true
 	}
 
-	// Check hasSuffix patterns
-	for _, pattern := range suffixPatterns {
-		if strings.HasSuffix(groupName, pattern) {
-			r.Log.V(2).Info("group matches hasSuffix pattern",
-				"group", groupName,
-				"pattern", pattern)
+	// Detect if template uses AND logic (requires all conditions to match)
+	// vs OR logic (requires any condition to match)
+	// Look for "and" keyword in conditional statements
+	usesAndLogic := strings.Contains(templateContent, "{{- if and") || strings.Contains(templateContent, "{{ if and")
+
+	if usesAndLogic {
+		// AND logic: ALL patterns must match
+		allSuffixMatch := true
+		if len(suffixPatterns) > 0 {
+			for _, pattern := range suffixPatterns {
+				if !strings.HasSuffix(groupName, pattern) {
+					allSuffixMatch = false
+					break
+				}
+			}
+		} else {
+			// If no suffix patterns are defined, they are considered to match if no other patterns are defined.
+			// If there are contains patterns, this will be handled below.
+			// If there are no patterns at all, it would have returned true earlier.
+			allSuffixMatch = true
+		}
+
+		allContainsMatch := true
+		if len(containsPatterns) > 0 {
+			for _, pattern := range containsPatterns {
+				if !strings.Contains(groupName, pattern) {
+					allContainsMatch = false
+					break
+				}
+			}
+		} else {
+			allContainsMatch = true
+		}
+
+		if allSuffixMatch && allContainsMatch {
+			r.Log.V(2).Info("group matches all AND logic patterns", "group", groupName)
 			return true
 		}
-	}
+		r.Log.V(2).Info("group does not match all AND logic patterns", "group", groupName)
+		return false
 
-	// Check contains patterns
-	for _, pattern := range containsPatterns {
-		if strings.Contains(groupName, pattern) {
-			r.Log.V(2).Info("group matches contains pattern",
-				"group", groupName,
-				"pattern", pattern)
-			return true
+	} else {
+		// OR logic: ANY pattern can match (original behavior)
+		// Check hasSuffix patterns
+		for _, pattern := range suffixPatterns {
+			if strings.HasSuffix(groupName, pattern) {
+				r.Log.V(2).Info("group matches hasSuffix pattern",
+					"group", groupName,
+					"pattern", pattern)
+				return true
+			}
+		}
+
+		// Check contains patterns
+		for _, pattern := range containsPatterns {
+			if strings.Contains(groupName, pattern) {
+				r.Log.V(2).Info("group matches contains pattern",
+					"group", groupName,
+					"pattern", pattern)
+				return true
+			}
 		}
 	}
 
