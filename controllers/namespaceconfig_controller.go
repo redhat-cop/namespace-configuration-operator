@@ -89,15 +89,40 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 	}
 
 	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, r.controllerName) {
+		// Support all old finalizer variants for backward compatibility
+		oldFinalizerVariants := []string{
+			"namespaceconfig-controller",
+			"namespaceconfig-controller.redhat.com",
+			"namespaceconfig-controller.redhatcop.redhat.io",
+		}
+
+		hasAnyFinalizer := false
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				hasAnyFinalizer = true
+				break
+			}
+		}
+		if !hasAnyFinalizer && !util.HasFinalizer(instance, r.controllerName) {
 			return reconcile.Result{}, nil
 		}
+
 		err := r.manageCleanUpLogic(instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
-		util.RemoveFinalizer(instance, r.controllerName)
+
+		// Remove all old finalizer variants and new finalizer if present
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				util.RemoveFinalizer(instance, oldFinalizer)
+			}
+		}
+		if util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+		}
+
 		err = r.GetClient().Update(context, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
@@ -146,13 +171,25 @@ func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.Na
 			needsUpdate = false
 		}
 	}
-	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+
+	// Migrate old finalizer to new finalizer (only if not being deleted)
+	oldFinalizerName := "namespaceconfig-controller"
+	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
+		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
 		needsUpdate = false
 	}
-	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
-		util.RemoveFinalizer(instance, r.controllerName)
-		needsUpdate = false
+
+	// Only add/remove finalizers if not being deleted
+	if !util.IsBeingDeleted(instance) {
+		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+			util.AddFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
+		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
 	}
 
 	return needsUpdate
@@ -243,9 +280,9 @@ func isProhibitedNamespaceName(name string) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.controllerName = "namespaceconfig-controller"
+	r.controllerName = "redhatcop.redhat.io/namespaceconfig-controller"
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&redhatcopv1alpha1.NamespaceConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
+		For(&redhatcopv1alpha1.NamespaceConfig{}, builder.WithPredicates(common.ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate)).
 		Watches(&corev1.Namespace{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Namespace",

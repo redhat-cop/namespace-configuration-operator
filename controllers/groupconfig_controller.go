@@ -18,11 +18,14 @@ package controllers
 
 import (
 	"context"
+	"regexp"
+	"strings"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
@@ -88,15 +91,40 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	}
 
 	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, r.controllerName) {
+		// Support all old finalizer variants for backward compatibility
+		oldFinalizerVariants := []string{
+			"groupconfig-controller",
+			"groupconfig-controller.redhat.com",
+			"groupconfig-controller.redhatcop.redhat.io",
+		}
+
+		hasAnyFinalizer := false
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				hasAnyFinalizer = true
+				break
+			}
+		}
+		if !hasAnyFinalizer && !util.HasFinalizer(instance, r.controllerName) {
 			return reconcile.Result{}, nil
 		}
+
 		err := r.manageCleanUpLogic(instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
-		util.RemoveFinalizer(instance, r.controllerName)
+
+		// Remove all old finalizer variants and new finalizer if present
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				util.RemoveFinalizer(instance, oldFinalizer)
+			}
+		}
+		if util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+		}
+
 		err = r.GetClient().Update(context, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
@@ -130,12 +158,18 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
 	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
-		if err != nil {
-			r.Log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
-			return []lockedresource.LockedResource{}, err
+		// Filter templates that are applicable to this group BEFORE processing
+		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, group)
+
+		// Only process templates that are actually applicable
+		if len(applicableTemplates) > 0 {
+			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), group)
+			if err != nil {
+				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", group)
+				return []lockedresource.LockedResource{}, err
+			}
+			lockedresources = append(lockedresources, lrs...)
 		}
-		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
 }
@@ -216,13 +250,25 @@ func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupC
 			needsUpdate = false
 		}
 	}
-	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+
+	// Migrate old finalizer to new finalizer (only if not being deleted)
+	oldFinalizerName := "groupconfig-controller"
+	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
+		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
 		needsUpdate = false
 	}
-	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
-		util.RemoveFinalizer(instance, r.controllerName)
-		needsUpdate = false
+
+	// Only add/remove finalizers if not being deleted
+	if !util.IsBeingDeleted(instance) {
+		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+			util.AddFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
+		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
 	}
 
 	return needsUpdate
@@ -237,12 +283,92 @@ func (r *GroupConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.G
 	return nil
 }
 
+// Dynamic template filtering based on extracted patterns from template content
+func (r *GroupConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, group userv1.Group) []apis.LockedResourceTemplate {
+	applicableTemplates := []apis.LockedResourceTemplate{}
+
+	for _, template := range templates {
+		if r.isTemplateApplicableToGroup(template, group) {
+			applicableTemplates = append(applicableTemplates, template)
+		}
+	}
+
+	return applicableTemplates
+}
+
+// Dynamically check if template is applicable by extracting patterns from template content
+func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.LockedResourceTemplate, group userv1.Group) bool {
+	templateContent := template.ObjectTemplate
+	groupName := group.Name
+
+	// Extract both hasSuffix and contains patterns
+	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
+	containsPatterns := r.extractContainsPatterns(templateContent)
+
+	// If no conditional patterns found, template applies to all groups
+	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
+		return true
+	}
+
+	// Check hasSuffix patterns
+	for _, pattern := range suffixPatterns {
+		if strings.HasSuffix(groupName, pattern) {
+			return true
+		}
+	}
+
+	// Check contains patterns
+	for _, pattern := range containsPatterns {
+		if strings.Contains(groupName, pattern) {
+			return true
+		}
+	}
+
+	// Group doesn't match any patterns
+	return false
+}
+
+// Extract all hasSuffix patterns from template content
+func (r *GroupConfigReconciler) extractHasSuffixPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: hasSuffix "some-pattern" or hasSuffix "-some-pattern"
+	// Handles both: {{- if hasSuffix "-cluster-admin" .Name }} and similar patterns
+	re := regexp.MustCompile(`hasSuffix\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
+}
+
+// Extract contains patterns for templates using 'contains' instead of 'hasSuffix'
+func (r *GroupConfigReconciler) extractContainsPatterns(templateContent string) []string {
+	patterns := []string{}
+
+	// Regex to match: contains "some-pattern" or contains "-some-pattern"
+	re := regexp.MustCompile(`contains\s+"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(templateContent, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			patterns = append(patterns, match[1])
+		}
+	}
+
+	return patterns
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.controllerName = "groupconfig-controller"
+	r.controllerName = "redhatcop.redhat.io/groupconfig-controller"
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&redhatcopv1alpha1.GroupConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
+		For(&redhatcopv1alpha1.GroupConfig{}, builder.WithPredicates(common.ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate)).
 		Watches(&userv1.Group{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Group",

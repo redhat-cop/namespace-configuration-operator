@@ -89,15 +89,40 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 	}
 
 	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, r.controllerName) {
+		// Support all old finalizer variants for backward compatibility
+		oldFinalizerVariants := []string{
+			"userconfig-controller",
+			"userconfig-controller.redhat.com",
+			"userconfig-controller.redhatcop.redhat.io",
+		}
+
+		hasAnyFinalizer := false
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				hasAnyFinalizer = true
+				break
+			}
+		}
+		if !hasAnyFinalizer && !util.HasFinalizer(instance, r.controllerName) {
 			return reconcile.Result{}, nil
 		}
+
 		err := r.manageCleanUpLogic(instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
-		util.RemoveFinalizer(instance, r.controllerName)
+
+		// Remove all old finalizer variants and new finalizer if present
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				util.RemoveFinalizer(instance, oldFinalizer)
+			}
+		}
+		if util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+		}
+
 		err = r.GetClient().Update(context, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
@@ -240,13 +265,25 @@ func (r *UserConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.UserCon
 			needsUpdate = false
 		}
 	}
-	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+
+	// Migrate old finalizer to new finalizer (only if not being deleted)
+	oldFinalizerName := "userconfig-controller"
+	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
+		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
 		needsUpdate = false
 	}
-	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
-		util.RemoveFinalizer(instance, r.controllerName)
-		needsUpdate = false
+
+	// Only add/remove finalizers if not being deleted
+	if !util.IsBeingDeleted(instance) {
+		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+			util.AddFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
+		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+			needsUpdate = false
+		}
 	}
 
 	return needsUpdate
@@ -280,9 +317,9 @@ func (r *UserConfigReconciler) findUserFromIdentity(ctx context.Context, identit
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.controllerName = "userconfig-controller"
+	r.controllerName = "redhatcop.redhat.io/userconfig-controller"
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&redhatcopv1alpha1.UserConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
+		For(&redhatcopv1alpha1.UserConfig{}, builder.WithPredicates(common.ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate)).
 		Watches(&userv1.User{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "User",
