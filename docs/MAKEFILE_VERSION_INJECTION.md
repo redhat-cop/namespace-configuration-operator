@@ -169,6 +169,8 @@ docker-build: test ## Build docker image with the manager.
 
 ## Usage Examples
 
+> **Important:** All manual commands shown in this document are for **local builds only**. For CI/CD pipelines, production builds, or automated builds, use the Makefile targets which handle version injection automatically.
+
 ### Build Binary with Version Info
 
 ```bash
@@ -184,6 +186,8 @@ make -f PodmanMakefile build
 - Version info embedded via ldflags
 - No visible output (version info is in binary)
 
+**Note:** These commands are for local development builds only.
+
 ### Build Container Image with Version Info
 
 ```bash
@@ -194,9 +198,11 @@ make -f PodmanMakefile podman-build
 # Building with version info: VERSION=v1.0.0, COMMIT=abc1234, BUILD_DATE=2025-12-10T10:30:00Z
 ```
 
+**Note:** This command is for local development builds only. For production builds, use your CI/CD pipeline which should call the Makefile targets.
+
 ### Override Version Information
 
-You can override version information via environment variables:
+You can override version information via environment variables (for local builds only):
 
 ```bash
 # Override VERSION only
@@ -206,7 +212,9 @@ VERSION=v2.0.0 make -f PodmanMakefile podman-build
 VERSION=v2.0.0 COMMIT=xyz789 BUILD_DATE=2025-12-11T00:00:00Z make -f PodmanMakefile podman-build
 ```
 
-**Note:** `COMMIT` and `BUILD_DATE` are typically auto-detected. Only override `VERSION` if needed.
+**Note:** 
+- `COMMIT` and `BUILD_DATE` are typically auto-detected. Only override `VERSION` if needed.
+- These override commands are for **local development builds only**. Production builds should use CI/CD pipelines with proper version management.
 
 ## Version Detection Details
 
@@ -292,34 +300,38 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a \
 
 2. **Verify Makefile is being used:**
    ```bash
-   # Use PodmanMakefile for container builds
+   # Use PodmanMakefile for container builds (local builds only)
    make -f PodmanMakefile podman-build
    ```
 
 3. **Check build output:**
    ```bash
-   # PodmanMakefile shows version info
+   # PodmanMakefile shows version info (local builds only)
    make -f PodmanMakefile podman-build
    # Should show: "Building with version info: VERSION=..."
    ```
 
-4. **Manual override:**
+4. **Manual override (local builds only):**
    ```bash
    VERSION=v1.0.0 make -f PodmanMakefile podman-build
    ```
+
+**Note:** For production builds, ensure your CI/CD pipeline uses Makefile targets and has access to git repository for version detection.
 
 ### Container Build Not Using Version Info
 
 **Problem:** Using standard Makefile `docker-build` which doesn't inject version info.
 
-**Solution:** Use PodmanMakefile instead:
+**Solution:** Use PodmanMakefile instead (for local builds):
 ```bash
 # Instead of:
 make docker-build
 
-# Use:
+# Use (local builds only):
 make -f PodmanMakefile podman-build
 ```
+
+**For production builds:** Ensure your CI/CD pipeline uses PodmanMakefile targets or manually passes build args.
 
 ### Version Info Not in Binary
 
@@ -345,11 +357,13 @@ make -f PodmanMakefile podman-build
 
 ## Best Practices
 
-1. **Always use PodmanMakefile for container builds** - Automatic version injection
-2. **Don't override COMMIT or BUILD_DATE** - Let Makefiles auto-detect
-3. **Use VERSION override only when needed** - For release builds or specific versions
-4. **Verify version info after build** - Check startup banner or binary strings
-5. **Use git tags for releases** - Enables `git describe` to work correctly
+1. **For local development:** Use PodmanMakefile for container builds - Automatic version injection
+2. **For production builds:** Use Makefile targets in CI/CD pipelines - Ensures consistent version injection
+3. **Don't override COMMIT or BUILD_DATE** - Let Makefiles auto-detect
+4. **Use VERSION override only when needed** - For local testing or specific version requirements
+5. **Verify version info after build** - Check startup banner or binary strings
+6. **Use git tags for releases** - Enables `git describe` to work correctly
+7. **CI/CD pipelines should use Makefile targets** - Don't use manual build commands in production
 
 ## Related Documentation
 
