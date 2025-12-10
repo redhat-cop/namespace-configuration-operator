@@ -232,6 +232,12 @@ func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.Grou
 				return []lockedresource.LockedResource{}, err
 			}
 			lockedresources = append(lockedresources, lrs...)
+		} else {
+			// Group is being skipped because no templates in this GroupConfig match the group's pattern
+			// This is logged at V(1) level to be visible but not too verbose
+			r.Log.V(1).Info("skipping group - no GroupConfig templates match the group pattern",
+				"group", group.Name,
+				"groupconfig", instance.Name)
 		}
 	}
 	return lockedresources, nil

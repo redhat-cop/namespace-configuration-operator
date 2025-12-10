@@ -233,6 +233,12 @@ func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserC
 				return []lockedresource.LockedResource{}, err
 			}
 			lockedresources = append(lockedresources, lrs...)
+		} else {
+			// User is being skipped because no templates in this UserConfig match the user's pattern
+			// This is logged at V(1) level to be visible but not too verbose
+			r.Log.V(1).Info("skipping user - no UserConfig templates match the user pattern",
+				"user", user.Name,
+				"userconfig", instance.Name)
 		}
 	}
 	return lockedresources, nil

@@ -274,6 +274,12 @@ func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.
 				return []lockedresource.LockedResource{}, err
 			}
 			lockedresources = append(lockedresources, lrs...)
+		} else {
+			// Namespace is being skipped because no templates in this NamespaceConfig match the namespace's pattern
+			// This is logged at V(1) level to be visible but not too verbose
+			r.Log.V(1).Info("skipping namespace - no NamespaceConfig templates match the namespace pattern",
+				"namespace", namespace.Name,
+				"namespaceconfig", instance.Name)
 		}
 	}
 	return lockedresources, nil
