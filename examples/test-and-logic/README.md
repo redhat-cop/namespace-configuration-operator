@@ -248,7 +248,7 @@ The AND logic detection works by:
 - **[ISSUE-194-GITHUB-ISSUE-TEXT.md](ISSUE-194-GITHUB-ISSUE-TEXT.md)** - **Formatted text ready to post in GitHub issue**
 - **[test-or-logic-results.md](test-or-logic-results.md)** - OR logic test results from production cluster
 - [Issues and Resolution](../issues-and-resolution.md) - Issue 1: Template Filtering Fix
-- [Work in Progress](../work-in-progress.md) - Bug 3: AND Logic Fix
+- [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Bug 3: AND Logic Fix
 - [GitHub Issue #194](https://github.com/redhat-cop/namespace-configuration-operator/issues/194) - Field removal with value 0 in conditionals
 
 ## Issue #194 Root Cause
