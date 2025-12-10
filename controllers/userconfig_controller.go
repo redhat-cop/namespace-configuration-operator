@@ -21,6 +21,7 @@ import (
 	errs "errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
@@ -55,6 +56,55 @@ type UserConfigReconciler struct {
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=userconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=userconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
+
+// manageSuccessWithRetry attempts to call ManageSuccess with retry logic to handle
+// optimistic concurrency conflicts. It re-fetches the instance before each retry
+// to ensure we have the latest resourceVersion.
+func (r *UserConfigReconciler) manageSuccessWithRetry(ctx context.Context, req ctrl.Request, log logr.Logger) (reconcile.Result, error) {
+	const maxRetries = 5
+	const baseDelay = 50 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Re-fetch the instance to get the latest resourceVersion
+		latestInstance := &redhatcopv1alpha1.UserConfig{}
+		err := r.GetClient().Get(ctx, req.NamespacedName, latestInstance)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// Resource was deleted, no need to update status
+				return reconcile.Result{}, nil
+			}
+			log.Error(err, "unable to re-fetch instance for status update", "attempt", attempt+1)
+			return reconcile.Result{}, err
+		}
+
+		// Attempt to update status
+		result, err := r.ManageSuccess(ctx, latestInstance)
+		if err == nil {
+			// Success!
+			return result, nil
+		}
+
+		// Check if this is a conflict error that we should retry
+		if errors.IsConflict(err) {
+			if attempt < maxRetries-1 {
+				// Calculate exponential backoff delay
+				delay := baseDelay * time.Duration(1<<uint(attempt))
+				log.V(1).Info("retrying ManageSuccess due to conflict", "attempt", attempt+1, "maxRetries", maxRetries, "delay", delay, "error", err)
+				time.Sleep(delay)
+				continue
+			}
+			// Last attempt failed, return the error
+			log.Error(err, "unable to update status after retries", "attempts", maxRetries)
+			return reconcile.Result{}, err
+		}
+
+		// Not a conflict error, return immediately
+		return result, err
+	}
+
+	// Should never reach here, but just in case
+	return reconcile.Result{}, nil
+}
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -153,20 +203,9 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 		return r.ManageError(context, instance, err)
 	}
 
-	// Re-fetch the instance to get the latest resourceVersion before updating status
-	// This prevents "object has been modified" conflicts when ManageSuccess updates the status
-	latestInstance := &redhatcopv1alpha1.UserConfig{}
-	err = r.GetClient().Get(context, req.NamespacedName, latestInstance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Resource was deleted, no need to update status
-			return reconcile.Result{}, nil
-		}
-		log.Error(err, "unable to re-fetch instance for status update", "instance", instance)
-		return reconcile.Result{}, err
-	}
-
-	return r.ManageSuccess(context, latestInstance)
+	// Use retry mechanism to handle optimistic concurrency conflicts
+	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
+	return r.manageSuccessWithRetry(context, req, log)
 }
 
 func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
