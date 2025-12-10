@@ -12,12 +12,81 @@
 
 ## Configuration methods
 
-### Method 1: Kyverno Policy (Recommended for OLM-managed deployments)
+**Important**: For OLM-managed deployments, you have **two options**:
+1. **Update the Subscription** (OLM-native method) - Recommended for OLM deployments
+2. **Use Kyverno Policy** (Policy-based injection) - Alternative method that works with OLM
+
+### Method 1: Update Subscription (Recommended for OLM-managed deployments)
+
+**Why this method:**
+- OLM-native approach
+- Persists across operator updates
+- Standard OLM configuration method
+- No additional dependencies (Kyverno not required)
+
+**Steps:**
+
+1. **Edit the Subscription to add environment variables**:
+```bash
+# Get the subscription name
+oc get subscription -n openshift-operators | grep namespace-configuration-operator
+
+# Edit the subscription
+oc edit subscription <subscription-name> -n openshift-operators
+```
+
+2. **Add environment variables to the Subscription spec**:
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: namespace-configuration-operator
+  namespace: openshift-operators
+spec:
+  # ... existing spec ...
+  config:
+    env:
+      - name: ZAP_LOG_LEVEL
+        value: "error"
+      - name: ZAP_DEVEL
+        value: "false"
+```
+
+3. **OLM will automatically update the Deployment**:
+   - OLM will propagate the environment variables to the Deployment
+   - The operator pod will restart automatically
+   - No manual restart needed
+
+4. **Verify the configuration**:
+```bash
+# Check environment variable is set in the deployment
+oc get deployment namespace-configuration-operator-controller-manager -n namespace-configuration-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
+
+# Expected output: error
+```
+
+5. **Verify logs are minimal**:
+```bash
+# Wait for pod to be ready
+oc wait --for=condition=ready pod -n namespace-configuration-operator \
+  -l control-plane=controller-manager --timeout=60s
+
+# Check logs (should be minimal, mostly errors)
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=100
+
+# Count log entries by level
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=1000 | \
+  grep -o '"level":"[^"]*"' | sort | uniq -c
+```
+
+### Method 2: Kyverno Policy (Alternative for OLM-managed deployments)
 
 **Why this method:**
 - Works with OLM-managed deployments
 - Persists across operator updates
-- Centralized configuration management
+- Centralized configuration management via policy
+- Useful when you want policy-based configuration management
 
 **Steps:**
 
@@ -75,9 +144,11 @@ oc logs -n namespace-configuration-operator deployment/namespace-configuration-o
   grep -o '"level":"[^"]*"' | sort | uniq -c
 ```
 
-### Method 2: Direct Deployment Edit (Manual deployments only)
+### Method 3: Direct Deployment Edit (Manual deployments only)
 
-**Note**: This method will be overwritten by OLM if the operator is OLM-managed.
+**Note**: 
+- This method will be **overwritten by OLM** if the operator is OLM-managed
+- Only use this method for manually deployed operators (not via OLM)
 
 **Steps:**
 
@@ -92,6 +163,19 @@ oc set env deployment/namespace-configuration-operator-controller-manager -n nam
 oc get deployment namespace-configuration-operator-controller-manager -n namespace-configuration-operator \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
 ```
+
+## Configuration Method Summary
+
+| Method | OLM-Managed | Manual Deployment | Persists Across Updates | Requires |
+|--------|-------------|-------------------|------------------------|----------|
+| **Subscription** | ✅ Yes | ❌ No | ✅ Yes | OLM |
+| **Kyverno Policy** | ✅ Yes | ✅ Yes | ✅ Yes | Kyverno |
+| **Direct Deployment Edit** | ❌ No (overwritten) | ✅ Yes | ❌ No | None |
+
+**Recommendation**:
+- **For OLM-managed deployments**: Use **Method 1 (Subscription)** - it's the OLM-native approach
+- **For policy-based management**: Use **Method 2 (Kyverno Policy)** - useful for centralized configuration
+- **For manual deployments**: Use **Method 3 (Direct Edit)** - only if not using OLM
 
 ## Verification test steps
 

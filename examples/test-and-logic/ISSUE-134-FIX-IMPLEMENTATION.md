@@ -92,20 +92,56 @@ spec:
 
 ### 3. Configuration Methods
 
-**Method 1: Kyverno Policy (Recommended)**
-- Edit `kyverno-policies/operator-log-level-config.yaml`
-- Change `ZAP_LOG_LEVEL` value to `"error"`
-- Apply: `oc apply -f kyverno-policies/operator-log-level-config.yaml`
-- Restart deployment: `oc rollout restart deployment/...`
+**Important**: For OLM-managed deployments, you have **two options**:
+1. **Update the Subscription** (OLM-native method) - Recommended
+2. **Use Kyverno Policy** (Policy-based injection) - Alternative
 
-**Method 2: Direct Deployment Edit**
+**Method 1: Update Subscription (Recommended for OLM-managed deployments)**
+
+This is the OLM-native approach for configuring operator environment variables.
+
+**Steps:**
+1. Edit the Subscription to add environment variables:
+```bash
+oc edit subscription <subscription-name> -n openshift-operators
+```
+
+2. Add environment variables to the Subscription spec:
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: namespace-configuration-operator
+  namespace: openshift-operators
+spec:
+  config:
+    env:
+      - name: ZAP_LOG_LEVEL
+        value: "error"
+      - name: ZAP_DEVEL
+        value: "false"
+```
+
+3. OLM automatically propagates the environment variables to the Deployment
+4. The operator pod restarts automatically
+
+**Method 2: Kyverno Policy (Alternative for OLM-managed deployments)**
+
+Use this method if you prefer policy-based configuration management.
+
+**Steps:**
+1. Edit `kyverno-policies/operator-log-level-config.yaml`
+2. Change `ZAP_LOG_LEVEL` value to `"error"`
+3. Apply: `oc apply -f kyverno-policies/operator-log-level-config.yaml`
+4. Restart deployment: `oc rollout restart deployment/...`
+
+**Method 3: Direct Deployment Edit (Manual deployments only)**
+
+**Note**: Will be overwritten by OLM if operator is OLM-managed.
+
+**Steps:**
 - `oc set env deployment/... ZAP_LOG_LEVEL=error`
-- **Note**: Will be overwritten by OLM if operator is OLM-managed
-
-**Method 3: ConfigMap (if supported)**
-- Create ConfigMap with log level configuration
-- Reference in Deployment spec
-- **Note**: Requires Deployment template support
+- Only use for manually deployed operators (not via OLM)
 
 ## Code Changes
 
@@ -165,7 +201,30 @@ spec:
 
 ### Set log level to "error" (minimal logging)
 
-**Using Kyverno policy:**
+**Option 1: Update Subscription (Recommended for OLM-managed deployments)**
+
+```bash
+# 1. Get the subscription name
+oc get subscription -n openshift-operators | grep namespace-configuration-operator
+
+# 2. Edit the subscription
+oc edit subscription <subscription-name> -n openshift-operators
+
+# 3. Add environment variables to spec.config.env:
+#    spec:
+#      config:
+#        env:
+#          - name: ZAP_LOG_LEVEL
+#            value: "error"
+#          - name: ZAP_DEVEL
+#            value: "false"
+
+# 4. OLM will automatically update the deployment
+#    No manual restart needed - OLM handles it
+```
+
+**Option 2: Use Kyverno Policy (Alternative for OLM-managed deployments)**
+
 ```bash
 # 1. Edit the policy file
 oc edit clusterpolicy configure-operator-log-level
@@ -178,7 +237,7 @@ oc edit clusterpolicy configure-operator-log-level
 oc rollout restart deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator
 ```
 
-**Or patch directly:**
+**Or patch Kyverno policy directly:**
 ```bash
 oc patch clusterpolicy configure-operator-log-level --type='json' -p='[
   {

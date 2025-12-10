@@ -25,8 +25,10 @@
 
 ## Solution approach
 - **Environment variables**: Use `ZAP_LOG_LEVEL` environment variable to control log level
-- **Kyverno policy**: Create a ClusterPolicy that injects log level environment variables into the Deployment
-- **OLM-compatible**: Policy works with OLM-managed deployments and persists across updates
+- **Two configuration methods for OLM-managed deployments**:
+  1. **Update Subscription** (OLM-native method) - Add environment variables to Subscription spec.config.env
+  2. **Kyverno policy** (Policy-based method) - Create a ClusterPolicy that injects log level environment variables into the Deployment
+- **OLM-compatible**: Both methods work with OLM-managed deployments and persist across updates
 - **Flexible configuration**: Supports "error", "info", "debug", or numeric levels (0-10)
 - **Enhanced logging features**:
   - V(1) level logging for skipped resources (groups/namespaces/users that don't match templates)
