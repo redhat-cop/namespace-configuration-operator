@@ -260,7 +260,9 @@ The Dockerfile follows security best practices:
 - [BUILD-RUN.md](../BUILD-RUN.md) - Build and run instructions
 - [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Version information system documentation
 
-## Example: Complete Build with Version Info
+## Example: Complete Build with Version Info (Local Builds Only)
+
+> **Important:** This example shows manual build commands for **local development builds only**. For production builds, use Makefile targets in your CI/CD pipeline.
 
 ```bash
 # Get version information
@@ -268,7 +270,7 @@ VERSION=$(git describe --tags --always --dirty || echo "dev")
 COMMIT=$(git rev-parse --short HEAD || echo "unknown")
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# Build with version info
+# Build with version info (local builds only)
 podman build \
   --build-arg VERSION="${VERSION}" \
   --build-arg COMMIT="${COMMIT}" \
@@ -279,6 +281,14 @@ podman build \
 
 # Verify version info in image
 podman run --rm namespace-configuration-operator:latest /manager --version
+```
+
+**For production builds:** Use Makefile targets in your CI/CD pipeline:
+```bash
+# In CI/CD pipeline
+make -f PodmanMakefile podman-build
+# or
+make -f PodmanMakefile external-deploy
 ```
 
 ## Troubleshooting
