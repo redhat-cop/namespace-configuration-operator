@@ -85,12 +85,18 @@
 - **All Controllers Updated**: namespaceconfig, groupconfig, userconfig controllers now use new predicate
 - **Status**: ✅ COMPLETED - Resources no longer get stuck in deletion
 
-#### 4. Log Level Configuration
-- **Environment Variable Support**: ZAP_LOG_LEVEL and ZAP_DEVEL support in main.go
+#### 4. Log Level Configuration (Issue #134) ✅
+- **Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/134
+- **Problem**: Operator creating lots of Info logs sent to ELK, need to set log level to Error
+- **Solution**: 
+  - **Environment Variable Support**: ZAP_LOG_LEVEL and ZAP_DEVEL support in main.go
+  - **Kyverno Policy**: operator-log-level-config.yaml for OLM-managed deployments (persists across updates)
+  - **Log Level Options**: Supports "error", "info", "debug", or numeric levels (0-10)
+  - **To set Error level**: Update Kyverno policy `ZAP_LOG_LEVEL` value to "error"
 - **Documentation**: docs/LOG_LEVEL_CONFIGURATION.md with OLM-compatible methods
 - **Default Configuration**: config/manager/manager.yaml with production defaults
-- **Kyverno Policy**: operator-log-level-config.yaml for OLM-managed deployments
 - **Template Support**: env-operator-log-level-config.yaml.tpl for environment substitution
+- **Status**: ✅ RESOLVED - Log level can now be set to "error" via Kyverno policy or environment variable
 
 #### 5. Template Filtering AND Logic Fix (Bug 3) - Initial Implementation
 - **isTemplateApplicableToGroup**: Updated to correctly handle AND conditions
