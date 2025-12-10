@@ -119,6 +119,7 @@ func (r *GroupConfigReconciler) manageSuccessWithRetry(ctx context.Context, req 
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("groupconfig", req.NamespacedName)
+	log.Info("reconciling started")
 
 	// Fetch the GroupConfig instance
 	instance := &redhatcopv1alpha1.GroupConfig{}
@@ -212,6 +213,8 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 		log.Error(err, "unable to update locked resources")
 		return r.ManageError(context, instance, err)
 	}
+
+	log.Info("resources processed successfully", "groupconfig", instance.Name, "groups", len(selectedGroups), "resources", len(lockedResources))
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion

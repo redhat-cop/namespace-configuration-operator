@@ -120,6 +120,7 @@ func (r *UserConfigReconciler) manageSuccessWithRetry(ctx context.Context, req c
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("userconfig", req.NamespacedName)
+	log.Info("reconciling started")
 
 	// Fetch the UserConfig instance
 	instance := &redhatcopv1alpha1.UserConfig{}
@@ -213,6 +214,8 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 		log.Error(err, "unable to update locked resources")
 		return r.ManageError(context, instance, err)
 	}
+
+	log.Info("resources processed successfully", "userconfig", instance.Name, "users", len(selectedUsers), "resources", len(lockedResources))
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion

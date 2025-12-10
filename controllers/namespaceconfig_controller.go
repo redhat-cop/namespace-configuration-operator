@@ -212,6 +212,8 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return r.ManageError(context, instance, err)
 	}
 
+	log.Info("resources processed successfully", "namespaceconfig", instance.Name, "namespaces", len(selectedNamespaces), "resources", len(lockedResources))
+
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
 	return r.manageSuccessWithRetry(context, req, log)
