@@ -46,7 +46,7 @@ spec:
         roleRef:
           apiGroup: rbac.authorization.k8s.io
           kind: ClusterRole
-          name: view
+          name: admin
         {{- end }}
     # Test Case 2: OR logic (for comparison) - requires ANY condition
     # This template should apply to groups that:
