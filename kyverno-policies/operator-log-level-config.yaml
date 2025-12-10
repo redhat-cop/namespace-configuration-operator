@@ -46,7 +46,7 @@ spec:
                       #   - "false" = JSON format (production)
                       #   - "true" = console format (development)
                       - name: ZAP_LOG_LEVEL
-                        value: "info"
+                        value: "2"
                       - name: ZAP_DEVEL
                         value: "false"
 

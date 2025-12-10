@@ -81,6 +81,9 @@ func (r *NamespaceConfigReconciler) manageSuccessWithRetry(ctx context.Context, 
 		result, err := r.ManageSuccess(ctx, latestInstance)
 		if err == nil {
 			// Success!
+			if attempt > 0 {
+				log.V(1).Info("ManageSuccess succeeded after retry", "attempt", attempt+1, "namespaceconfig", latestInstance.Name)
+			}
 			return result, nil
 		}
 
@@ -124,6 +127,7 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
+			log.Info("resource deletion detected - resource not found, skipping reconciliation", "namespaceconfig", req.NamespacedName)
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			return reconcile.Result{}, nil
@@ -141,6 +145,7 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 	}
 
 	if util.IsBeingDeleted(instance) {
+		log.Info("resource deletion detected - processing deletion cleanup", "namespaceconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
 		// Support all old finalizer variants for backward compatibility
 		oldFinalizerVariants := []string{
 			"namespaceconfig-controller",
@@ -179,12 +184,13 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if apierrors.IsNotFound(err) {
-				log.V(1).Info("resource already deleted, skipping finalizer removal", "instance", instance)
+				log.Info("resource deletion completed - resource already deleted during finalizer removal", "namespaceconfig", instance.Name)
 				return reconcile.Result{}, nil
 			}
 			log.Error(err, "unable to update instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
+		log.Info("resource deletion completed successfully", "namespaceconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 	//get selected namespaces

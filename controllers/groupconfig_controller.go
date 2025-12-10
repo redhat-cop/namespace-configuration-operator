@@ -80,6 +80,9 @@ func (r *GroupConfigReconciler) manageSuccessWithRetry(ctx context.Context, req 
 		result, err := r.ManageSuccess(ctx, latestInstance)
 		if err == nil {
 			// Success!
+			if attempt > 0 {
+				log.V(1).Info("ManageSuccess succeeded after retry", "attempt", attempt+1, "groupconfig", latestInstance.Name)
+			}
 			return result, nil
 		}
 
@@ -123,6 +126,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
+			log.Info("resource deletion detected - resource not found, skipping reconciliation", "groupconfig", req.NamespacedName)
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			return reconcile.Result{}, nil
@@ -141,6 +145,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	}
 
 	if util.IsBeingDeleted(instance) {
+		log.Info("resource deletion detected - processing deletion cleanup", "groupconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
 		// Support all old finalizer variants for backward compatibility
 		oldFinalizerVariants := []string{
 			"groupconfig-controller",
@@ -179,12 +184,13 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if errors.IsNotFound(err) {
-				log.V(1).Info("resource already deleted, skipping finalizer removal", "instance", instance)
+				log.Info("resource deletion completed - resource already deleted during finalizer removal", "groupconfig", instance.Name)
 				return reconcile.Result{}, nil
 			}
 			log.Error(err, "unable to update instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
+		log.Info("resource deletion completed successfully", "groupconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
