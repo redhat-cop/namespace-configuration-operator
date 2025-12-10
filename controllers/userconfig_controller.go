@@ -178,6 +178,11 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 
 		err = r.GetClient().Update(context, instance)
 		if err != nil {
+			// If the resource is already deleted (NotFound), that's fine - just return success
+			if errors.IsNotFound(err) {
+				log.V(1).Info("resource already deleted, skipping finalizer removal", "instance", instance)
+				return reconcile.Result{}, nil
+			}
 			log.Error(err, "unable to update instance", "instance", instance)
 			return r.ManageError(context, instance, err)
 		}
