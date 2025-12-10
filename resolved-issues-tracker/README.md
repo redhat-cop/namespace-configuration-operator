@@ -17,7 +17,7 @@ The namespace-configuration-operator has been actively updated and improved over
 ## Related Documentation
 
 For detailed technical analysis of specific issues, see:
-- **[../FEATURES_AND_ISSUES_RESOLUTION.md](../FEATURES_AND_ISSUES_RESOLUTION.md)** - Comprehensive features and issues resolution documentation
+- **[../docs/FEATURES_AND_ISSUES_RESOLUTION.md](../docs/FEATURES_AND_ISSUES_RESOLUTION.md)** - Comprehensive features and issues resolution documentation
 - **[../examples/test-and-logic/README.md](../examples/test-and-logic/README.md)** - Test examples and verification guides
 
 ## Status
