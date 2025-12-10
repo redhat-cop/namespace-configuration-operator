@@ -293,55 +293,11 @@ These logs show:
 - Match/no-match decisions
 - Template previews
 
-## Dockerfile Enhancements
-
-The Dockerfile includes several enhancements for production-ready builds and logging configuration.
-
-### Version Information Build Args
-
-The Dockerfile supports build-time arguments for embedding version information into the binary:
-
-```dockerfile
-ARG VERSION=dev
-ARG COMMIT=unknown
-ARG BUILD_DATE=unknown
-RUN CGO_ENABLED=0 GOOS=linux go build -a \
-    -ldflags "-X github.com/redhat-cop/namespace-configuration-operator/internal/version.Version=${VERSION} \
-              -X github.com/redhat-cop/namespace-configuration-operator/internal/version.Commit=${COMMIT} \
-              -X github.com/redhat-cop/namespace-configuration-operator/internal/version.BuildDate=${BUILD_DATE}" \
-    -o manager main.go
-```
-
-**Build Args:**
-- `VERSION`: Version string (e.g., from `git describe --tags --always --dirty`)
-- `COMMIT`: Git commit hash (e.g., from `git rev-parse --short HEAD`)
-- `BUILD_DATE`: Build timestamp (e.g., from `date -u +%Y-%m-%dT%H:%M:%SZ`)
-
-**Usage:**
-```bash
-# Manual build with version info
-podman build --build-arg VERSION=$(git describe --tags --always --dirty) \
-             --build-arg COMMIT=$(git rev-parse --short HEAD) \
-             --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-             -t namespace-configuration-operator:latest .
-```
-
-**Note:** The Makefile and PodmanMakefile automatically pass these build args, so manual specification is typically not needed.
-
-**Benefits:**
-- Version information displayed in operator startup banner
-- Helps with debugging and identifying deployed operator versions
-- Build date helps track when operator was built
-
-### Log Level Environment Variables
+## Dockerfile Defaults
 
 The Dockerfile sets default environment variables for log configuration:
 
 ```dockerfile
-# Set default log level via environment variables
-# These can be overridden at runtime via Deployment env section or ConfigMap
-# See: https://sdk.operatorframework.io/docs/building-operators/golang/references/logging/
-# Production defaults: info level, JSON format (ZAP_DEVEL=false)
 ENV ZAP_LOG_LEVEL=info
 ENV ZAP_DEVEL=false
 ```
@@ -358,6 +314,8 @@ ENV ZAP_DEVEL=false
 3. **Operator SDK defaults** - Built-in defaults (debug level if ZAP_DEVEL=true)
 
 **Important:** For OLM-managed deployments, always use Subscription or Kyverno policy to configure log levels. The Dockerfile defaults serve as a fallback but should be overridden for production use.
+
+**For detailed information about Dockerfile enhancements (version info, build args, etc.), see [DOCKERFILE_ENHANCEMENTS.md](./DOCKERFILE_ENHANCEMENTS.md).**
 
 ## Verification
 
