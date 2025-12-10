@@ -67,6 +67,20 @@ The project uses shared workflows from `redhat-cop/github-workflows-operators`:
 
 **Shared Workflow:** `redhat-cop/github-workflows-operators/.github/workflows/release-operator.yml`
 
+### Which Dockerfile is Used in CI/CD?
+
+**Answer: The `Dockerfile` in the root directory is used by the GitHub CI build.**
+
+The shared workflow `release-operator.yml` from `redhat-cop/github-workflows-operators`:
+- Uses the standard `Dockerfile` located in the root directory
+- Does **NOT** use `ci.Dockerfile` (which is only for Tiltfile/local development)
+- The workflow builds the image using the full `Dockerfile` which includes the Go build step
+
+**Why `Dockerfile` and not `ci.Dockerfile`?**
+- `Dockerfile` is the standard production Dockerfile with full build process
+- `ci.Dockerfile` is minimal and expects a pre-built binary (used by Tilt for fast local iteration)
+- CI/CD workflows need a complete, reproducible build from source
+
 ### How Version Injection Works in CI/CD
 
 The shared workflow typically:
@@ -75,14 +89,20 @@ The shared workflow typically:
    - Uses `git rev-parse --short HEAD` for commit
    - Uses `date -u +"%Y-%m-%dT%H:%M:%SZ"` for build date
 
-2. **Builds binary with version info:**
+2. **Builds Docker image with build args:**
    ```bash
-   go build -ldflags "-X ...Version=${VERSION} -X ...Commit=${COMMIT} -X ...BuildDate=${BUILD_DATE}" -o bin/manager main.go
+   docker build --build-arg VERSION=${VERSION} --build-arg COMMIT=${COMMIT} --build-arg BUILD_DATE=${BUILD_DATE} -t ${IMAGE} .
    ```
+   - Uses the root `Dockerfile` (default)
+   - Passes version info as build args
+   - Dockerfile receives args and passes to `go build` via ldflags
 
-3. **Builds Docker image:**
-   - If using `Dockerfile`: Passes build args
-   - If using `ci.Dockerfile`: Binary already has version info
+3. **Dockerfile builds binary with version info:**
+   ```dockerfile
+   RUN CGO_ENABLED=0 GOOS=linux go build -a \
+       -ldflags "-X ...Version=${VERSION} -X ...Commit=${COMMIT} -X ...BuildDate=${BUILD_DATE}" \
+       -o manager main.go
+   ```
 
 ### Example CI/CD Build Command
 
