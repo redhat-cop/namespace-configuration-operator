@@ -8,10 +8,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// DefaultExcludedPaths represents paths that are exlcuded by default in all resources
+// DefaultExcludedPaths represents paths that are excluded by default in all resources
 var DefaultExcludedPaths = []string{".metadata", ".status", ".spec.replicas"}
 
-// DefaultExcludedPathsSet represents paths that are exlcuded by default in all resources
+// DefaultExcludedPathsSet represents paths that are excluded by default in all resources
 var DefaultExcludedPathsSet = strset.New(DefaultExcludedPaths...)
 
 func GetResources(lockedResources []lockedresource.LockedResource) []client.Object {

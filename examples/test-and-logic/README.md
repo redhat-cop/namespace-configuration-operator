@@ -23,8 +23,6 @@ The GroupConfig controller now supports **AND logic** in template conditionals, 
 - `test-and-logic-groupconfig-explanation.md` - **Detailed stanza-by-stanza explanation of the AND logic YAML**
 - `test-or-logic-groupconfig-explanation.md` - **Detailed stanza-by-stanza explanation of the OR logic YAML**
 - `test-unrecognized-conditionals-explanation.md` - **Detailed explanation of unrecognized conditional logic detection**
-- `test-issue-194-field-removal-explanation.md` - **Detailed explanation of issue #194 field removal test**
-- `test-issue-194-field-removal-results.md` - **Issue #194 test results and bug confirmation**
 - `test-and-logic-results.md` - AND logic test results and verification
 - `test-or-logic-results.md` - OR logic test results and verification
 
@@ -171,9 +169,9 @@ oc get resourcequota test-issue-194-quota -n test-issue-194-ns -o yaml
 - Initially: `persistentvolumeclaims: "0"` field is present
 - After annotation: `persistentvolumeclaims: "0"` field **remains** ❌
 
-See [test-issue-194-field-removal-explanation.md](test-issue-194-field-removal-explanation.md) for detailed test steps and analysis.
+See [ISSUE-194-VERIFICATION-GUIDE.md](ISSUE-194-VERIFICATION-GUIDE.md) for detailed test steps and analysis.
 
-**Test Results**: See [test-issue-194-field-removal-results.md](test-issue-194-field-removal-results.md) for actual test execution results.
+**Test Results**: See [ISSUE-194-ROOT-CAUSE-SUMMARY.md](ISSUE-194-ROOT-CAUSE-SUMMARY.md) for root cause analysis and [ISSUE-194-FIX-IMPLEMENTATION.md](ISSUE-194-FIX-IMPLEMENTATION.md) for fix implementation details.
 
 **Status**: ✅ **Bug Confirmed** - The operator does NOT remove fields with value `0` when conditionals change from true to false.
 
@@ -303,9 +301,6 @@ The AND logic detection works by:
 - **[test-and-logic-groupconfig-explanation.md](test-and-logic-groupconfig-explanation.md)** - Complete stanza-by-stanza explanation of the AND logic YAML
 - **[test-or-logic-groupconfig-explanation.md](test-or-logic-groupconfig-explanation.md)** - Complete stanza-by-stanza explanation of the OR logic YAML
 - **[test-unrecognized-conditionals-explanation.md](test-unrecognized-conditionals-explanation.md)** - Complete explanation of unrecognized conditional logic detection
-- **[test-issue-194-field-removal-explanation.md](test-issue-194-field-removal-explanation.md)** - Complete explanation of issue #194 field removal test
-- **[test-issue-194-field-removal-results.md](test-issue-194-field-removal-results.md)** - Issue #194 test results and bug confirmation
-- **[test-issue-194-field-removal-fix-options.md](test-issue-194-field-removal-fix-options.md)** - Fix options and implementation plan for issue #194
 - **[ISSUE-194-ROOT-CAUSE-SUMMARY.md](ISSUE-194-ROOT-CAUSE-SUMMARY.md)** - **Root cause summary for issue #194**
 - **[ISSUE-194-VERIFICATION-GUIDE.md](ISSUE-194-VERIFICATION-GUIDE.md)** - **Verification and testing guide for issue #194**
 - **[ISSUE-194-FIX-IMPLEMENTATION.md](ISSUE-194-FIX-IMPLEMENTATION.md)** - **Fix implementation details for issue #194**
@@ -322,5 +317,5 @@ The AND logic detection works by:
 
 **Important Finding**: The bug in issue #194 is **NOT in the namespace-configuration-operator code**, but in the dependency `github.com/redhat-cop/operator-utils` v1.3.8.
 
-See **[ISSUE-194-ROOT-CAUSE-ANALYSIS.md](ISSUE-194-ROOT-CAUSE-ANALYSIS.md)** for complete evidence, command outputs, and analysis proving the bug is in the dependency's comparison logic.
+See **[ISSUE-194-ROOT-CAUSE-SUMMARY.md](ISSUE-194-ROOT-CAUSE-SUMMARY.md)** for complete evidence, command outputs, and analysis proving the bug is in the dependency's comparison logic.
 

@@ -55,7 +55,7 @@ spec:
     and will create and enforce a set of resources.\n\nHere are some examples of the
     type of onboarding processes that one could support:\n\n1. [developer sandbox](https://github.com/redhat-cop/namespace-configuration-operator/blob/master/examples/user-sandbox/readme.md)\n2.
     [team onboarding](https://github.com/redhat-cop/namespace-configuration-operator//blob/master/examples/team-onboarding/readme.md)
-    with support of the entire SDLC in a multitentant environment.\n\nPolicies can
+    with support of the entire SDLC in a multitenant environment.\n\nPolicies can
     be expressed with the following CRDs:\n\n| Watched Resource | CRD |\n|--|--|\n|
     Groups | [GroupConfig](#GroupConfig) |\n| Users | [UserConfig](#UserConfig) |\n|
     Namespace | [NamespaceConfig](#NamespaceConfig) |\n\nThese CRDs all share some

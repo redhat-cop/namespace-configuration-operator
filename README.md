@@ -16,7 +16,7 @@ With the namespace-configuration-operator one can create rules that will react t
 Here are some examples of the type of onboarding processes that one could support:
 
 1. [developer sandbox](./examples/user-sandbox/readme.md)
-2. [team onboarding](./examples/team-onboarding/readme.md) with support of the entire SDLC in a multitentant environment.
+2. [team onboarding](./examples/team-onboarding/readme.md) with support of the entire SDLC in a multitenant environment.
 
 Policies can be expressed with the following CRDs:
 

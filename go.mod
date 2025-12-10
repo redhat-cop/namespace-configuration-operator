@@ -119,4 +119,10 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
+// Temporary replace directive to use fork with fix for issue #194
+// Issue: Fields with value "0" are not removed when conditionals change from true to false
+// PR: https://github.com/redhat-cop/operator-utils/pull/103
+// This replace will be removed once the PR is merged and a new version of operator-utils is released
+// Fork: github.com/ephico2real2/operator-utils@fix-issue-194-field-removal-zero-value
+// Commit: 9569465257c18041b4a4483c90aebfc278882387
 replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20251208075852-9569465257c1
