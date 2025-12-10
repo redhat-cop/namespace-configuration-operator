@@ -313,7 +313,7 @@ The AND logic detection works by:
 - **[ISSUE-134-VERIFICATION-GUIDE.md](ISSUE-134-VERIFICATION-GUIDE.md)** - **Verification and configuration guide for issue #134**
 - **[ISSUE-134-FIX-IMPLEMENTATION.md](ISSUE-134-FIX-IMPLEMENTATION.md)** - **Fix implementation details for issue #134**
 - **[test-or-logic-results.md](test-or-logic-results.md)** - OR logic test results from production cluster
-- [Issues and Resolution](../issues-and-resolution.md) - Issue 1: Template Filtering Fix
+- [Features and Issues Resolution](../FEATURES_AND_ISSUES_RESOLUTION.md) - Issue 1: Template Filtering Fix
 - [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Bug 3: AND Logic Fix, Deletion Tracking and Retry Success Logging
 - [GitHub Issue #194](https://github.com/redhat-cop/namespace-configuration-operator/issues/194) - Field removal with value 0 in conditionals
 - [GitHub Issue #134](https://github.com/redhat-cop/namespace-configuration-operator/issues/134) - How to set log level to Error
