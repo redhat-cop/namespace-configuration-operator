@@ -107,8 +107,8 @@ Implemented startup banner with version, commit, and build date information:
 
 **See Also:** 
 - [Resolved Issues Tracker - Issue 4](../resolved-issues-tracker/resolved-issues-tracker.md)
-- [DOCKERFILE_ENHANCEMENTS.md](docs/DOCKERFILE_ENHANCEMENTS.md)
-- [MAKEFILE_VERSION_INJECTION.md](docs/MAKEFILE_VERSION_INJECTION.md)
+- [DOCKERFILE_ENHANCEMENTS.md](./DOCKERFILE_ENHANCEMENTS.md)
+- [MAKEFILE_VERSION_INJECTION.md](./MAKEFILE_VERSION_INJECTION.md)
 
 ---
 
@@ -142,10 +142,10 @@ Operator creating lots of Info-level logs sent to ELK (hosted in AWS) via OpenSh
 - `kyverno-policies/operator-log-level-config.yaml` - **NEW** - Kyverno policy
 
 **Documentation:**
-- [ISSUE-134-ROOT-CAUSE-SUMMARY.md](examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md)
-- [ISSUE-134-VERIFICATION-GUIDE.md](examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md)
-- [ISSUE-134-FIX-IMPLEMENTATION.md](examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md)
-- [LOG_LEVEL_CONFIGURATION.md](docs/LOG_LEVEL_CONFIGURATION.md)
+- [ISSUE-134-ROOT-CAUSE-SUMMARY.md](../examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md)
+- [ISSUE-134-VERIFICATION-GUIDE.md](../examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md)
+- [ISSUE-134-FIX-IMPLEMENTATION.md](../examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md)
+- [LOG_LEVEL_CONFIGURATION.md](./LOG_LEVEL_CONFIGURATION.md)
 
 **See Also:** [Resolved Issues Tracker - Issue #134](../resolved-issues-tracker/resolved-issues-tracker.md)
 
@@ -166,9 +166,9 @@ Bug identified in `operator-utils` dependency (not in this operator). The issue 
 Using forked operator-utils with fix: `github.com/ephico2real2/operator-utils@fix-issue-194-field-removal-zero-value`
 
 **Documentation:**
-- [ISSUE-194-ROOT-CAUSE-SUMMARY.md](examples/test-and-logic/ISSUE-194-ROOT-CAUSE-SUMMARY.md)
-- [ISSUE-194-VERIFICATION-GUIDE.md](examples/test-and-logic/ISSUE-194-VERIFICATION-GUIDE.md)
-- [ISSUE-194-FIX-IMPLEMENTATION.md](examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md)
+- [ISSUE-194-ROOT-CAUSE-SUMMARY.md](../examples/test-and-logic/ISSUE-194-ROOT-CAUSE-SUMMARY.md)
+- [ISSUE-194-VERIFICATION-GUIDE.md](../examples/test-and-logic/ISSUE-194-VERIFICATION-GUIDE.md)
+- [ISSUE-194-FIX-IMPLEMENTATION.md](../examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md)
 
 **See Also:** [Resolved Issues Tracker - Issue #194](../resolved-issues-tracker/resolved-issues-tracker.md)
 
@@ -240,9 +240,9 @@ Added comprehensive deletion tracking logs to prevent continuous lookups for del
 - `controllers/userconfig_controller.go` - Deletion tracking
 
 **Test Resources:**
-- `examples/test-and-logic/test-deletion-tracking-groupconfig.yaml`
-- `examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml`
-- `examples/test-and-logic/test-deletion-tracking-userconfig.yaml`
+- `../examples/test-and-logic/test-deletion-tracking-groupconfig.yaml`
+- `../examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml`
+- `../examples/test-and-logic/test-deletion-tracking-userconfig.yaml`
 
 **See Also:** [Resolved Issues Tracker - Deletion Tracking](../resolved-issues-tracker/resolved-issues-tracker.md)
 
@@ -314,9 +314,9 @@ Automatic version information injection in both Makefile and PodmanMakefile for 
 - `Dockerfile` - Build args for VERSION, COMMIT, BUILD_DATE
 
 **Documentation:**
-- [MAKEFILE_VERSION_INJECTION.md](docs/MAKEFILE_VERSION_INJECTION.md)
-- [DOCKERFILE_ENHANCEMENTS.md](docs/DOCKERFILE_ENHANCEMENTS.md)
-- [CI_CD_VERSION_INJECTION.md](docs/CI_CD_VERSION_INJECTION.md)
+- [MAKEFILE_VERSION_INJECTION.md](./MAKEFILE_VERSION_INJECTION.md)
+- [DOCKERFILE_ENHANCEMENTS.md](./DOCKERFILE_ENHANCEMENTS.md)
+- [CI_CD_VERSION_INJECTION.md](./CI_CD_VERSION_INJECTION.md)
 
 **See Also:** [Resolved Issues Tracker - Version Information System](../resolved-issues-tracker/resolved-issues-tracker.md)
 
@@ -358,7 +358,7 @@ V(2) level debug logs for template filtering to help troubleshoot template match
 - Visible with `ZAP_LOG_LEVEL=2` or higher
 
 **Documentation:**
-- [TEMPLATE_FILTERING_LOGS_EXPLANATION.md](docs/TEMPLATE_FILTERING_LOGS_EXPLANATION.md)
+- [TEMPLATE_FILTERING_LOGS_EXPLANATION.md](./TEMPLATE_FILTERING_LOGS_EXPLANATION.md)
 
 ---
 
@@ -385,25 +385,25 @@ All logs use structured JSON format for easy parsing and filtering in ELK and ot
 
 **New Documentation Files:**
 1. **Issue Documentation:**
-   - `examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md`
-   - `examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md`
-   - `examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md`
-   - `examples/test-and-logic/ISSUE-194-ROOT-CAUSE-SUMMARY.md`
-   - `examples/test-and-logic/ISSUE-194-VERIFICATION-GUIDE.md`
-   - `examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md`
+   - `../examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md`
+   - `../examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md`
+   - `../examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md`
+   - `../examples/test-and-logic/ISSUE-194-ROOT-CAUSE-SUMMARY.md`
+   - `../examples/test-and-logic/ISSUE-194-VERIFICATION-GUIDE.md`
+   - `../examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md`
 
 2. **Technical Documentation:**
-   - `docs/LOG_LEVEL_CONFIGURATION.md` - Log level configuration guide
-   - `docs/DOCKERFILE_ENHANCEMENTS.md` - Dockerfile enhancements
-   - `docs/MAKEFILE_VERSION_INJECTION.md` - Makefile version injection
-   - `docs/CI_CD_VERSION_INJECTION.md` - CI/CD version injection
-   - `docs/TEMPLATE_FILTERING_LOGS_EXPLANATION.md` - Template filtering logs
+   - `./LOG_LEVEL_CONFIGURATION.md` - Log level configuration guide
+   - `./DOCKERFILE_ENHANCEMENTS.md` - Dockerfile enhancements
+   - `./MAKEFILE_VERSION_INJECTION.md` - Makefile version injection
+   - `./CI_CD_VERSION_INJECTION.md` - CI/CD version injection
+   - `./TEMPLATE_FILTERING_LOGS_EXPLANATION.md` - Template filtering logs
 
 3. **Build and Run:**
-   - `BUILD-RUN.md` - Build and run instructions
+   - `../BUILD-RUN.md` - Build and run instructions
 
 4. **Resolved Issues Tracker:**
-   - `resolved-issues-tracker/resolved-issues-tracker.md` - Comprehensive tracker
+   - `../resolved-issues-tracker/resolved-issues-tracker.md` - Comprehensive tracker
 
 **See Also:** [Resolved Issues Tracker - Documentation](../resolved-issues-tracker/resolved-issues-tracker.md)
 
@@ -580,10 +580,10 @@ spec:
 
 ## Related Documentation
 
-- [Resolved Issues Tracker](resolved-issues-tracker/resolved-issues-tracker.md) - Comprehensive tracker of all resolved issues
-- [Documentation Directory](docs/) - Technical documentation
-- [Test Examples](examples/test-and-logic/) - Test examples and documentation
-- [Build and Run Guide](BUILD-RUN.md) - Build and run instructions
+- [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Comprehensive tracker of all resolved issues
+- [Documentation Directory](./) - Technical documentation
+- [Test Examples](../examples/test-and-logic/) - Test examples and documentation
+- [Build and Run Guide](../BUILD-RUN.md) - Build and run instructions
 
 ---
 
