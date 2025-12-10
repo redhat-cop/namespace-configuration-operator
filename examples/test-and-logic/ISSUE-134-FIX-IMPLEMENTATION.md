@@ -7,8 +7,10 @@
 
 ## Solution Overview
 - **Environment Variable Support**: Added `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variable support in `main.go`
-- **Kyverno Policy**: Created ClusterPolicy to inject log level environment variables into the operator Deployment
-- **OLM-Compatible**: Policy works with OLM-managed deployments and persists across operator updates
+- **Two Configuration Methods for OLM-Managed Deployments**:
+  1. **Update Subscription** (OLM-native, recommended) - Add environment variables to Subscription spec.config.env
+  2. **Kyverno Policy** (Alternative) - Created ClusterPolicy to inject log level environment variables into the operator Deployment
+- **OLM-Compatible**: Both methods work with OLM-managed deployments and persist across operator updates
 - **Enhanced Logging Features**:
   - V(1) level logging for skipped resources (groups/namespaces/users)
   - V(2) level logging for template filtering details
@@ -46,11 +48,28 @@ if zapLogLevel := os.Getenv("ZAP_LOG_LEVEL"); zapLogLevel != "" {
 - `"false"` - JSON format (production, works with ELK)
 - `"true"` - Console format (development)
 
-### 2. Kyverno Policy (operator-log-level-config.yaml)
+### 2. Subscription Configuration (OLM-native method)
+
+**Location**: Subscription resource in `openshift-operators` namespace
+
+**Purpose**: 
+- OLM-native way to configure operator environment variables
+- Add `ZAP_LOG_LEVEL` and `ZAP_DEVEL` to Subscription spec.config.env
+- OLM automatically propagates environment variables to the Deployment
+- Persists across operator updates (OLM-managed)
+
+**How it works**:
+1. User edits Subscription to add environment variables to spec.config.env
+2. OLM detects the change and updates the Deployment
+3. Operator pod restarts automatically with new environment variables
+4. `main.go` reads the environment variables and configures the logger
+
+### 3. Kyverno Policy (operator-log-level-config.yaml)
 
 **Location**: `kyverno-policies/operator-log-level-config.yaml`
 
 **Purpose**: 
+- Alternative method for policy-based configuration management
 - Injects `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variables into the operator Deployment
 - Works with OLM-managed deployments
 - Persists across operator updates (OLM won't overwrite Kyverno-injected env vars)
@@ -90,7 +109,7 @@ spec:
 4. Operator pod picks up the environment variables on startup
 5. `main.go` reads the environment variables and configures the logger
 
-### 3. Configuration Methods
+### 4. Configuration Methods
 
 **Important**: For OLM-managed deployments, you have **two options**:
 1. **Update the Subscription** (OLM-native method) - Recommended

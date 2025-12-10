@@ -46,7 +46,9 @@
 - **Format control**: `ZAP_DEVEL` controls output format:
   - `"false"` = JSON format (production, works with ELK)
   - `"true"` = console format (development)
-- **Configuration method**: Kyverno policy is the recommended approach for OLM-managed deployments
+- **Configuration methods**: For OLM-managed deployments, users should **either**:
+  1. **Update Subscription** (OLM-native method, recommended) - Add environment variables to Subscription spec.config.env
+  2. **Use Kyverno policy** (Policy-based method, alternative) - ClusterPolicy injects environment variables into Deployment
 - **Enhanced logging features added**:
   - **V(1) skipping logs**: Clear messages when resources are skipped because no templates match
     - Format: `"skipping group - no GroupConfig templates match the group pattern"`
@@ -63,9 +65,11 @@
 
 ## Conclusion
 - The issue was not a bug, but a missing configuration mechanism
-- Solution: Kyverno policy to inject `ZAP_LOG_LEVEL=error` into the operator Deployment
+- **Solution**: Users can configure log level in two ways for OLM-managed deployments:
+  1. **Update Subscription** (OLM-native, recommended) - Add `ZAP_LOG_LEVEL=error` to Subscription spec.config.env
+  2. **Use Kyverno policy** (Alternative) - ClusterPolicy injects `ZAP_LOG_LEVEL=error` into the operator Deployment
 - This allows users to reduce log volume by setting log level to "error"
-- Works with OLM-managed deployments and persists across operator updates
+- Both methods work with OLM-managed deployments and persist across operator updates
 
 ## Key commands used to verify the solution
 ```bash
