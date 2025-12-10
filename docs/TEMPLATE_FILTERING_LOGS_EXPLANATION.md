@@ -180,6 +180,149 @@ You should only be concerned if:
    - Review the template patterns
    - Check if patterns are too broad (e.g., `-admin` matches both `-ns-admin` and `-cluster-admin`)
 
+## Verifying Groups in the Cluster
+
+When troubleshooting template filtering logs, it's helpful to verify that the groups mentioned in the logs actually exist in the cluster.
+
+### List All Groups
+
+```bash
+# List all groups in the cluster
+oc get groups
+
+# List groups with more details
+oc get groups -o wide
+
+# List groups in a specific format
+oc get groups -o custom-columns=NAME:.metadata.name,USERS:.users
+```
+
+### Check if a Specific Group Exists
+
+```bash
+# Check if a specific group exists
+oc get group <group-name>
+
+# Example: Check if the group from the logs exists
+oc get group app-ocp-rbac-jeff-ns-admin
+
+# Get full details of a group
+oc get group app-ocp-rbac-jeff-ns-admin -o yaml
+
+# Get group in JSON format
+oc get group app-ocp-rbac-jeff-ns-admin -o json
+```
+
+### Filter Groups by Pattern
+
+```bash
+# Find groups matching a suffix pattern (e.g., -ns-admin)
+oc get groups | grep -- "-ns-admin$"
+
+# Find groups matching a contains pattern (e.g., "database")
+oc get groups | grep "database"
+
+# Find groups matching multiple patterns
+oc get groups | grep -E "(-ns-admin|-cluster-admin)$"
+
+# Count groups matching a pattern
+oc get groups | grep -- "-ns-admin$" | wc -l
+```
+
+### Advanced Group Queries
+
+```bash
+# List groups with JSONPath filtering
+oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep "ns-admin"
+
+# List groups and their users
+oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.users[*]}{"\n"}{end}'
+
+# Find groups that should match a template pattern
+# Example: Find all groups ending with -database-admin
+oc get groups -o json | jq -r '.items[] | select(.metadata.name | endswith("-database-admin")) | .metadata.name'
+
+# Find groups containing a specific substring
+oc get groups -o json | jq -r '.items[] | select(.metadata.name | contains("database")) | .metadata.name'
+```
+
+### Verify Group from Log Messages
+
+When you see a log message like:
+```json
+{"group": "app-ocp-rbac-jeff-ns-admin", "suffixPatterns": ["-ns-admin"]}
+```
+
+You can verify:
+
+```bash
+# 1. Check if the group exists
+oc get group app-ocp-rbac-jeff-ns-admin
+
+# 2. Verify the group name matches the pattern
+# The group should end with "-ns-admin"
+oc get group app-ocp-rbac-jeff-ns-admin -o jsonpath='{.metadata.name}'
+# Expected output: app-ocp-rbac-jeff-ns-admin
+
+# 3. Check all groups with the same pattern
+oc get groups | grep -- "-ns-admin$"
+
+# 4. Verify the group is selected by the GroupConfig's label/annotation selectors
+oc get group app-ocp-rbac-jeff-ns-admin -o yaml
+# Check if labels/annotations match the GroupConfig's selectors
+```
+
+### Troubleshooting Commands
+
+```bash
+# Compare groups in logs vs groups in cluster
+# Extract group names from logs
+oc logs deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator --container=manager --since=10m | grep -o '"group":"[^"]*"' | sort -u
+
+# List all groups in cluster
+oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort
+
+# Find groups that appear in logs but don't exist in cluster (potential issue)
+# This would require comparing the two lists above
+
+# Check if a GroupConfig is selecting the expected groups
+oc get groupconfig <groupconfig-name> -o yaml
+# Review the labelSelector and annotationSelector
+# Then check if groups match:
+oc get groups --show-labels
+oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{": labels="}{.metadata.labels}{"\n"}{end}'
+```
+
+### Example: Verifying a Log Entry
+
+Given this log entry:
+```json
+{
+  "msg": "group does not match any template patterns",
+  "group": "app-ocp-rbac-platform-cluster-admin",
+  "suffixPatterns": ["-database-admin"]
+}
+```
+
+Run these commands:
+
+```bash
+# 1. Verify the group exists
+oc get group app-ocp-rbac-platform-cluster-admin
+
+# 2. Check the group's actual name
+oc get group app-ocp-rbac-platform-cluster-admin -o jsonpath='{.metadata.name}'
+# Output: app-ocp-rbac-platform-cluster-admin
+
+# 3. Verify it doesn't match the pattern (expected)
+# The group ends with "-cluster-admin", not "-database-admin"
+echo "app-ocp-rbac-platform-cluster-admin" | grep -- "-database-admin$"
+# No output = correct, it doesn't match
+
+# 4. Find groups that DO match the pattern
+oc get groups | grep -- "-database-admin$"
+```
+
 ## Best Practices
 
 1. **Use Specific Patterns**: Prefer specific patterns like `-database-admin` over generic ones like `-admin`
@@ -189,6 +332,8 @@ You should only be concerned if:
 3. **Production Log Level**: In production, use `ZAP_LOG_LEVEL=info` (or 0) to avoid verbose debug logs
 
 4. **Group Naming Convention**: Use consistent naming conventions to make pattern matching predictable
+
+5. **Verify Groups Exist**: When troubleshooting, always verify that groups mentioned in logs actually exist in the cluster
 
 ## Summary
 
