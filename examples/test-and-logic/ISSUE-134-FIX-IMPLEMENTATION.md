@@ -190,9 +190,10 @@ Use this method if you prefer policy-based configuration management.
    - Added V(1) level retry success logs
 
 5. **`kyverno-policies/operator-log-level-config.yaml`** (new)
-   - ClusterPolicy to inject log level environment variables
+   - ClusterPolicy to inject log level environment variables (alternative method)
    - Works with OLM-managed deployments
    - Includes documentation comments
+   - **Note**: Users should either update Subscription OR use Kyverno policy
 
 6. **`resolved-issues-tracker/resolved-issues-tracker.md`**
    - Documented issue #134 resolution
