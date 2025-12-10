@@ -306,13 +306,17 @@ The AND logic detection works by:
 - **[test-issue-194-field-removal-explanation.md](test-issue-194-field-removal-explanation.md)** - Complete explanation of issue #194 field removal test
 - **[test-issue-194-field-removal-results.md](test-issue-194-field-removal-results.md)** - Issue #194 test results and bug confirmation
 - **[test-issue-194-field-removal-fix-options.md](test-issue-194-field-removal-fix-options.md)** - Fix options and implementation plan for issue #194
-- **[ISSUE-194-ROOT-CAUSE-ANALYSIS.md](ISSUE-194-ROOT-CAUSE-ANALYSIS.md)** - **Root cause analysis proving bug is in dependency (for GitHub issue)**
-- **[ISSUE-194-COMMAND-VERIFICATION.md](ISSUE-194-COMMAND-VERIFICATION.md)** - **All commands executed with actual outputs (verification)**
-- **[ISSUE-194-GITHUB-ISSUE-TEXT.md](ISSUE-194-GITHUB-ISSUE-TEXT.md)** - **Formatted text ready to post in GitHub issue**
+- **[ISSUE-194-ROOT-CAUSE-SUMMARY.md](ISSUE-194-ROOT-CAUSE-SUMMARY.md)** - **Root cause summary for issue #194**
+- **[ISSUE-194-VERIFICATION-GUIDE.md](ISSUE-194-VERIFICATION-GUIDE.md)** - **Verification and testing guide for issue #194**
+- **[ISSUE-194-FIX-IMPLEMENTATION.md](ISSUE-194-FIX-IMPLEMENTATION.md)** - **Fix implementation details for issue #194**
+- **[ISSUE-134-ROOT-CAUSE-SUMMARY.md](ISSUE-134-ROOT-CAUSE-SUMMARY.md)** - **Root cause summary for issue #134 (log level configuration)**
+- **[ISSUE-134-VERIFICATION-GUIDE.md](ISSUE-134-VERIFICATION-GUIDE.md)** - **Verification and configuration guide for issue #134**
+- **[ISSUE-134-FIX-IMPLEMENTATION.md](ISSUE-134-FIX-IMPLEMENTATION.md)** - **Fix implementation details for issue #134**
 - **[test-or-logic-results.md](test-or-logic-results.md)** - OR logic test results from production cluster
 - [Issues and Resolution](../issues-and-resolution.md) - Issue 1: Template Filtering Fix
 - [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Bug 3: AND Logic Fix, Deletion Tracking and Retry Success Logging
 - [GitHub Issue #194](https://github.com/redhat-cop/namespace-configuration-operator/issues/194) - Field removal with value 0 in conditionals
+- [GitHub Issue #134](https://github.com/redhat-cop/namespace-configuration-operator/issues/134) - How to set log level to Error
 
 ## Issue #194 Root Cause
 

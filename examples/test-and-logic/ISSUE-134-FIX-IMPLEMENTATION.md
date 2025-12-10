@@ -1,0 +1,217 @@
+# Issue #134 — Fix Implementation
+
+## Issue Reference
+- **GitHub Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/134
+- **Problem**: Operator creating lots of Info logs sent to ELK, need to set log level to Error
+- **Status**: ✅ RESOLVED
+
+## Solution Overview
+- **Environment Variable Support**: Added `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variable support in `main.go`
+- **Kyverno Policy**: Created ClusterPolicy to inject log level environment variables into the operator Deployment
+- **OLM-Compatible**: Policy works with OLM-managed deployments and persists across operator updates
+- **Documentation**: Added comprehensive documentation for log level configuration
+
+## Implementation Details
+
+### 1. Environment Variable Support (main.go)
+
+**Location**: `main.go`
+
+**Implementation**:
+```go
+// Check for ZAP_LOG_LEVEL environment variable
+if zapLogLevel := os.Getenv("ZAP_LOG_LEVEL"); zapLogLevel != "" {
+    // Parse log level from environment variable
+    if err := level.UnmarshalText([]byte(zapLogLevel)); err == nil {
+        // Set log level
+    } else if intLevel, err := strconv.Atoi(zapLogLevel); err == nil && intLevel >= 0 {
+        // Set numeric verbosity level
+    }
+}
+```
+
+**Supported values**:
+- `"error"` - Only error-level logs
+- `"info"` - Info and error logs (default)
+- `"debug"` - Debug, info, and error logs
+- `"0-10"` - Numeric verbosity levels
+
+**Additional variable**: `ZAP_DEVEL`
+- `"false"` - JSON format (production, works with ELK)
+- `"true"` - Console format (development)
+
+### 2. Kyverno Policy (operator-log-level-config.yaml)
+
+**Location**: `kyverno-policies/operator-log-level-config.yaml`
+
+**Purpose**: 
+- Injects `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variables into the operator Deployment
+- Works with OLM-managed deployments
+- Persists across operator updates (OLM won't overwrite Kyverno-injected env vars)
+
+**Policy structure**:
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: configure-operator-log-level
+spec:
+  rules:
+    - name: inject-log-level-env
+      match:
+        resources:
+          kinds: [Deployment]
+          names: [namespace-configuration-operator-controller-manager]
+          namespaces: [namespace-configuration-operator]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: manager
+                    env:
+                      - name: ZAP_LOG_LEVEL
+                        value: "error"  # Change this to desired level
+                      - name: ZAP_DEVEL
+                        value: "false"
+```
+
+**How it works**:
+1. Kyverno watches for CREATE/UPDATE operations on the Deployment
+2. When the Deployment is created or updated, Kyverno mutates it
+3. Adds/updates the `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variables
+4. Operator pod picks up the environment variables on startup
+5. `main.go` reads the environment variables and configures the logger
+
+### 3. Configuration Methods
+
+**Method 1: Kyverno Policy (Recommended)**
+- Edit `kyverno-policies/operator-log-level-config.yaml`
+- Change `ZAP_LOG_LEVEL` value to `"error"`
+- Apply: `oc apply -f kyverno-policies/operator-log-level-config.yaml`
+- Restart deployment: `oc rollout restart deployment/...`
+
+**Method 2: Direct Deployment Edit**
+- `oc set env deployment/... ZAP_LOG_LEVEL=error`
+- **Note**: Will be overwritten by OLM if operator is OLM-managed
+
+**Method 3: ConfigMap (if supported)**
+- Create ConfigMap with log level configuration
+- Reference in Deployment spec
+- **Note**: Requires Deployment template support
+
+## Code Changes
+
+### Files Modified
+
+1. **`main.go`**
+   - Added environment variable parsing for `ZAP_LOG_LEVEL`
+   - Added support for numeric verbosity levels (0-10)
+   - Added `ZAP_DEVEL` support for output format control
+
+2. **`kyverno-policies/operator-log-level-config.yaml`** (new)
+   - ClusterPolicy to inject log level environment variables
+   - Works with OLM-managed deployments
+   - Includes documentation comments
+
+3. **`resolved-issues-tracker/resolved-issues-tracker.md`**
+   - Documented issue #134 resolution
+   - Added reference to GitHub issue
+
+### Files Created
+
+1. **`examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md`**
+   - Problem description
+   - Root cause analysis
+   - Solution approach
+
+2. **`examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md`**
+   - Step-by-step verification instructions
+   - Configuration methods
+   - Troubleshooting guide
+
+3. **`examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md`** (this file)
+   - Implementation details
+   - Code changes
+   - Configuration methods
+
+## How to Use
+
+### Set log level to "error" (minimal logging)
+
+**Using Kyverno policy:**
+```bash
+# 1. Edit the policy file
+oc edit clusterpolicy configure-operator-log-level
+
+# 2. Change ZAP_LOG_LEVEL value to "error":
+#    - name: ZAP_LOG_LEVEL
+#      value: "error"
+
+# 3. Restart deployment
+oc rollout restart deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator
+```
+
+**Or patch directly:**
+```bash
+oc patch clusterpolicy configure-operator-log-level --type='json' -p='[
+  {
+    "op": "replace",
+    "path": "/spec/rules/0/mutate/patchStrategicMerge/spec/template/spec/containers/0/env/0/value",
+    "value": "error"
+  }
+]'
+
+oc rollout restart deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator
+```
+
+### Verify it's working
+
+```bash
+# Check environment variable
+oc get deployment namespace-configuration-operator-controller-manager -n namespace-configuration-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
+
+# Check logs (should be minimal)
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=100
+```
+
+## Benefits
+
+1. **Reduced log volume**: Setting log level to "error" significantly reduces log entries sent to ELK
+2. **OLM-compatible**: Kyverno policy works with OLM-managed deployments
+3. **Persistent**: Configuration persists across operator updates
+4. **Flexible**: Supports multiple log levels (error, info, debug, numeric)
+5. **Production-ready**: JSON format works seamlessly with ELK and other log aggregation systems
+
+## Testing
+
+### Test 1: Verify environment variable is set
+```bash
+oc get deployment namespace-configuration-operator-controller-manager -n namespace-configuration-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
+```
+
+### Test 2: Verify log output is minimal
+```bash
+# With error level, should see mostly errors
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=1000 | \
+  grep -o '"level":"[^"]*"' | sort | uniq -c
+```
+
+### Test 3: Verify configuration persists
+```bash
+# Restart deployment
+oc rollout restart deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator
+
+# Verify log level is still set
+oc get deployment namespace-configuration-operator-controller-manager -n namespace-configuration-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
+```
+
+## Related Documentation
+- [Issue #134 Root Cause Summary](./ISSUE-134-ROOT-CAUSE-SUMMARY.md)
+- [Issue #134 Verification Guide](./ISSUE-134-VERIFICATION-GUIDE.md)
+- [Kyverno Policies README](../../kyverno-policies/README.md)
+- [Resolved Issues Tracker](../../resolved-issues-tracker/resolved-issues-tracker.md)
