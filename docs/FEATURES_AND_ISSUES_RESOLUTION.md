@@ -244,6 +244,83 @@ Added comprehensive deletion tracking logs to prevent continuous lookups for del
 - `../examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml`
 - `../examples/test-and-logic/test-deletion-tracking-userconfig.yaml`
 
+**Real-World Example:**
+
+The deletion tracking logs provide clear visibility into the resource deletion lifecycle. Here's an example from a production cluster:
+
+**1. List existing GroupConfig resources:**
+```bash
+oc get groupconfig
+
+NAME                                                  AGE
+cluster-admin-groupconfig-rbac                        14h
+cluster-audit-groupconfig-rbac                        2d15h
+cluster-developer-groupconfig-rbac                    2d15h
+user-workload-monitoring-admin-groupconfig-rbac       3d8h
+user-workload-monitoring-developer-groupconfig-rbac   3d8h
+```
+
+**2. Delete a GroupConfig:**
+```bash
+oc delete groupconfig cluster-audit-groupconfig-rbac
+
+groupconfig.redhatcop.redhat.io "cluster-audit-groupconfig-rbac" deleted
+```
+
+**3. Deletion tracking logs show the complete lifecycle:**
+
+**Deletion Processing Log** (when deletion timestamp is detected):
+```json
+{
+  "level": "info",
+  "ts": "2025-12-10T17:51:07Z",
+  "logger": "controllers.GroupConfig",
+  "msg": "resource deletion detected - processing deletion cleanup",
+  "groupconfig": {
+    "name": "cluster-audit-groupconfig-rbac"
+  },
+  "groupconfig": "cluster-audit-groupconfig-rbac",
+  "deletionTimestamp": "2025-12-10 17:51:07 +0000 UTC"
+}
+```
+
+**Deletion Completion Log** (when deletion finishes successfully):
+```json
+{
+  "level": "info",
+  "ts": "2025-12-10T17:51:07Z",
+  "logger": "controllers.GroupConfig",
+  "msg": "resource deletion completed successfully",
+  "groupconfig": {
+    "name": "cluster-audit-groupconfig-rbac"
+  },
+  "groupconfig": "cluster-audit-groupconfig-rbac"
+}
+```
+
+**Deletion Detection Log** (when resource is not found during reconciliation):
+```json
+{
+  "level": "info",
+  "ts": "2025-12-10T17:51:07Z",
+  "logger": "controllers.GroupConfig",
+  "msg": "resource deletion detected - resource not found, skipping reconciliation",
+  "groupconfig": {
+    "name": "cluster-audit-groupconfig-rbac"
+  },
+  "groupconfig": {
+    "name": "cluster-audit-groupconfig-rbac"
+  }
+}
+```
+
+**Benefits:**
+- **Clear visibility**: Operators can see exactly when resources are being deleted
+- **Prevents false positives**: Logs clearly indicate when a resource is deleted vs. missing
+- **Lifecycle tracking**: Complete audit trail of deletion events
+- **Troubleshooting**: Easy to identify if deletion is stuck or completed successfully
+- **No continuous lookups**: System stops attempting to reconcile deleted resources
+
 **See Also:** [Resolved Issues Tracker - Deletion Tracking](../resolved-issues-tracker/resolved-issues-tracker.md)
 
 ---
