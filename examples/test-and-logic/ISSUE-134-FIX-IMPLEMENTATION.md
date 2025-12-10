@@ -9,7 +9,13 @@
 - **Environment Variable Support**: Added `ZAP_LOG_LEVEL` and `ZAP_DEVEL` environment variable support in `main.go`
 - **Kyverno Policy**: Created ClusterPolicy to inject log level environment variables into the operator Deployment
 - **OLM-Compatible**: Policy works with OLM-managed deployments and persists across operator updates
-- **Documentation**: Added comprehensive documentation for log level configuration
+- **Enhanced Logging Features**:
+  - V(1) level logging for skipped resources (groups/namespaces/users)
+  - V(2) level logging for template filtering details
+  - Info-level deletion tracking logs
+  - V(1) level retry success logs
+  - Structured JSON logging format
+- **Documentation**: Added comprehensive documentation for log level configuration and all logging enhancements
 
 ## Implementation Details
 
@@ -110,14 +116,33 @@ spec:
    - Added support for numeric verbosity levels (0-10)
    - Added `ZAP_DEVEL` support for output format control
 
-2. **`kyverno-policies/operator-log-level-config.yaml`** (new)
+2. **`controllers/groupconfig_controller.go`**
+   - Added V(1) level "skipping" logs when groups don't match any templates
+   - Added V(2) level template filtering debug logs
+   - Added info-level deletion tracking logs
+   - Added V(1) level retry success logs
+
+3. **`controllers/namespaceconfig_controller.go`**
+   - Added V(1) level "skipping" logs when namespaces don't match any templates
+   - Added V(2) level template filtering debug logs
+   - Added info-level deletion tracking logs
+   - Added V(1) level retry success logs
+
+4. **`controllers/userconfig_controller.go`**
+   - Added V(1) level "skipping" logs when users don't match any templates
+   - Added V(2) level template filtering debug logs
+   - Added info-level deletion tracking logs
+   - Added V(1) level retry success logs
+
+5. **`kyverno-policies/operator-log-level-config.yaml`** (new)
    - ClusterPolicy to inject log level environment variables
    - Works with OLM-managed deployments
    - Includes documentation comments
 
-3. **`resolved-issues-tracker/resolved-issues-tracker.md`**
+6. **`resolved-issues-tracker/resolved-issues-tracker.md`**
    - Documented issue #134 resolution
    - Added reference to GitHub issue
+   - Documented all logging enhancements
 
 ### Files Created
 
@@ -184,6 +209,11 @@ oc logs -n namespace-configuration-operator deployment/namespace-configuration-o
 3. **Persistent**: Configuration persists across operator updates
 4. **Flexible**: Supports multiple log levels (error, info, debug, numeric)
 5. **Production-ready**: JSON format works seamlessly with ELK and other log aggregation systems
+6. **Enhanced visibility**: V(1) skipping logs provide clear visibility into why resources are skipped
+7. **Better debugging**: V(2) template filtering logs help troubleshoot template matching issues
+8. **Deletion tracking**: Info-level logs track resource deletion lifecycle for audit purposes
+9. **Retry visibility**: V(1) retry success logs help distinguish retries from errors in centralized logging
+10. **Structured logging**: All logs use structured JSON format for easy parsing and filtering in ELK
 
 ## Testing
 
@@ -210,8 +240,86 @@ oc get deployment namespace-configuration-operator-controller-manager -n namespa
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ZAP_LOG_LEVEL")].value}' && echo
 ```
 
+## Enhanced Logging Features
+
+### 1. V(1) Level Skipping Logs
+
+**Purpose**: Provide clear visibility when resources are skipped because no templates match
+
+**Implementation**: Added to all three controllers (`groupconfig_controller.go`, `namespaceconfig_controller.go`, `userconfig_controller.go`)
+
+**Log format**:
+```json
+{"level":"debug","msg":"skipping group - no GroupConfig templates match the group pattern","group":"app-ocp-rbac-platform-cluster-admin","groupconfig":"cluster-audit-groupconfig-rbac"}
+```
+
+**Visibility**: Requires `ZAP_LOG_LEVEL=1` or higher
+
+**Benefits**:
+- Clear explanation of why resources are skipped
+- Includes resource name and CR name for context
+- Helps identify groups/namespaces/users that need templates
+
+### 2. V(2) Level Template Filtering Logs
+
+**Purpose**: Detailed debug logs for template matching and pattern evaluation
+
+**Implementation**: Already existed, enhanced with better pattern extraction
+
+**Log format**:
+```json
+{"level":"Level(-2)","msg":"checking template applicability","group":"app-ocp-rbac-alpha-cluster-admin","suffixPatterns":["-cluster-admin"],"containsPatterns":[]}
+{"level":"Level(-2)","msg":"group matches hasSuffix pattern","group":"app-ocp-rbac-alpha-cluster-admin","pattern":"-cluster-admin"}
+```
+
+**Visibility**: Requires `ZAP_LOG_LEVEL=2` or higher
+
+**Benefits**:
+- Shows which patterns are being checked
+- Explains why groups match or don't match
+- Helps troubleshoot template filtering issues
+
+### 3. Info-Level Deletion Tracking Logs
+
+**Purpose**: Track resource deletion lifecycle for audit and troubleshooting
+
+**Implementation**: Added to all three controllers
+
+**Log formats**:
+```json
+{"level":"info","msg":"resource deletion detected - resource not found, skipping reconciliation","groupconfig":{"name":"test-groupconfig"}}
+{"level":"info","msg":"resource deletion detected - processing deletion cleanup","groupconfig":"test-groupconfig","deletionTimestamp":"2025-12-10T05:11:57Z"}
+{"level":"info","msg":"resource deletion completed successfully","groupconfig":"test-groupconfig"}
+```
+
+**Visibility**: Always visible (info level)
+
+**Benefits**:
+- Clear audit trail of resource deletions
+- Helps prevent false positives in centralized logging
+- Shows deletion lifecycle stages
+
+### 4. V(1) Level Retry Success Logs
+
+**Purpose**: Log when operations succeed after retries to distinguish from errors
+
+**Implementation**: Added to `manageSuccessWithRetry` function in all three controllers
+
+**Log format**:
+```json
+{"level":"Level(-1)","msg":"ManageSuccess succeeded after retry","attempt":2,"groupconfig":"test-groupconfig"}
+```
+
+**Visibility**: Requires `ZAP_LOG_LEVEL=1` or higher
+
+**Benefits**:
+- Distinguishes successful retries from actual errors
+- Prevents false positives in centralized logging systems
+- Shows retry attempts and success
+
 ## Related Documentation
 - [Issue #134 Root Cause Summary](./ISSUE-134-ROOT-CAUSE-SUMMARY.md)
 - [Issue #134 Verification Guide](./ISSUE-134-VERIFICATION-GUIDE.md)
+- [Template Filtering Logs Explanation](../../docs/TEMPLATE_FILTERING_LOGS_EXPLANATION.md)
 - [Kyverno Policies README](../../kyverno-policies/README.md)
 - [Resolved Issues Tracker](../../resolved-issues-tracker/resolved-issues-tracker.md)

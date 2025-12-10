@@ -118,6 +118,31 @@ oc logs -n namespace-configuration-operator deployment/namespace-configuration-o
 # With error level, you should see:
 # - Mostly "error" level messages
 # - Very few or no "info" or "debug" messages
+# - No V(1) or V(2) level messages
+```
+
+### Test 2b: Verify enhanced logging features (with log level 1 or 2)
+
+**With log level 1 (`ZAP_LOG_LEVEL=1`):**
+```bash
+# Check for skipping logs
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=500 | \
+  grep -i "skipping" | head -10
+
+# Check for retry success logs
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=500 | \
+  grep "succeeded after retry" | head -5
+```
+
+**With log level 2 (`ZAP_LOG_LEVEL=2`):**
+```bash
+# Check for template filtering logs
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=500 | \
+  grep "checking template applicability" | head -10
+
+# Check for pattern matching logs
+oc logs -n namespace-configuration-operator deployment/namespace-configuration-operator-controller-manager --tail=500 | \
+  grep -E "(matches|does not match)" | head -10
 ```
 
 ### Test 3: Verify configuration persists after operator update
@@ -170,10 +195,16 @@ oc logs -n namespace-configuration-operator deployment/namespace-configuration-o
 
 | Log Level | Shows | Use Case |
 |-----------|-------|----------|
-| `error` | Only errors | Production (minimal logging) |
-| `info` | Info and errors | Production (normal operations) |
-| `debug` | Debug, info, and errors | Development |
-| `2` | Verbosity level 2 (template filtering) | Troubleshooting |
+| `error` | Only errors | Production (minimal logging, reduces ELK volume) |
+| `info` | Info and errors | Production (normal operations, includes deletion tracking) |
+| `1` or `debug` | V(1) + info + errors | Development (shows skipping logs, retry success) |
+| `2` | V(2) + V(1) + info + errors | Troubleshooting (shows template filtering details) |
+
+**Log Level Breakdown**:
+- **Error level**: Only actual errors
+- **Info level**: Includes deletion tracking, resource lifecycle events
+- **V(1) level**: Includes skipping logs, retry success logs
+- **V(2) level**: Includes template filtering debug logs
 
 ## Troubleshooting
 

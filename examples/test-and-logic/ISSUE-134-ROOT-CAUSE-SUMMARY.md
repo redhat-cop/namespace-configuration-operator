@@ -28,10 +28,16 @@
 - **Kyverno policy**: Create a ClusterPolicy that injects log level environment variables into the Deployment
 - **OLM-compatible**: Policy works with OLM-managed deployments and persists across updates
 - **Flexible configuration**: Supports "error", "info", "debug", or numeric levels (0-10)
+- **Enhanced logging features**:
+  - V(1) level logging for skipped resources (groups/namespaces/users that don't match templates)
+  - V(2) level logging for template filtering details (debug-level template matching)
+  - Deletion tracking logs (info-level) for resource deletion lifecycle
+  - Retry success logs (V(1)) for optimistic concurrency conflict resolution
+  - Structured JSON logging format for ELK integration
 
 ## Key findings
 - **Log level options**:
-  - `"error"` = only errors (minimal logging)
+  - `"error"` = only errors (minimal logging, reduces ELK volume)
   - `"info"` = info and above (recommended for production)
   - `"debug"` = debug and above (development)
   - `"0-10"` = numeric verbosity levels (e.g., "2" shows template filtering logs)
@@ -39,6 +45,19 @@
   - `"false"` = JSON format (production, works with ELK)
   - `"true"` = console format (development)
 - **Configuration method**: Kyverno policy is the recommended approach for OLM-managed deployments
+- **Enhanced logging features added**:
+  - **V(1) skipping logs**: Clear messages when resources are skipped because no templates match
+    - Format: `"skipping group - no GroupConfig templates match the group pattern"`
+    - Visible with `ZAP_LOG_LEVEL=1` or higher
+  - **V(2) template filtering logs**: Detailed debug logs for template matching
+    - Shows which patterns are checked and why groups match/don't match
+    - Visible with `ZAP_LOG_LEVEL=2` or higher
+  - **Info-level deletion tracking**: Logs for resource deletion lifecycle
+    - Detection, processing, and completion messages
+    - Always visible (info level)
+  - **V(1) retry success logs**: Logs when operations succeed after retries
+    - Helps distinguish retries from actual errors in centralized logging
+    - Visible with `ZAP_LOG_LEVEL=1` or higher
 
 ## Conclusion
 - The issue was not a bug, but a missing configuration mechanism
