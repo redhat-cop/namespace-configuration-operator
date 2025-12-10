@@ -20,7 +20,6 @@ import (
 	"context"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
@@ -57,58 +56,6 @@ type NamespaceConfigReconciler struct {
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=namespaceconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
 
-// manageSuccessWithRetry attempts to call ManageSuccess with retry logic to handle
-// optimistic concurrency conflicts. It re-fetches the instance before each retry
-// to ensure we have the latest resourceVersion.
-func (r *NamespaceConfigReconciler) manageSuccessWithRetry(ctx context.Context, req ctrl.Request, log logr.Logger) (reconcile.Result, error) {
-	const maxRetries = 5
-	const baseDelay = 50 * time.Millisecond
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Re-fetch the instance to get the latest resourceVersion
-		latestInstance := &redhatcopv1alpha1.NamespaceConfig{}
-		err := r.GetClient().Get(ctx, req.NamespacedName, latestInstance)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// Resource was deleted, no need to update status
-				return reconcile.Result{}, nil
-			}
-			log.Error(err, "unable to re-fetch instance for status update", "attempt", attempt+1)
-			return reconcile.Result{}, err
-		}
-
-		// Attempt to update status
-		result, err := r.ManageSuccess(ctx, latestInstance)
-		if err == nil {
-			// Success!
-			if attempt > 0 {
-				log.V(1).Info("ManageSuccess succeeded after retry", "attempt", attempt+1, "namespaceconfig", latestInstance.Name)
-			}
-			return result, nil
-		}
-
-		// Check if this is a conflict error that we should retry
-		if apierrors.IsConflict(err) {
-			if attempt < maxRetries-1 {
-				// Calculate exponential backoff delay
-				delay := baseDelay * time.Duration(1<<uint(attempt))
-				log.V(1).Info("retrying ManageSuccess due to conflict", "attempt", attempt+1, "maxRetries", maxRetries, "delay", delay, "error", err)
-				time.Sleep(delay)
-				continue
-			}
-			// Last attempt failed, return the error
-			log.Error(err, "unable to update status after retries", "attempts", maxRetries)
-			return reconcile.Result{}, err
-		}
-
-		// Not a conflict error, return immediately
-		return result, err
-	}
-
-	// Should never reach here, but just in case
-	return reconcile.Result{}, nil
-}
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
@@ -120,7 +67,7 @@ func (r *NamespaceConfigReconciler) manageSuccessWithRetry(ctx context.Context, 
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("namespaceconfig", req.NamespacedName)
-	log.Info("reconciling started")
+	common.LogReconcilingStarted(log, "namespaceconfig", req.NamespacedName)
 	// Fetch the NamespaceConfig instance
 	instance := &redhatcopv1alpha1.NamespaceConfig{}
 	err := r.GetClient().Get(context, req.NamespacedName, instance)
@@ -212,11 +159,11 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return r.ManageError(context, instance, err)
 	}
 
-	log.Info("resources processed successfully", "namespaceconfig", instance.Name, "namespaces", len(selectedNamespaces), "resources", len(lockedResources))
+	common.LogResourcesProcessedSuccessfully(log, "namespaceconfig", instance.Name, len(selectedNamespaces), len(lockedResources), "namespaces")
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
-	return r.manageSuccessWithRetry(context, req, log)
+	return common.ManageSuccessWithRetry(r, context, req, log, "namespaceconfig", func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
 }
 
 func (r *NamespaceConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.NamespaceConfig) error {

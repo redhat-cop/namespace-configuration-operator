@@ -20,7 +20,6 @@ import (
 	"context"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
@@ -56,58 +55,6 @@ type GroupConfigReconciler struct {
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=groupconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
 
-// manageSuccessWithRetry attempts to call ManageSuccess with retry logic to handle
-// optimistic concurrency conflicts. It re-fetches the instance before each retry
-// to ensure we have the latest resourceVersion.
-func (r *GroupConfigReconciler) manageSuccessWithRetry(ctx context.Context, req ctrl.Request, log logr.Logger) (reconcile.Result, error) {
-	const maxRetries = 5
-	const baseDelay = 50 * time.Millisecond
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Re-fetch the instance to get the latest resourceVersion
-		latestInstance := &redhatcopv1alpha1.GroupConfig{}
-		err := r.GetClient().Get(ctx, req.NamespacedName, latestInstance)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// Resource was deleted, no need to update status
-				return reconcile.Result{}, nil
-			}
-			log.Error(err, "unable to re-fetch instance for status update", "attempt", attempt+1)
-			return reconcile.Result{}, err
-		}
-
-		// Attempt to update status
-		result, err := r.ManageSuccess(ctx, latestInstance)
-		if err == nil {
-			// Success!
-			if attempt > 0 {
-				log.V(1).Info("ManageSuccess succeeded after retry", "attempt", attempt+1, "groupconfig", latestInstance.Name)
-			}
-			return result, nil
-		}
-
-		// Check if this is a conflict error that we should retry
-		if errors.IsConflict(err) {
-			if attempt < maxRetries-1 {
-				// Calculate exponential backoff delay
-				delay := baseDelay * time.Duration(1<<uint(attempt))
-				log.V(1).Info("retrying ManageSuccess due to conflict", "attempt", attempt+1, "maxRetries", maxRetries, "delay", delay, "error", err)
-				time.Sleep(delay)
-				continue
-			}
-			// Last attempt failed, return the error
-			log.Error(err, "unable to update status after retries", "attempts", maxRetries)
-			return reconcile.Result{}, err
-		}
-
-		// Not a conflict error, return immediately
-		return result, err
-	}
-
-	// Should never reach here, but just in case
-	return reconcile.Result{}, nil
-}
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
@@ -119,7 +66,7 @@ func (r *GroupConfigReconciler) manageSuccessWithRetry(ctx context.Context, req 
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("groupconfig", req.NamespacedName)
-	log.Info("reconciling started")
+	common.LogReconcilingStarted(log, "groupconfig", req.NamespacedName)
 
 	// Fetch the GroupConfig instance
 	instance := &redhatcopv1alpha1.GroupConfig{}
@@ -214,11 +161,11 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 		return r.ManageError(context, instance, err)
 	}
 
-	log.Info("resources processed successfully", "groupconfig", instance.Name, "groups", len(selectedGroups), "resources", len(lockedResources))
+	common.LogResourcesProcessedSuccessfully(log, "groupconfig", instance.Name, len(selectedGroups), len(lockedResources), "groups")
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
-	return r.manageSuccessWithRetry(context, req, log)
+	return common.ManageSuccessWithRetry(r, context, req, log, "groupconfig", func() *redhatcopv1alpha1.GroupConfig { return &redhatcopv1alpha1.GroupConfig{} })
 }
 
 func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
