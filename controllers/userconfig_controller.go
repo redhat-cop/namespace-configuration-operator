@@ -153,7 +153,20 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 		return r.ManageError(context, instance, err)
 	}
 
-	return r.ManageSuccess(context, instance)
+	// Re-fetch the instance to get the latest resourceVersion before updating status
+	// This prevents "object has been modified" conflicts when ManageSuccess updates the status
+	latestInstance := &redhatcopv1alpha1.UserConfig{}
+	err = r.GetClient().Get(context, req.NamespacedName, latestInstance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Resource was deleted, no need to update status
+			return reconcile.Result{}, nil
+		}
+		log.Error(err, "unable to re-fetch instance for status update", "instance", instance)
+		return reconcile.Result{}, err
+	}
+
+	return r.ManageSuccess(context, latestInstance)
 }
 
 func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {

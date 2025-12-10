@@ -151,7 +151,20 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return r.ManageError(context, instance, err)
 	}
 
-	return r.ManageSuccess(context, instance)
+	// Re-fetch the instance to get the latest resourceVersion before updating status
+	// This prevents "object has been modified" conflicts when ManageSuccess updates the status
+	latestInstance := &redhatcopv1alpha1.NamespaceConfig{}
+	err = r.GetClient().Get(context, req.NamespacedName, latestInstance)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Resource was deleted, no need to update status
+			return reconcile.Result{}, nil
+		}
+		log.Error(err, "unable to re-fetch instance for status update", "instance", instance)
+		return reconcile.Result{}, err
+	}
+
+	return r.ManageSuccess(context, latestInstance)
 }
 
 func (r *NamespaceConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.NamespaceConfig) error {
