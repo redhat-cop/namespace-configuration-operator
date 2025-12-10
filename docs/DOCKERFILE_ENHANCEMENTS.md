@@ -50,26 +50,38 @@ podman build --build-arg VERSION=$(git describe --tags --always --dirty) \
 
 #### Using Makefiles (Recommended)
 
-The `Makefile` and `PodmanMakefile` automatically detect and pass version information:
+The `Makefile` and `PodmanMakefile` automatically detect and pass version information.
 
+**For binary builds:**
 ```bash
 # Using Makefile
-make docker-build
+make build
 
 # Using PodmanMakefile
 make -f PodmanMakefile build
+```
+
+**For container builds:**
+```bash
+# Using PodmanMakefile (recommended - automatic version injection)
+make -f PodmanMakefile podman-build
+
+# Note: Standard Makefile docker-build does NOT inject version info
+# Use PodmanMakefile for container builds
 ```
 
 The Makefiles automatically:
 - Detect version from git tags or use "dev"
 - Get commit hash from git
 - Generate build date timestamp
-- Pass all values as build args
+- Pass all values as build args (PodmanMakefile) or ldflags (both)
 
-**Example Makefile output:**
+**Example PodmanMakefile output:**
 ```
-VERSION=v1.0.0 COMMIT=abc1234 BUILD_DATE=2025-12-10T10:30:00Z podman build ...
+Building with version info: VERSION=v1.0.0, COMMIT=abc1234, BUILD_DATE=2025-12-10T10:30:00Z
 ```
+
+**For detailed information about how Makefiles inject version information, see [MAKEFILE_VERSION_INJECTION.md](./MAKEFILE_VERSION_INJECTION.md).**
 
 ### Benefits
 
