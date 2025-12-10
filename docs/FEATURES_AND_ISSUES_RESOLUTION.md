@@ -187,7 +187,7 @@ Extended template filtering to all controllers (GroupConfig, NamespaceConfig, Us
 - **AND Logic**: When template uses `{{- if and`, ALL patterns must match
 - **OR Logic**: When template uses `{{- if` or `{{- else if`, ANY pattern match is sufficient
 - **Comprehensive Test Coverage**: Unit tests for all three controllers
-- **Real-world Examples**: Test examples in `examples/test-and-logic/`
+- **Real-world Examples**: Test examples in `../examples/test-and-logic/`
 
 **Files Modified:**
 - All three controllers - Template filtering with AND/OR logic
