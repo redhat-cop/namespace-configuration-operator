@@ -150,7 +150,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	@BUILD_VERSION=$${VERSION:-$$(git describe --tags --always --dirty 2>/dev/null || echo "$(VERSION)")}; \
+	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "Building with version info: VERSION=$$BUILD_VERSION, COMMIT=$$COMMIT, BUILD_DATE=$$BUILD_DATE"; \
+	docker build --build-arg VERSION=$$BUILD_VERSION --build-arg COMMIT=$$COMMIT --build-arg BUILD_DATE=$$BUILD_DATE -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
