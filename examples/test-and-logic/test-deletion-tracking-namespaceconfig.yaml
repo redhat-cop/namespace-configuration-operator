@@ -1,0 +1,10 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: test-deletion-tracking-namespaceconfig
+spec:
+  labelSelector:
+    matchLabels: {}
+  annotationSelector:
+    matchLabels: {}
+  templates: []

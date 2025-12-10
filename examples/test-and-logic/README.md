@@ -17,6 +17,9 @@ The GroupConfig controller now supports **AND logic** in template conditionals, 
 - `test-or-logic-groupconfig.yaml` - **Dedicated OR logic test with multiple test cases**
 - `test-unrecognized-conditionals-groupconfig.yaml` - **Test for unrecognized conditional logic detection (eq, hasPrefix, ne, etc.)**
 - `test-issue-194-field-removal-namespaceconfig.yaml` - **Test for GitHub issue #194 - Field removal with value 0 in conditionals**
+- `test-deletion-tracking-groupconfig.yaml` - **Test GroupConfig for deletion tracking and logging**
+- `test-deletion-tracking-namespaceconfig.yaml` - **Test NamespaceConfig for deletion tracking and logging**
+- `test-deletion-tracking-userconfig.yaml` - **Test UserConfig for deletion tracking and logging**
 - `test-and-logic-groupconfig-explanation.md` - **Detailed stanza-by-stanza explanation of the AND logic YAML**
 - `test-or-logic-groupconfig-explanation.md` - **Detailed stanza-by-stanza explanation of the OR logic YAML**
 - `test-unrecognized-conditionals-explanation.md` - **Detailed explanation of unrecognized conditional logic detection**
@@ -174,6 +177,61 @@ See [test-issue-194-field-removal-explanation.md](test-issue-194-field-removal-e
 
 **Status**: ✅ **Bug Confirmed** - The operator does NOT remove fields with value `0` when conditionals change from true to false.
 
+### Apply Deletion Tracking Test
+
+To test deletion tracking and logging for all three CR types (GroupConfig, NamespaceConfig, UserConfig):
+
+```bash
+# Apply test resources for all three CR types
+oc apply -f examples/test-and-logic/test-deletion-tracking-groupconfig.yaml
+oc apply -f examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml
+oc apply -f examples/test-and-logic/test-deletion-tracking-userconfig.yaml
+
+# Wait for resources to be processed
+sleep 10
+
+# Monitor logs in another terminal
+oc logs -f deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator --container=manager
+
+# Delete the test resources
+oc delete -f examples/test-and-logic/test-deletion-tracking-groupconfig.yaml
+oc delete -f examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml
+oc delete -f examples/test-and-logic/test-deletion-tracking-userconfig.yaml
+```
+
+**Expected Log Messages**:
+
+When resources are deleted, you should see the following log messages:
+
+1. **Deletion Detection** (when resource is not found):
+   ```json
+   {"level":"info","msg":"resource deletion detected - resource not found, skipping reconciliation","groupconfig":{"name":"test-deletion-tracking-groupconfig"}}
+   ```
+
+2. **Deletion Processing** (when IsBeingDeleted is true):
+   ```json
+   {"level":"info","msg":"resource deletion detected - processing deletion cleanup","groupconfig":"test-deletion-tracking-groupconfig","deletionTimestamp":"2025-12-10T05:11:57Z"}
+   ```
+
+3. **Deletion Completion** (when deletion finishes successfully):
+   ```json
+   {"level":"info","msg":"resource deletion completed successfully","groupconfig":"test-deletion-tracking-groupconfig"}
+   ```
+
+4. **Already Deleted** (if resource was deleted during finalizer removal):
+   ```json
+   {"level":"info","msg":"resource deletion completed - resource already deleted during finalizer removal","groupconfig":"test-deletion-tracking-groupconfig"}
+   ```
+
+**Note**: These test resources have empty templates, so they may not have finalizers and might be deleted immediately without going through the full deletion cleanup path. For resources with templates (which get finalizers), the deletion tracking logs will be more visible.
+
+**Retry Success Logging**:
+
+When `ManageSuccess` succeeds after retries due to optimistic concurrency conflicts, you should see:
+```json
+{"level":"Level(1)","msg":"ManageSuccess succeeded after retry","attempt":2,"groupconfig":"test-deletion-tracking-groupconfig"}
+```
+
 ### Check Groups
 
 List groups that should match AND logic:
@@ -219,6 +277,11 @@ oc delete clusterrolebindings -l rbac.ocp.io/config-source=test-unrecognized-uni
 # Delete issue #194 test NamespaceConfig
 oc delete namespaceconfig test-issue-194-field-removal
 oc delete namespace test-issue-194-ns
+
+# Delete deletion tracking test resources
+oc delete -f examples/test-and-logic/test-deletion-tracking-groupconfig.yaml
+oc delete -f examples/test-and-logic/test-deletion-tracking-namespaceconfig.yaml
+oc delete -f examples/test-and-logic/test-deletion-tracking-userconfig.yaml
 ```
 
 ## Implementation Details
@@ -248,7 +311,7 @@ The AND logic detection works by:
 - **[ISSUE-194-GITHUB-ISSUE-TEXT.md](ISSUE-194-GITHUB-ISSUE-TEXT.md)** - **Formatted text ready to post in GitHub issue**
 - **[test-or-logic-results.md](test-or-logic-results.md)** - OR logic test results from production cluster
 - [Issues and Resolution](../issues-and-resolution.md) - Issue 1: Template Filtering Fix
-- [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Bug 3: AND Logic Fix
+- [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Bug 3: AND Logic Fix, Deletion Tracking and Retry Success Logging
 - [GitHub Issue #194](https://github.com/redhat-cop/namespace-configuration-operator/issues/194) - Field removal with value 0 in conditionals
 
 ## Issue #194 Root Cause

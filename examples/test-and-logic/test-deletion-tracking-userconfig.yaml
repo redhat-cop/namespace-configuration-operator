@@ -1,0 +1,12 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: UserConfig
+metadata:
+  name: test-deletion-tracking-userconfig
+spec:
+  labelSelector:
+    matchLabels: {}
+  annotationSelector:
+    matchLabels: {}
+  identityExtraFieldSelector:
+    matchLabels: {}
+  templates: []

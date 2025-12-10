@@ -1,0 +1,10 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: test-deletion-tracking-groupconfig
+spec:
+  labelSelector:
+    matchLabels: {}
+  annotationSelector:
+    matchLabels: {}
+  templates: []
