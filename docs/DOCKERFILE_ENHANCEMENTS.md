@@ -42,11 +42,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a \
 #### Manual Build with Version Info
 
 ```bash
+# Manual build with version info (local builds only)
 podman build --build-arg VERSION=$(git describe --tags --always --dirty) \
              --build-arg COMMIT=$(git rev-parse --short HEAD) \
              --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
              -t namespace-configuration-operator:latest .
 ```
+
+> **Important:** Manual build commands are for **local development builds only**. For production builds, always use the Makefile targets which handle version injection automatically.
 
 #### Using Makefiles (Recommended)
 
