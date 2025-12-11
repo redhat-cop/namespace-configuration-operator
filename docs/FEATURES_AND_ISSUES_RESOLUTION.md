@@ -252,7 +252,7 @@ Using forked operator-utils with fix: `github.com/ephico2real2/operator-utils@fi
 ### Issue #50: Provide a way to identify operator generated resources
 
 **GitHub Issue:** https://github.com/redhat-cop/namespace-configuration-operator/issues/50  
-**Status:** ✅ RESOLVED
+**Status:** ✅ FIXED
 
 **Problem Statement:**
 It could be helpful to identify the resources created by the controller. Currently some teams in our clusters are creating their own network policies and they may get confused with the new NetworkPolicies we are injecting into their namespaces. They don't have an easy way to identify how such resources are created.

@@ -9,8 +9,9 @@
 
 ### Recently Completed (December 10, 2025) ✅
 
-#### 15. Issue #50 - Provide a way to identify operator generated resources ✅
+#### 15. Issue #50 - Provide a way to identify operator generated resources ✅ FIXED
 - **Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/50
+- **Status**: ✅ FIXED
 - **Problem**: Teams creating their own network policies may get confused with NetworkPolicies injected by the operator. No easy way to identify operator-generated resources.
 - **Solution**: Manual specification of labels and annotations in templates
   - Users add identifying labels/annotations to templates (e.g., `app.kubernetes.io/managed-by: namespace-configuration-operator`)
@@ -27,7 +28,7 @@
   - Automatic recreation when namespace labels are added back
   - Complete lifecycle demonstration
 - **Example Template**: Full YAML template example in documentation showing proper metadata specification
-- **Status**: ✅ RESOLVED - Resources can be identified via labels/annotations, and automatic cleanup/recreation works correctly
+- **Status**: ✅ FIXED - Resources can be identified via labels/annotations, and automatic cleanup/recreation works correctly
 
 #### 16. Issue #132 - Status Update Conflict Blocking Subsequent Reconciles ✅
 - **Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/132
