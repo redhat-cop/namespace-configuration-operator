@@ -3,13 +3,29 @@
 **Last Updated:** December 10, 2025  
 **Status:** Comprehensive improvements and feature enhancements completed ✅
 
+**Recent Updates:**
+- Code refactoring: Extracted common reconciler helpers (December 10, 2025)
+- Documentation: Added groups-and-bindings-examples.md (December 10, 2025)
+- Documentation: Fixed log level configuration guidance (December 10, 2025)
+
 > **Note**: This document tracks all resolved issues, completed features, and improvements. For detailed technical documentation, see the `docs/` directory and `resolved-issues-tracker/` directory.
 
 ## Table of Contents
 
 1. [Core Issues Resolved](#core-issues-resolved)
 2. [GitHub Issues Resolved](#github-issues-resolved)
+   - [Issue #50: Provide a way to identify operator generated resources](#issue-50-provide-a-way-to-identify-operator-generated-resources)
+   - [Issue #132: Status Update Conflict Blocking Subsequent Reconciles](#issue-132-status-update-conflict-blocking-subsequent-reconciles)
+   - [Issue #134: Log Level Configuration](#issue-134-log-level-configuration)
+   - [Issue #194: Field Removal with Value 0](#issue-194-field-removal-with-value-0)
+   - [Issue #50: Provide a way to identify operator generated resources](#issue-50-provide-a-way-to-identify-operator-generated-resources)
 3. [Feature Enhancements](#feature-enhancements)
+   - [Code Refactoring: Common Reconciler Helpers](#code-refactoring-common-reconciler-helpers)
+   - [Enhanced Template Filtering with AND/OR Logic](#enhanced-template-filtering-with-andor-logic)
+   - [Unrecognized Conditional Logic Detection](#unrecognized-conditional-logic-detection)
+   - [Deletion Tracking and Logging](#deletion-tracking-and-logging)
+   - [Retry Success Logging](#retry-success-logging)
+   - [Skipping Resource Logging](#skipping-resource-logging)
 4. [Build System Improvements](#build-system-improvements)
 5. [Logging Enhancements](#logging-enhancements)
 6. [Documentation](#documentation)
@@ -114,6 +130,61 @@ Implemented startup banner with version, commit, and build date information:
 
 ## GitHub Issues Resolved
 
+### Issue #132: Status Update Conflict Blocking Subsequent Reconciles
+
+**GitHub Issue:** https://github.com/redhat-cop/namespace-configuration-operator/issues/132  
+**Status:** ✅ RESOLVED
+
+**Problem Statement:**
+When a status update failed on a CR due to optimistic concurrency conflicts (e.g., "the object has been modified; please apply your changes to the latest version and try again"), all following enqueued namespaceconfigs were not processed until the next reconcile event. This caused delays in processing multiple namespaceconfigs and blocked the reconciliation queue.
+
+**Root Cause:**
+The `ManageSuccess` function was called directly without retry logic. When an optimistic concurrency conflict occurred (resourceVersion mismatch), the reconcile would fail immediately, causing:
+1. The current reconcile to fail
+2. Subsequent reconciles in the queue to be blocked
+3. No automatic retry with updated resourceVersion
+
+**Solution:**
+Implemented `ManageSuccessWithRetry` function in `controllers/common/reconciler_helpers.go` that:
+1. **Automatic Conflict Detection**: Detects conflict errors using `errors.IsConflict(err)`
+2. **Re-fetch Before Retry**: Re-fetches the instance before each retry to get the latest `resourceVersion`
+3. **Exponential Backoff**: Retries up to 5 times with exponential backoff delays (50ms, 100ms, 200ms, 400ms, 800ms)
+4. **Applied to All Controllers**: GroupConfig, NamespaceConfig, and UserConfig all use the retry mechanism
+
+**Implementation Details:**
+- Created centralized retry logic in `controllers/common/reconciler_helpers.go`
+- Uses Go generics to work with any controller type
+- Re-fetches instance before each retry to ensure latest resourceVersion
+- V(1) level logging for retry attempts and success after retry
+- Handles resource deletion gracefully (returns success if resource not found)
+
+**Files Modified:**
+- `controllers/common/reconciler_helpers.go` - **NEW** - `ManageSuccessWithRetry` function
+- `controllers/groupconfig_controller.go` - Uses `ManageSuccessWithRetry`
+- `controllers/namespaceconfig_controller.go` - Uses `ManageSuccessWithRetry`
+- `controllers/userconfig_controller.go` - Uses `ManageSuccessWithRetry`
+
+**Benefits:**
+- ✅ **Prevents Queue Blocking**: Most conflicts are resolved automatically without failing the reconcile
+- ✅ **Automatic Recovery**: No manual intervention needed for transient conflicts
+- ✅ **Better Observability**: V(1) logs show retry attempts for debugging
+- ✅ **Consistent Behavior**: All three controllers use the same retry logic
+- ✅ **Reduced False Positives**: Fewer errors in monitoring systems
+
+**Example Log Output:**
+```json
+{"level":"debug","ts":"2025-12-10T20:54:01Z","logger":"controllers.NamespaceConfig","msg":"retrying ManageSuccess due to conflict","attempt":2,"maxRetries":5,"delay":"100ms"}
+
+{"level":"debug","ts":"2025-12-10T20:54:01Z","logger":"controllers.NamespaceConfig","msg":"ManageSuccess succeeded after retry","attempt":2,"namespaceconfig":"default-resourcequota"}
+```
+
+**See Also:** 
+- [Resolved Issues Tracker - Issue #132](../resolved-issues-tracker/resolved-issues-tracker.md)
+- [Code Refactoring: Common Reconciler Helpers](#code-refactoring-common-reconciler-helpers)
+- [Issue #50 - Resource Identification](#issue-50-provide-a-way-to-identify-operator-generated-resources)
+
+---
+
 ### Issue #134: Log Level Configuration
 
 **GitHub Issue:** https://github.com/redhat-cop/namespace-configuration-operator/issues/134  
@@ -147,7 +218,9 @@ Operator creating lots of Info-level logs sent to ELK (hosted in AWS) via OpenSh
 - [ISSUE-134-FIX-IMPLEMENTATION.md](../examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md)
 - [LOG_LEVEL_CONFIGURATION.md](./LOG_LEVEL_CONFIGURATION.md)
 
-**See Also:** [Resolved Issues Tracker - Issue #134](../resolved-issues-tracker/resolved-issues-tracker.md)
+**See Also:** 
+- [Resolved Issues Tracker - Issue #134](../resolved-issues-tracker/resolved-issues-tracker.md)
+- [Issue #50 - Resource Identification](#issue-50-provide-a-way-to-identify-operator-generated-resources)
 
 ---
 
@@ -170,11 +243,618 @@ Using forked operator-utils with fix: `github.com/ephico2real2/operator-utils@fi
 - [ISSUE-194-VERIFICATION-GUIDE.md](../examples/test-and-logic/ISSUE-194-VERIFICATION-GUIDE.md)
 - [ISSUE-194-FIX-IMPLEMENTATION.md](../examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md)
 
-**See Also:** [Resolved Issues Tracker - Issue #194](../resolved-issues-tracker/resolved-issues-tracker.md)
+**See Also:** 
+- [Resolved Issues Tracker - Issue #194](../resolved-issues-tracker/resolved-issues-tracker.md)
+- [Issue #50 - Resource Identification](#issue-50-provide-a-way-to-identify-operator-generated-resources)
+
+---
+
+### Issue #50: Provide a way to identify operator generated resources
+
+**GitHub Issue:** https://github.com/redhat-cop/namespace-configuration-operator/issues/50  
+**Status:** ✅ RESOLVED
+
+**Problem Statement:**
+It could be helpful to identify the resources created by the controller. Currently some teams in our clusters are creating their own network policies and they may get confused with the new NetworkPolicies we are injecting into their namespaces. They don't have an easy way to identify how such resources are created.
+
+The common method for such case is to place an ownerReferences to the generated object with the triggering resource's reference (e.g. NamespaceConfig). But this will likely impact the implementation of the NamespaceConfig resources' deletion since Kubernetes itself will also try to delete the owned objects once the owner resource (NamespaceConfig) is removed.
+
+Other options could be adding an annotation/label.
+
+**Solution:**
+The operator supports identifying operator-generated resources through **manual specification of labels and annotations in templates**. While the operator doesn't automatically inject identifying metadata, users can add labels and annotations to their templates, which are then applied to all created resources.
+
+**Key Features:**
+1. **Manual Metadata Specification**: Users add identifying labels/annotations to templates
+2. **Automatic Cleanup**: When namespace labels are removed, operator automatically deletes resources for that namespace
+3. **Production-Ready**: This approach is sustainable for production environments - no need to delete entire CRs to remove resources from specific namespaces
+
+**Recommended Labels and Annotations:**
+
+**Labels:**
+- `app.kubernetes.io/managed-by: namespace-configuration-operator` - Standard Kubernetes label for identifying managed resources
+- `rbac.ocp.io/role-type: <type>` - Custom label for role type (e.g., `cluster-admin`, `ns-developer`)
+- `rbac.ocp.io/config-source: <source>` - Custom label identifying the configuration source
+- `rbac.ocp.io/group-name: <group-name>` - Custom label for group name (for GroupConfig resources)
+- `rbac.ocp.io/mnemonic: <mnemonic>` - Custom label for mnemonic (for NamespaceConfig resources)
+- `rbac.ocp.io/environment: <env>` - Custom label for environment (for NamespaceConfig resources)
+
+**Annotations:**
+- `rbac.ocp.io/created-by: namespace-configuration-operator` - Identifies the operator that created the resource
+- `rbac.ocp.io/source-groupconfig: <groupconfig-name>` - References the GroupConfig that created the resource
+- `rbac.ocp.io/source-namespaceconfig: <namespaceconfig-name>` - References the NamespaceConfig that created the resource
+- `rbac.ocp.io/source-namespace: <namespace-name>` - References the namespace (for NamespaceConfig resources)
+
+**Verification Test Results:**
+
+**Test 1: Metadata Verification on Created Resources**
+
+**Step 1: Check deployed CRs:**
+```bash
+oc get groupconfigs -A
+```
+**Output:**
+```
+NAME                                                  AGE
+cluster-admin-groupconfig-rbac                        18h
+cluster-audit-groupconfig-rbac                        123m
+cluster-developer-groupconfig-rbac                    2d20h
+user-workload-monitoring-admin-groupconfig-rbac       119m
+user-workload-monitoring-developer-groupconfig-rbac   119m
+```
+
+```bash
+oc get namespaceconfigs -A
+```
+**Output:**
+```
+NAME                           AGE
+nonprod-namespaceconfig-rbac   122m
+prod-namespaceconfig-rbac      2d20h
+```
+
+**Step 2: Verify metadata on ClusterRoleBindings:**
+```bash
+oc get clusterrolebindings -l app.kubernetes.io/managed-by=namespace-configuration-operator --show-labels | head -5
+```
+**Output:**
+```
+NAME                                          ROLE                AGE     LABELS
+app-ocp-rbac-alpha-cluster-admin-crb          ClusterRole/admin   18h     app.kubernetes.io/managed-by=namespace-configuration-operator,app.kubernetes.io/version=0.1.0,rbac.ocp.io/access-level=admin-cluster-wide,rbac.ocp.io/config-source=cluster-rbac,rbac.ocp.io/group-name=app-ocp-rbac-alpha-cluster-admin,rbac.ocp.io/policy-version=0.1.0,rbac.ocp.io/role-type=cluster-admin
+app-ocp-rbac-alpha-cluster-audit-crb          ClusterRole/view    123m    app.kubernetes.io/managed-by=namespace-configuration-operator,app.kubernetes.io/version=0.1.0,rbac.ocp.io/access-level=view-cluster-wide,rbac.ocp.io/config-source=cluster-rbac,rbac.ocp.io/group-name=app-ocp-rbac-alpha-cluster-audit,rbac.ocp.io/policy-version=0.1.0,rbac.ocp.io/role-type=cluster-audit
+app-ocp-rbac-alpha-cluster-developer-crb      ClusterRole/view    2d20h   app.kubernetes.io/managed-by=namespace-configuration-operator,app.kubernetes.io/version=0.1.0,rbac.ocp.io/access-level=view-cluster-wide,rbac.ocp.io/config-source=cluster-rbac,rbac.ocp.io/group-name=app-ocp-rbac-alpha-cluster-developer,rbac.ocp.io/policy-version=0.1.0,rbac.ocp.io/role-type=cluster-developer
+```
+
+```bash
+oc get clusterrolebindings -l app.kubernetes.io/managed-by=namespace-configuration-operator -o json | jq -r '.items[0] | {name: .metadata.name, labels: .metadata.labels, annotations: .metadata.annotations}'
+```
+**Output:**
+```json
+{
+  "name": "app-ocp-rbac-alpha-cluster-admin-crb",
+  "labels": {
+    "app.kubernetes.io/managed-by": "namespace-configuration-operator",
+    "app.kubernetes.io/version": "0.1.0",
+    "rbac.ocp.io/access-level": "admin-cluster-wide",
+    "rbac.ocp.io/config-source": "cluster-rbac",
+    "rbac.ocp.io/group-name": "app-ocp-rbac-alpha-cluster-admin",
+    "rbac.ocp.io/policy-version": "0.1.0",
+    "rbac.ocp.io/role-type": "cluster-admin"
+  },
+  "annotations": {
+    "rbac.ocp.io/created-by": "namespace-configuration-operator",
+    "rbac.ocp.io/group-pattern": "app-ocp-rbac-*-cluster-admin",
+    "rbac.ocp.io/scope-restriction": "cluster-wide",
+    "rbac.ocp.io/source-groupconfig": "cluster-admin-groupconfig-rbac"
+  }
+}
+```
+
+**Step 3: Verify metadata on RoleBindings:**
+```bash
+oc get rolebindings -A -l app.kubernetes.io/managed-by=namespace-configuration-operator -o json | jq -r '.items[0] | {name: .metadata.name, namespace: .metadata.namespace, labels: .metadata.labels, annotations: .metadata.annotations}'
+```
+**Output:**
+```json
+{
+  "name": "beta-audit-rb",
+  "namespace": "beta-prod",
+  "labels": {
+    "app.kubernetes.io/managed-by": "namespace-configuration-operator",
+    "app.kubernetes.io/version": "0.1.0",
+    "rbac.ocp.io/access-level": "audit-prod-only",
+    "rbac.ocp.io/config-source": "prod-rbac",
+    "rbac.ocp.io/environment": "prod",
+    "rbac.ocp.io/mnemonic": "beta",
+    "rbac.ocp.io/policy-version": "0.1.0",
+    "rbac.ocp.io/role-type": "ns-audit"
+  },
+  "annotations": {
+    "rbac.ocp.io/created-by": "namespace-configuration-operator",
+    "rbac.ocp.io/environment-restriction": "prod-only",
+    "rbac.ocp.io/group-pattern": "app-ocp-rbac-beta-ns-audit",
+    "rbac.ocp.io/source-namespace": "beta-prod",
+    "rbac.ocp.io/source-namespaceconfig": "prod-namespaceconfig-rbac"
+  }
+}
+```
+
+**Test 2: Automatic Cleanup Verification (Production-Ready Behavior)**
+
+This test proves that removing a label from a namespace automatically triggers cleanup of operator-generated resources, making this approach sustainable for production environments.
+
+**Step 1: Find a namespace with resources:**
+```bash
+oc get namespaces -l company.net/app-environment=prod
+```
+**Output:**
+```
+NAME              STATUS   AGE
+beta-prod         Active   4d4h
+demo-prod         Active   4d16h
+demo-production   Active   4d16h
+```
+
+**Step 2: Verify namespace has the label:**
+```bash
+oc get namespace beta-prod -o jsonpath='{.metadata.labels.company\.net/app-environment}'
+```
+**Output:**
+```
+prod
+```
+
+**Step 3: Verify RoleBindings exist in test namespace:**
+```bash
+oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac -o custom-columns=NAME:.metadata.name
+```
+**Output:**
+```
+NAME
+beta-audit-rb
+beta-developer-rb
+```
+
+**Step 4: Remove the label:**
+```bash
+oc label namespace beta-prod company.net/app-environment-
+```
+**Output:**
+```
+namespace/beta-prod unlabeled
+```
+
+**Step 5: Wait for operator reconciliation:**
+```bash
+echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+```
+
+**Step 6: Verify label was removed:**
+```bash
+oc get namespace beta-prod -o jsonpath='{.metadata.labels.company\.net/app-environment}'
+```
+**Output:**
+```
+(empty - label removed)
+```
+
+**Step 7: Verify RoleBindings are automatically deleted:**
+```bash
+oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac
+```
+**Output:**
+```
+No resources found in beta-prod namespace.
+```
+
+**Alternative verification command:**
+```bash
+oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac -o json | jq -r '.items[] | .metadata.name' 2>&1
+```
+**Output:**
+```
+(empty - no resources found)
+```
+
+**Step 8: Verify only default RoleBindings remain:**
+```bash
+oc get rolebindings -n beta-prod
+```
+**Output:**
+```
+NAME                    ROLE                               AGE
+admin                   ClusterRole/admin                  4d4h
+system:deployers        ClusterRole/system:deployer        4d4h
+system:image-builders   ClusterRole/system:image-builder   4d4h
+system:image-pullers    ClusterRole/system:image-puller    4d4h
+```
+*(Only default system RoleBindings remain - operator-generated resources were automatically deleted)*
+
+**Step 9: Verify NamespaceConfig labelSelector configuration:**
+```bash
+oc get namespaceconfig prod-namespaceconfig-rbac -o json | jq '.spec.labelSelector'
+```
+**Output:**
+```json
+{
+  "matchExpressions": [
+    {
+      "key": "company.net/mnemonic",
+      "operator": "Exists"
+    },
+    {
+      "key": "company.net/app-environment",
+      "operator": "In",
+      "values": [
+        "prod"
+      ]
+    }
+  ]
+}
+```
+*(The selector requires `company.net/app-environment=prod`, which beta-prod no longer has)*
+
+**Step 10: Verify namespace no longer matches selector:**
+```bash
+oc get namespaces -l company.net/app-environment=prod
+```
+**Output:**
+```
+NAME              STATUS   AGE
+demo-prod         Active   4d16h
+demo-production   Active   4d16h
+```
+*(beta-prod no longer appears in the list)*
+
+**Step 11: Check operator logs showing cleanup:**
+```bash
+oc logs -n namespace-configuration-operator namespace-configuration-operator-controller-manager-86dd4c7dt6q --tail=30 | grep -i "beta-prod\|reconciling\|namespaceconfig"
+```
+**Output:**
+```json
+{"level":"info","ts":"2025-12-10T22:20:55Z","msg":"All workers finished","controller":"controller_locked_object_rbac.authorization.k8s.io/v1/RoleBinding/beta-prod/beta-audit-rb"}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"resource-reconciler./prod-namespaceconfig-rbac.rbac.authorization.k8s.io/v1/RoleBinding/demo-production/demo-developer-rb","msg":"reconcile called for","object":"rbac.authorization.k8s.io/v1/RoleBinding/demo-production/demo-developer-rb","request":{"name":"demo-developer-rb","namespace":"demo-production"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"resource-reconciler./prod-namespaceconfig-rbac.rbac.authorization.k8s.io/v1/RoleBinding/demo-prod/demo-developer-rb","msg":"reconcile called for","object":"rbac.authorization.k8s.io/v1/RoleBinding/demo-prod/demo-developer-rb","request":{"name":"demo-developer-rb","namespace":"demo-prod"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"resource-reconciler./prod-namespaceconfig-rbac.rbac.authorization.k8s.io/v1/RoleBinding/demo-prod/demo-audit-rb","msg":"reconcile called for","object":"rbac.authorization.k8s.io/v1/RoleBinding/demo-prod/demo-audit-rb","request":{"name":"demo-audit-rb","namespace":"demo-prod"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"resource-reconciler./prod-namespaceconfig-rbac.rbac.authorization.k8s.io/v1/RoleBinding/demo-production/demo-audit-rb","msg":"reconcile called for","object":"rbac.authorization.k8s.io/v1/RoleBinding/demo-production/demo-audit-rb","request":{"name":"demo-audit-rb","namespace":"demo-production"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"controllers.NamespaceConfig","msg":"reconciling started","namespaceconfig":{"name":"prod-namespaceconfig-rbac"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"controllers.NamespaceConfig","msg":"resources processed successfully","namespaceconfig":{"name":"prod-namespaceconfig-rbac"},"namespaceconfig":"prod-namespaceconfig-rbac","namespaces":2,"resources":4}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"controllers.NamespaceConfig","msg":"reconciling started","namespaceconfig":{"name":"prod-namespaceconfig-rbac"}}
+{"level":"info","ts":"2025-12-10T22:20:56Z","logger":"controllers.NamespaceConfig","msg":"resources processed successfully","namespaceconfig":{"name":"prod-namespaceconfig-rbac"},"namespaceconfig":"prod-namespaceconfig-rbac","namespaces":2,"resources":4}
+```
+*(Logs show: "All workers finished" for beta-prod resources, and reconciliation now shows "namespaces":2 instead of 3, confirming cleanup. The resource-reconciler logs show only demo-prod and demo-production RoleBindings being reconciled, with no beta-prod resources, proving automatic cleanup worked correctly.)*
+
+**Test 3: Automatic Resource Recreation (Complete Lifecycle)**
+
+This test demonstrates that the operator also automatically recreates resources when a namespace label is added back, completing the full lifecycle demonstration.
+
+**Step 1: Add the label back to the namespace:**
+```bash
+oc label namespace beta-prod company.net/app-environment=prod
+```
+**Output:**
+```
+namespace/beta-prod labeled
+```
+
+**Step 2: Verify label was added:**
+```bash
+oc get namespace beta-prod -o jsonpath='{.metadata.labels.company\.net/app-environment}'
+```
+**Output:**
+```
+prod
+```
+
+**Step 3: Wait for operator reconciliation:**
+```bash
+echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+```
+
+**Step 4: Verify RoleBindings are automatically recreated:**
+```bash
+oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac
+```
+**Output:**
+```
+NAME                ROLE               AGE
+beta-audit-rb       ClusterRole/view   1s
+beta-developer-rb   ClusterRole/edit   1s
+```
+*(RoleBindings show AGE of 1s, confirming they were just recreated)*
+
+**Step 5: Verify namespace now matches selector again:**
+```bash
+oc get namespaces -l company.net/app-environment=prod
+```
+**Output:**
+```
+NAME              STATUS   AGE
+beta-prod         Active   4d4h
+demo-prod         Active   4d16h
+demo-production   Active   4d16h
+```
+*(beta-prod is back in the list, confirming it matches the selector again)*
+
+**Complete Lifecycle Demonstration:**
+
+This test proves the operator handles the complete lifecycle:
+- ✅ **Label Removed** → Resources automatically deleted
+- ✅ **Label Added Back** → Resources automatically recreated
+- ✅ **Production-Ready**: No manual intervention needed, operator handles both directions automatically
+
+**Test 4: NetworkPolicy Example - Demonstrating Issue #50**
+
+This test uses the `multitenant-networkpolicy.yaml` example to demonstrate Issue #50 with NetworkPolicy resources, showing that resources created without identifying metadata cannot be easily identified.
+
+**Step 1: Apply the Multitenant NamespaceConfig:**
+```bash
+oc apply -f examples/namespace-config/multitenant-networkpolicy.yaml
+```
+**Output:**
+```
+namespaceconfig.redhatcop.redhat.io/multitenant created
+```
+
+**Step 2: Check initial state of beta-prod namespace:**
+```bash
+oc get namespace beta-prod -o jsonpath='{.metadata.labels}' | jq .
+```
+**Output:**
+```json
+{
+  "company.net/app-environment": "prod",
+  "company.net/mnemonic": "beta",
+  "kubernetes.io/metadata.name": "beta-prod",
+  "pod-security.kubernetes.io/audit": "restricted",
+  "pod-security.kubernetes.io/audit-version": "latest",
+  "pod-security.kubernetes.io/warn": "restricted",
+  "pod-security.kubernetes.io/warn-version": "latest"
+}
+```
+*(No `multitenant=true` label initially)*
+
+```bash
+oc get networkpolicies -n beta-prod
+```
+**Output:**
+```
+No resources found in beta-prod namespace.
+```
+
+**Step 3: Add multitenant label to beta-prod:**
+```bash
+oc label namespace beta-prod multitenant=true
+```
+**Output:**
+```
+namespace/beta-prod labeled
+```
+
+**Step 4: Wait for operator reconciliation:**
+```bash
+echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+```
+
+**Step 5: Verify NetworkPolicies are created:**
+```bash
+oc get networkpolicies -n beta-prod
+```
+**Output:**
+```
+NAME                           POD-SELECTOR   AGE
+allow-from-default-namespace   <none>         13s
+allow-from-same-namespace      <none>         13s
+```
+
+**Step 6: Check for identifying labels/annotations (Issue #50 demonstration):**
+```bash
+oc get networkpolicy allow-from-same-namespace -n beta-prod -o jsonpath='{.metadata.labels}' | jq .
+```
+**Output:**
+```
+(empty - no labels)
+```
+
+```bash
+oc get networkpolicy allow-from-same-namespace -n beta-prod -o jsonpath='{.metadata.annotations}' | jq .
+```
+**Output:**
+```
+(empty - no annotations)
+```
+
+**Step 7: Test automatic cleanup (remove label):**
+```bash
+oc label namespace beta-prod multitenant-
+```
+**Output:**
+```
+namespace/beta-prod unlabeled
+```
+
+```bash
+sleep 15 && oc get networkpolicies -n beta-prod
+```
+**Output:**
+```
+No resources found in beta-prod namespace.
+```
+*(NetworkPolicies automatically deleted)*
+
+**Step 8: Test automatic recreation (add label back):**
+```bash
+oc label namespace beta-prod multitenant=true
+```
+**Output:**
+```
+namespace/beta-prod labeled
+```
+
+```bash
+sleep 15 && oc get networkpolicies -n beta-prod
+```
+**Output:**
+```
+NAME                           POD-SELECTOR   AGE
+allow-from-default-namespace   <none>         28s
+allow-from-same-namespace      <none>         28s
+```
+*(NetworkPolicies automatically recreated with new AGE)*
+
+**Key Finding - Issue #50 Demonstration:**
+
+The NetworkPolicies created by the operator have **NO identifying labels or annotations**. This demonstrates the core problem described in Issue #50:
+
+- **Cannot identify operator-generated resources**: Teams cannot distinguish between NetworkPolicies they created and those injected by the operator
+- **No query mechanism**: Cannot use label selectors like `app.kubernetes.io/managed-by=namespace-configuration-operator` to find operator-generated NetworkPolicies
+- **Solution needed**: Users must manually add identifying labels/annotations to templates (as shown in the `prod-namespaceconfig-rbac.yaml` example)
+
+**How Automatic Cleanup Works:**
+
+1. **Operator Reconciliation**: The operator reconciles `NamespaceConfig` periodically and when namespace changes are detected
+2. **Selector Re-evaluation**: `getSelectedNamespaces()` re-evaluates which namespaces match the selector
+3. **Resource Comparison**: `UpdateLockedResources()` compares current desired state (only matching namespaces) with previously tracked state
+4. **Automatic Cleanup**: Resources for namespaces that no longer match are automatically removed
+
+**Example Template with Proper Metadata Specification:**
+
+The following is a complete example showing how to properly specify identifying labels and annotations in templates:
+
+```yaml
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: prod-namespaceconfig-rbac
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: rbac-automation
+    rbac.ocp.io/scope: namespace-scoped
+    rbac.ocp.io/kind: NamespaceConfig
+  annotations:
+    description: "Universal RBAC: audit/developer access for ALL environments (admin restricted to non-prod)"
+spec:
+  labelSelector:
+    matchExpressions:
+    - key: company.net/mnemonic
+      operator: Exists  # Match any namespace with mnemonic label
+    - key: company.net/app-environment
+      operator: In
+      values: ["prod"]  # EXPLICIT prod environments only
+  templates:
+    # Developer RoleBinding - Universal access for ALL environments (power users)
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: "{{ index .Labels "company.net/mnemonic" }}-developer-rb"
+          namespace: "{{ .Name }}"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: ns-developer
+            rbac.ocp.io/mnemonic: "{{ index .Labels "company.net/mnemonic" }}"
+            rbac.ocp.io/environment: "{{ index .Labels "company.net/app-environment" }}"
+            rbac.ocp.io/access-level: developer-prod-only
+            rbac.ocp.io/config-source: prod-rbac
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-namespace: "{{ .Name }}"
+            rbac.ocp.io/source-namespaceconfig: prod-namespaceconfig-rbac
+            rbac.ocp.io/group-pattern: "app-ocp-rbac-{{ index .Labels "company.net/mnemonic" }}-ns-developer"
+            rbac.ocp.io/environment-restriction: "prod-only"
+        subjects:
+        - kind: Group
+          name: "app-ocp-rbac-{{ index .Labels "company.net/mnemonic" }}-ns-developer"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          kind: ClusterRole
+          name: edit
+          apiGroup: rbac.authorization.k8s.io
+
+    # Audit RoleBinding - Universal access for ALL environments (including prod)
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: "{{ index .Labels "company.net/mnemonic" }}-audit-rb"
+          namespace: "{{ .Name }}"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: ns-audit
+            rbac.ocp.io/mnemonic: "{{ index .Labels "company.net/mnemonic" }}"
+            rbac.ocp.io/environment: "{{ index .Labels "company.net/app-environment" }}"
+            rbac.ocp.io/access-level: audit-prod-only
+            rbac.ocp.io/config-source: prod-rbac
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-namespace: "{{ .Name }}"
+            rbac.ocp.io/source-namespaceconfig: prod-namespaceconfig-rbac
+            rbac.ocp.io/group-pattern: "app-ocp-rbac-{{ index .Labels "company.net/mnemonic" }}-ns-audit"
+            rbac.ocp.io/environment-restriction: "prod-only"
+        subjects:
+        - kind: Group
+          name: "app-ocp-rbac-{{ index .Labels "company.net/mnemonic" }}-ns-audit"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          kind: ClusterRole
+          name: view
+          apiGroup: rbac.authorization.k8s.io
+```
+
+**Benefits:**
+- ✅ **Resource Identification**: Resources can be easily identified via labels/annotations
+- ✅ **Queryable Resources**: Users can query operator-generated resources using standard Kubernetes label selectors
+- ✅ **Automatic Cleanup**: Removing namespace labels automatically triggers resource cleanup (production-ready)
+- ✅ **No CR Deletion Required**: Resources can be removed from specific namespaces without deleting the entire CR
+- ✅ **Sustainable for Production**: This approach works well in production environments where multiple namespaces are managed by a single CR
+- ✅ **Clear Ownership**: Annotations clearly identify which CR created each resource
+
+**See Also:** 
+- [Resolved Issues Tracker - Issue #50](../resolved-issues-tracker/resolved-issues-tracker.md)
+- [Groups and Bindings Examples](./groups-and-bindings-examples.md) - Includes resource identification examples
 
 ---
 
 ## Feature Enhancements
+
+### Code Refactoring: Common Reconciler Helpers
+
+**Status:** ✅ COMPLETED (December 10, 2025)
+
+**Description:**
+Extracted duplicate retry logic and logging helpers from individual controllers into a centralized common package to improve code maintainability and consistency.
+
+**Features:**
+- **Centralized Retry Logic**: `ManageSuccessWithRetry` function in common package
+- **Centralized Logging Helpers**: `LogReconcilingStarted` and `LogResourcesProcessedSuccessfully` functions
+- **Consistent Behavior**: All three controllers now use the same retry and logging logic
+- **Reduced Code Duplication**: Removed ~59 lines of duplicate code from each controller
+
+**Implementation:**
+- Created `controllers/common/reconciler_helpers.go` with shared functionality
+- Refactored `GroupConfigReconciler`, `NamespaceConfigReconciler`, and `UserConfigReconciler` to use common helpers
+- Removed duplicate `manageSuccessWithRetry` methods from all three controllers
+- Removed unused `time` import from controllers
+
+**Files Modified:**
+- `controllers/common/reconciler_helpers.go` - **NEW** - Common reconciler helper functions
+- `controllers/groupconfig_controller.go` - Refactored to use common helpers (-59 lines)
+- `controllers/namespaceconfig_controller.go` - Refactored to use common helpers (-59 lines)
+- `controllers/userconfig_controller.go` - Refactored to use common helpers (-59 lines)
+
+**Benefits:**
+- **Maintainability**: Single source of truth for retry logic and logging
+- **Consistency**: All controllers behave identically for retry and logging
+- **Testability**: Common logic can be tested once and reused
+- **Code Quality**: Reduced duplication improves maintainability
+
+**See Also:** Commit `d9f697c` - "Refactor: Extract common reconciler helpers and add groups/bindings documentation"
+
+---
 
 ### Enhanced Template Filtering with AND/OR Logic
 
@@ -366,7 +1046,9 @@ Added V(1) level logging when resources are skipped because no templates match t
 {"level":"debug","msg":"skipping group - no GroupConfig templates match the group pattern","group":"app-ocp-rbac-platform-cluster-admin","groupconfig":"cluster-audit-groupconfig-rbac"}
 ```
 
-**See Also:** [Issue #134 - Logging Enhancements](#issue-134-log-level-configuration)
+**See Also:** 
+- [Issue #134 - Logging Enhancements](#issue-134-log-level-configuration)
+- [Issue #50 - Resource Identification](#issue-50-provide-a-way-to-identify-operator-generated-resources)
 
 ---
 
@@ -450,7 +1132,22 @@ All logs use structured JSON format for easy parsing and filtering in ELK and ot
 - `ZAP_DEVEL=false` - JSON format (production)
 - `ZAP_DEVEL=true` - Console format (development)
 
-**See Also:** [Issue #134 - Log Level Configuration](#issue-134-log-level-configuration)
+**Important Configuration Note (Updated December 10, 2025):**
+- **For OLM-managed deployments**: Configure `ZAP_LOG_LEVEL` and `ZAP_DEVEL` via `Subscription.spec.config.env`, NOT directly on the Deployment
+- **For local development**: Set environment variables when running `./run-go.sh`
+- **Documentation updated**: Corrected guidance in `groups-and-bindings-examples.md` to reflect proper configuration method
+
+**Example Operator Logs:**
+The documentation now includes real-world log examples showing:
+- `reconciling started` messages with GroupConfig names
+- `resources processed successfully` messages with group counts and resource counts
+- Structured JSON format suitable for log aggregation systems
+- Log level: `info` (ZAP_LOG_LEVEL=info)
+- Development mode: `false` (ZAP_DEVEL=false)
+
+**See Also:** 
+- [Issue #134 - Log Level Configuration](#issue-134-log-level-configuration)
+- [Groups and Bindings Examples](./groups-and-bindings-examples.md) - Includes log examples and configuration guidance
 
 ---
 
@@ -462,6 +1159,7 @@ All logs use structured JSON format for easy parsing and filtering in ELK and ot
 
 **New Documentation Files:**
 1. **Issue Documentation:**
+   - Issue #50: Comprehensive documentation in `FEATURES_AND_ISSUES_RESOLUTION.md` with test results and template examples
    - `../examples/test-and-logic/ISSUE-134-ROOT-CAUSE-SUMMARY.md`
    - `../examples/test-and-logic/ISSUE-134-VERIFICATION-GUIDE.md`
    - `../examples/test-and-logic/ISSUE-134-FIX-IMPLEMENTATION.md`
@@ -470,11 +1168,13 @@ All logs use structured JSON format for easy parsing and filtering in ELK and ot
    - `../examples/test-and-logic/ISSUE-194-FIX-IMPLEMENTATION.md`
 
 2. **Technical Documentation:**
+   - `./groups-and-bindings-examples.md` - Groups and bindings examples with resource identification guidance (Issue #50)
    - `./LOG_LEVEL_CONFIGURATION.md` - Log level configuration guide
    - `./DOCKERFILE_ENHANCEMENTS.md` - Dockerfile enhancements
    - `./MAKEFILE_VERSION_INJECTION.md` - Makefile version injection
    - `./CI_CD_VERSION_INJECTION.md` - CI/CD version injection
    - `./TEMPLATE_FILTERING_LOGS_EXPLANATION.md` - Template filtering logs
+   - `./groups-and-bindings-examples.md` - **NEW** (December 10, 2025) - Groups and bindings examples with commands
 
 3. **Build and Run:**
    - `../BUILD-RUN.md` - Build and run instructions
@@ -482,7 +1182,35 @@ All logs use structured JSON format for easy parsing and filtering in ELK and ot
 4. **Resolved Issues Tracker:**
    - `../resolved-issues-tracker/resolved-issues-tracker.md` - Comprehensive tracker
 
-**See Also:** [Resolved Issues Tracker - Documentation](../resolved-issues-tracker/resolved-issues-tracker.md)
+**Groups and Bindings Examples Documentation (NEW - December 10, 2025):**
+
+Created comprehensive documentation (`./groups-and-bindings-examples.md`) providing (related to Issue #50):
+- **Group Naming Patterns**: Cluster-level and namespace-level group conventions
+- **Example Groups**: Commands to view and inspect groups
+- **ClusterRoleBindings Examples**: How to view and verify cluster-level bindings
+- **RoleBindings Examples**: How to view and verify namespace-level bindings
+- **Common Queries**: Practical commands for counting, finding, and verifying bindings
+- **Example Operator Logs**: Real-world log examples with explanations
+  - Shows structured JSON logs with `ZAP_LOG_LEVEL=info` and `ZAP_DEVEL=false`
+  - Explains log fields: `reconciling started`, `resources processed successfully`, `groups`, `resources`
+  - Includes commands for filtering and monitoring logs
+- **Log Level Configuration**: Correct guidance on configuring via Subscription (not Deployment)
+- **Troubleshooting**: Commands for verifying operator status and manual reconciliation
+
+**Key Features:**
+- Practical, copy-paste ready commands
+- Real-world examples from production clusters
+- Clear explanations of log structure and meaning
+- Correct configuration guidance (Subscription-based, not Deployment-based)
+
+**Documentation Locations:**
+- `./groups-and-bindings-examples.md` - In this repository (namespace-configuration-operator)
+- `../openshift-rbac-automation/docs/groups-and-bindings-examples.md` - In openshift-rbac-automation repository (for end users)
+
+**See Also:** 
+- [Resolved Issues Tracker - Documentation](../resolved-issues-tracker/resolved-issues-tracker.md)
+- [Groups and Bindings Examples](./groups-and-bindings-examples.md) - Includes resource identification examples (Issue #50)
+- [Issue #50 - Resource Identification](#issue-50-provide-a-way-to-identify-operator-generated-resources)
 
 ---
 

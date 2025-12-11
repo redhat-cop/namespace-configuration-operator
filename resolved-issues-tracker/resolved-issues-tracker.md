@@ -1,13 +1,90 @@
 # Resolved Issues Tracker - Namespace Configuration Operator
 
-**Last Updated:** December 9, 2025  
+**Last Updated:** December 10, 2025  
 **Status:** Major improvements implemented and tested ✅
 
 > **Note**: This document tracks resolved issues, completed features, and improvements. For active work or pending items, see the main project documentation.
 
 ## Current Status
 
-### Recently Completed (December 8-9, 2025) ✅
+### Recently Completed (December 10, 2025) ✅
+
+#### 15. Issue #50 - Provide a way to identify operator generated resources ✅
+- **Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/50
+- **Problem**: Teams creating their own network policies may get confused with NetworkPolicies injected by the operator. No easy way to identify operator-generated resources.
+- **Solution**: Manual specification of labels and annotations in templates
+  - Users add identifying labels/annotations to templates (e.g., `app.kubernetes.io/managed-by: namespace-configuration-operator`)
+  - Labels and annotations are applied to all created resources
+  - Resources can be queried using standard Kubernetes label selectors
+- **Key Features**:
+  - **Resource Identification**: Resources can be easily identified via labels/annotations
+  - **Automatic Cleanup**: Removing namespace labels automatically triggers resource deletion (production-ready)
+  - **Automatic Recreation**: Adding namespace labels back automatically recreates resources
+  - **No CR Deletion Required**: Resources can be removed from specific namespaces without deleting the entire CR
+- **Verification**: Comprehensive test results documented showing:
+  - Metadata verification on created resources (ClusterRoleBindings and RoleBindings)
+  - Automatic cleanup when namespace labels are removed
+  - Automatic recreation when namespace labels are added back
+  - Complete lifecycle demonstration
+- **Example Template**: Full YAML template example in documentation showing proper metadata specification
+- **Status**: ✅ RESOLVED - Resources can be identified via labels/annotations, and automatic cleanup/recreation works correctly
+
+#### 16. Issue #132 - Status Update Conflict Blocking Subsequent Reconciles ✅
+- **Issue**: https://github.com/redhat-cop/namespace-configuration-operator/issues/132
+- **Problem**: When status updates failed due to optimistic concurrency conflicts, all following enqueued namespaceconfigs were not processed, blocking the reconciliation queue
+- **Root Cause**: `ManageSuccess` function was called directly without retry logic, causing immediate failures on resourceVersion mismatches
+- **Solution**: Implemented `ManageSuccessWithRetry` function in `controllers/common/reconciler_helpers.go`
+  - Automatic conflict detection using `errors.IsConflict(err)`
+  - Re-fetches instance before each retry to get latest resourceVersion
+  - Exponential backoff: 5 retries with delays (50ms, 100ms, 200ms, 400ms, 800ms)
+  - Applied to all three controllers (GroupConfig, NamespaceConfig, UserConfig)
+- **Benefits**: Prevents queue blocking, automatic recovery, better observability, consistent behavior, reduced false positives
+- **Files Modified**:
+  - `controllers/common/reconciler_helpers.go` - **NEW** - `ManageSuccessWithRetry` function
+  - `controllers/groupconfig_controller.go` - Uses `ManageSuccessWithRetry`
+  - `controllers/namespaceconfig_controller.go` - Uses `ManageSuccessWithRetry`
+  - `controllers/userconfig_controller.go` - Uses `ManageSuccessWithRetry`
+- **Status**: ✅ RESOLVED - Optimistic concurrency conflicts now handled automatically with retry logic
+
+#### 17. Code Refactoring: Common Reconciler Helpers
+- **Description**: Extracted duplicate retry logic and logging helpers from individual controllers into centralized common package
+- **Implementation**: Created `controllers/common/reconciler_helpers.go` with shared functionality
+  - `ManageSuccessWithRetry` - Centralized retry logic for all controllers
+  - `LogReconcilingStarted` - Centralized logging helper
+  - `LogResourcesProcessedSuccessfully` - Centralized logging helper
+- **Benefits**: 
+  - Single source of truth for retry logic and logging
+  - Consistent behavior across all controllers
+  - Reduced code duplication (~59 lines removed from each controller)
+  - Improved maintainability and testability
+- **Files Modified**:
+  - `controllers/common/reconciler_helpers.go` - **NEW**
+  - `controllers/groupconfig_controller.go` - Refactored (-59 lines)
+  - `controllers/namespaceconfig_controller.go` - Refactored (-59 lines)
+  - `controllers/userconfig_controller.go` - Refactored (-59 lines)
+- **Status**: ✅ COMPLETED - Code duplication eliminated, maintainability improved
+
+#### 18. Documentation: Groups and Bindings Examples
+- **New Documentation**: `docs/groups-and-bindings-examples.md` and `openshift-rbac-automation/docs/groups-and-bindings-examples.md`
+- **Content**: Comprehensive documentation providing:
+  - Group naming patterns (cluster-level and namespace-level)
+  - Example commands to view and inspect groups
+  - ClusterRoleBindings and RoleBindings examples
+  - Common queries for counting, finding, and verifying bindings
+  - Real-world operator log examples with explanations
+  - Log level configuration guidance (corrected to use Subscription, not Deployment)
+  - Troubleshooting commands
+- **Status**: ✅ COMPLETED - Practical documentation for operators and administrators
+
+#### 19. Documentation Fix: Log Level Configuration Guidance
+- **Issue**: Incorrect guidance on setting `ZAP_LOG_LEVEL` and `ZAP_DEVEL` directly on Deployment
+- **Fix**: Updated documentation to correctly explain configuration via OLM Subscription resource
+  - For OLM-managed deployments: Configure via `Subscription.spec.config.env`
+  - For local development: Set environment variables when running `./run-go.sh`
+- **Files Updated**: `docs/groups-and-bindings-examples.md` (both repositories)
+- **Status**: ✅ COMPLETED - Documentation now reflects correct configuration method
+
+### Previously Completed (December 8-9, 2025) ✅
 
 #### 9. Enhanced Template Filtering with AND/OR Logic (Extended)
 - **Comprehensive AND/OR Logic Support**: Extended template filtering to all controllers (GroupConfig, NamespaceConfig, UserConfig)
@@ -175,7 +252,9 @@
 - `BUILD-RUN.md` - Build and run documentation
 - `internal/version/version.go` - Version management package
 - `controllers/common/common.go` - Common utilities and predicates
+- `controllers/common/reconciler_helpers.go` - **NEW (December 10, 2025)** - Common reconciler helper functions (ManageSuccessWithRetry, logging helpers)
 - `docs/LOG_LEVEL_CONFIGURATION.md` - Log level configuration guide
+- `docs/groups-and-bindings-examples.md` - **NEW (December 10, 2025)** - Groups and bindings examples documentation
 - `kyverno-policies/` - Kyverno policy files and templates
 - `local-utilities/` - Development utility scripts
 - `controllers/unrecognized_conditionals_test.go` - Tests for unrecognized conditional detection
@@ -194,9 +273,10 @@
 
 ### Modified Files
 - `main.go` - Added startup banner and log level configuration
-- `controllers/groupconfig_controller.go` - Template filtering AND/OR logic, unrecognized conditional detection
-- `controllers/namespaceconfig_controller.go` - New predicate, template filtering with AND/OR logic, unrecognized conditional detection
-- `controllers/userconfig_controller.go` - New predicate, template filtering with AND/OR logic, unrecognized conditional detection
+- `controllers/groupconfig_controller.go` - Template filtering AND/OR logic, unrecognized conditional detection, refactored to use common reconciler helpers (December 10, 2025)
+- `controllers/namespaceconfig_controller.go` - New predicate, template filtering with AND/OR logic, unrecognized conditional detection, refactored to use common reconciler helpers (December 10, 2025)
+- `controllers/userconfig_controller.go` - New predicate, template filtering with AND/OR logic, unrecognized conditional detection, refactored to use common reconciler helpers (December 10, 2025)
+- `docs/FEATURES_AND_ISSUES_RESOLUTION.md` - **UPDATED (December 10, 2025)** - Added issue #50 and issue #132 documentation, updated with recent work
 - `Dockerfile` - Version info and log level defaults
 - `PodmanMakefile` - Version detection and build improvements
 - `Makefile` - Version detection in build target
@@ -250,10 +330,15 @@
 - ✅ Template filtering correctly handles AND/OR conditions across all controllers
 - ✅ Unrecognized conditional detection prevents template filtering errors
 - ✅ Comprehensive test coverage for all template filtering scenarios
+- ✅ Issue #50 resolved - Resources can be identified via labels/annotations, automatic cleanup/recreation works
+- ✅ Issue #50 resolved - Resources can be identified via labels/annotations, automatic cleanup/recreation works
 - ✅ Issue #194 root cause identified (operator-utils dependency)
+- ✅ Issue #132 resolved - Optimistic concurrency conflicts handled automatically with retry logic
+- ✅ Code refactoring eliminates duplication and improves maintainability
 - ✅ All utilities documented and tested
 - ✅ Build system automatically detects version info
 - ✅ Documentation consolidated and comprehensive
+- ✅ Groups and bindings examples documentation provides practical guidance
 
 ## Known Issues
 
