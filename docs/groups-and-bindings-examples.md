@@ -258,6 +258,82 @@ oc get pods -n namespace-configuration-operator
 oc logs -n namespace-configuration-operator -l control-plane=controller-manager --tail=100
 ```
 
+**Note**: The operator logs shown in this documentation are generated with:
+- **Log Level**: `info` (ZAP_LOG_LEVEL=info)
+- **Development Mode**: `false` (ZAP_DEVEL=false)
+
+This produces structured JSON logs suitable for production environments.
+
+### Example Operator Logs
+
+When the operator is working correctly, you'll see structured JSON logs showing reconciliation activity. These logs are generated with:
+- **Log Level**: `info` (set via `ZAP_LOG_LEVEL=info`)
+- **Development Mode**: `false` (set via `ZAP_DEVEL=false`)
+
+Here's an example of what successful GroupConfig processing looks like:
+
+```json
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"reconciling started","groupconfig":{"name":"cluster-admin-groupconfig-rbac"}}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"resources processed successfully","groupconfig":{"name":"cluster-admin-groupconfig-rbac"},"groupconfig":"cluster-admin-groupconfig-rbac","groups":28,"resources":6}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"reconciling started","groupconfig":{"name":"cluster-audit-groupconfig-rbac"}}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"resources processed successfully","groupconfig":{"name":"cluster-audit-groupconfig-rbac"},"groupconfig":"cluster-audit-groupconfig-rbac","groups":28,"resources":2}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"reconciling started","groupconfig":{"name":"cluster-developer-groupconfig-rbac"}}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"resources processed successfully","groupconfig":{"name":"cluster-developer-groupconfig-rbac"},"groupconfig":"cluster-developer-groupconfig-rbac","groups":28,"resources":4}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"reconciling started","groupconfig":{"name":"user-workload-monitoring-admin-groupconfig-rbac"}}
+
+{"level":"info","ts":"2025-12-10T20:54:01Z","logger":"controllers.GroupConfig","msg":"resources processed successfully","groupconfig":{"name":"user-workload-monitoring-admin-groupconfig-rbac"},"groupconfig":"user-workload-monitoring-admin-groupconfig-rbac","groups":28,"resources":15}
+```
+
+**Key information in the logs:**
+- **`reconciling started`**: Indicates the operator began processing a GroupConfig
+- **`resources processed successfully`**: Shows the reconciliation completed successfully
+- **`groups`**: Number of groups that matched the GroupConfig selector (28 in this example)
+- **`resources`**: Number of resources (ClusterRoleBindings/RoleBindings) created or updated (varies by GroupConfig)
+
+**Filtering logs for specific GroupConfigs:**
+
+```bash
+# Watch logs for a specific GroupConfig
+oc logs -n namespace-configuration-operator -l control-plane=controller-manager --tail=100 | grep "cluster-admin-groupconfig-rbac"
+
+# Watch logs in real-time
+oc logs -n namespace-configuration-operator -l control-plane=controller-manager -f | grep "GroupConfig"
+```
+
+**Changing log level:**
+
+The operator's log level is configured via the Subscription resource (for OLM-managed deployments), not directly on the Deployment. The configuration uses:
+- `ZAP_LOG_LEVEL`: Controls log verbosity (options: `error`, `info`, `debug`, or numeric 0-10)
+- `ZAP_DEVEL`: Controls development mode (options: `true` for console logs, `false` for JSON structured logs)
+
+To change these settings, update the Subscription:
+```bash
+# Find your Subscription
+oc get subscription -A | grep namespace-configuration-operator
+
+# Patch the Subscription to set log level (example: set to debug)
+oc patch subscription namespace-configuration-operator -n openshift-operators --type='merge' -p='
+spec:
+  config:
+    env:
+    - name: ZAP_LOG_LEVEL
+      value: "debug"
+    - name: ZAP_DEVEL
+      value: "false"
+'
+```
+
+**Note**: For local development, you can set these via environment variables when running `./run-go.sh`:
+```bash
+ZAP_LOG_LEVEL=debug ZAP_DEVEL=false ./run-go.sh
+```
+
 ### Manual Reconciliation
 
 If bindings are not being created automatically:
