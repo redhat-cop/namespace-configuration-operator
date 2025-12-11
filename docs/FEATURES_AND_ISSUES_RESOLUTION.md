@@ -664,6 +664,63 @@ oc get networkpolicy allow-from-same-namespace -n beta-prod -o jsonpath='{.metad
 (empty - no annotations)
 ```
 
+**Step 6a: Full NetworkPolicy YAML showing no operator-added metadata:**
+```bash
+oc get networkpolicies -n beta-prod -oyaml
+```
+**Output:**
+```yaml
+apiVersion: v1
+items:
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    creationTimestamp: "2025-12-11T00:14:39Z"
+    generation: 1
+    name: allow-from-default-namespace
+    namespace: beta-prod
+    resourceVersion: "15564753"
+    uid: 0568aa09-b053-438e-9065-dd558a4ee2b7
+  spec:
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: default
+    podSelector: {}
+    policyTypes:
+    - Ingress
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    creationTimestamp: "2025-12-11T00:14:39Z"
+    generation: 1
+    name: allow-from-same-namespace
+    namespace: beta-prod
+    resourceVersion: "15564752"
+    uid: f636d79a-9ce6-4ca0-900c-deea135e9e90
+  spec:
+    ingress:
+    - from:
+      - podSelector: {}
+    podSelector: {}
+    policyTypes:
+    - Ingress
+kind: List
+metadata:
+  resourceVersion: ""
+```
+
+**Important Observation:**
+
+The NetworkPolicies shown above have **NO labels or annotations** in their metadata section. This demonstrates:
+
+1. **Operator Management Without Metadata**: The operator can watch, monitor, and manage these NetworkPolicies even without identifying labels/annotations. The operator tracks resources internally through the `EnforcingReconciler` mechanism.
+
+2. **Resource Identification Issue**: However, **users cannot easily identify** these as operator-generated resources because there are no identifying labels or annotations. Teams cannot distinguish between NetworkPolicies they created manually and those injected by the operator.
+
+3. **Solution - Manual Metadata**: As shown in the RBAC example (`prod-namespaceconfig-rbac.yaml`), if you want to identify operator-generated resources, you must **manually add labels and annotations** to your templates. The operator does not automatically inject identifying metadata.
+
 **Step 7: Test automatic cleanup (remove label):**
 ```bash
 oc label namespace beta-prod multitenant-
