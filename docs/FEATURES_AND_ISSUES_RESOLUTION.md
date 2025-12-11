@@ -426,7 +426,7 @@ namespace/beta-prod unlabeled
 
 **Step 5: Wait for operator reconciliation:**
 ```bash
-echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+sleep 15
 ```
 
 **Step 6: Verify label was removed:**
@@ -435,8 +435,8 @@ oc get namespace beta-prod -o jsonpath='{.metadata.labels.company\.net/app-envir
 ```
 **Output:**
 ```
-(empty - label removed)
 ```
+*(Label removed - empty output)*
 
 **Step 7: Verify RoleBindings are automatically deleted:**
 ```bash
@@ -445,15 +445,6 @@ oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac
 **Output:**
 ```
 No resources found in beta-prod namespace.
-```
-
-**Alternative verification command:**
-```bash
-oc get rolebindings -n beta-prod -l rbac.ocp.io/config-source=prod-rbac -o json | jq -r '.items[] | .metadata.name' 2>&1
-```
-**Output:**
-```
-(empty - no resources found)
 ```
 
 **Step 8: Verify only default RoleBindings remain:**
@@ -548,7 +539,7 @@ prod
 
 **Step 3: Wait for operator reconciliation:**
 ```bash
-echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+sleep 15
 ```
 
 **Step 4: Verify RoleBindings are automatically recreated:**
@@ -633,7 +624,7 @@ namespace/beta-prod labeled
 
 **Step 4: Wait for operator reconciliation:**
 ```bash
-echo "Waiting 15 seconds for operator reconciliation..." && sleep 15
+sleep 15
 ```
 
 **Step 5: Verify NetworkPolicies are created:**
@@ -647,24 +638,7 @@ allow-from-default-namespace   <none>         13s
 allow-from-same-namespace      <none>         13s
 ```
 
-**Step 6: Check for identifying labels/annotations (Issue #50 demonstration):**
-```bash
-oc get networkpolicy allow-from-same-namespace -n beta-prod -o jsonpath='{.metadata.labels}' | jq .
-```
-**Output:**
-```
-(empty - no labels)
-```
-
-```bash
-oc get networkpolicy allow-from-same-namespace -n beta-prod -o jsonpath='{.metadata.annotations}' | jq .
-```
-**Output:**
-```
-(empty - no annotations)
-```
-
-**Step 6a: Full NetworkPolicy YAML showing no operator-added metadata:**
+**Step 6: Full NetworkPolicy YAML showing no operator-added metadata:**
 ```bash
 oc get networkpolicies -n beta-prod -oyaml
 ```
@@ -758,14 +732,6 @@ allow-from-default-namespace   <none>         28s
 allow-from-same-namespace      <none>         28s
 ```
 *(NetworkPolicies automatically recreated with new AGE)*
-
-**Key Finding - Issue #50 Demonstration:**
-
-The NetworkPolicies created by the operator have **NO identifying labels or annotations**. This demonstrates the core problem described in Issue #50:
-
-- **Cannot identify operator-generated resources**: Teams cannot distinguish between NetworkPolicies they created and those injected by the operator
-- **No query mechanism**: Cannot use label selectors like `app.kubernetes.io/managed-by=namespace-configuration-operator` to find operator-generated NetworkPolicies
-- **Solution needed**: Users must manually add identifying labels/annotations to templates (as shown in the `prod-namespaceconfig-rbac.yaml` example)
 
 **How Automatic Cleanup Works:**
 
