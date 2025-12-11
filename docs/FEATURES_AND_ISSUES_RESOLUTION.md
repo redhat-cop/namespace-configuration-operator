@@ -813,6 +813,8 @@ spec:
 - ✅ **Sustainable for Production**: This approach works well in production environments where multiple namespaces are managed by a single CR
 - ✅ **Clear Ownership**: Annotations clearly identify which CR created each resource
 
+**Issue Status:** ✅ **FIXED** - This issue has been resolved. Users can now identify operator-generated resources by manually adding labels and annotations to their templates. The operator correctly handles automatic cleanup and recreation of resources based on namespace label changes, making this solution production-ready and sustainable.
+
 **See Also:** 
 - [Resolved Issues Tracker - Issue #50](../resolved-issues-tracker/resolved-issues-tracker.md)
 - [Groups and Bindings Examples](./groups-and-bindings-examples.md) - Includes resource identification examples
