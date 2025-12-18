@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: manager
-          image: quay.io/namespace-configuration-operator/namespace-configuration-operator:latest 
+          image: quay.io/redhat-cop/namespace-configuration-operator:latest 
