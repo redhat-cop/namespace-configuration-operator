@@ -50,7 +50,15 @@ OpenShift enforces Pod Security Standards. Kyverno is compatible with the `restr
 
 ---
 
-## Installation Steps
+## Installation Methods
+
+There are two methods to install Kyverno:
+1. **Helm Chart Installation** (Recommended) - Using official Helm charts
+2. **Git Repository Installation** - Clone and install from source
+
+---
+
+## Method 1: Helm Chart Installation (Recommended)
 
 ### Step 1: Add Kyverno Helm Repository
 
@@ -70,6 +78,9 @@ helm search repo kyverno/kyverno --versions | head -20
 # kyverno/kyverno      3.6.0          v1.16.0      Kubernetes Native Policy Management
 # kyverno/kyverno      3.5.2          v1.15.2      Kubernetes Native Policy Management
 # ...
+
+# Note: Helm chart 3.6.1 provides v1.16.1
+# Newer releases like v1.16.2 and v1.16.3 exist in git but may not have Helm charts yet
 ```
 
 ### Step 2: Create Kyverno Namespace
@@ -234,6 +245,82 @@ oc delete cpol require-labels
 
 ---
 
+## Method 2: Git Repository Installation
+
+This method is useful if you need a specific version not yet available in Helm charts (e.g., v1.16.3).
+
+### Step 1: Clone Kyverno Repository
+
+```bash
+# Clone the Kyverno repository
+git clone https://github.com/kyverno/kyverno.git
+cd kyverno
+
+# List available tags
+git tag | grep "v1.16"
+
+# Expected output:
+# v1.16.0
+# v1.16.1
+# v1.16.2
+# v1.16.3
+# ...
+
+# Checkout the desired version (e.g., v1.16.3)
+git checkout v1.16.3
+```
+
+### Step 2: Install via Local Helm Chart
+
+```bash
+# Install from the local chart directory
+helm install kyverno ./charts/kyverno \
+  --namespace kyverno \
+  --create-namespace
+
+# Or with custom values
+helm install kyverno ./charts/kyverno \
+  --namespace kyverno \
+  --create-namespace \
+  --values /path/to/your/kyverno-values.yaml
+```
+
+### Step 3: Verify Installation
+
+```bash
+# Check pods
+oc get pods -n kyverno
+
+# Verify version
+oc get deploy -n kyverno -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+
+# Should show something like: ghcr.io/kyverno/kyverno:v1.16.3
+```
+
+### Alternative: Install via Kustomize
+
+Kyverno also provides kustomize manifests:
+
+```bash
+# From the cloned repository
+cd kyverno
+git checkout v1.16.3
+
+# Install using kustomize
+oc apply -k config/install/latest
+
+# Or for a specific version
+oc apply -k config/install/v1.16.3
+```
+
+**Note**: When using git installation:
+- You have access to the latest releases (v1.16.3)
+- You can customize manifests before installation
+- Updates require manual git pulls and reapplication
+- Helm charts may lag behind git releases by a few days/weeks
+
+---
+
 ## Troubleshooting
 
 ### Pods Not Starting
@@ -365,9 +452,13 @@ oc delete mutatingwebhookconfiguration -l webhook.kyverno.io/managed-by=kyverno
 
 ## Version Strategy
 
-### Why We're Staying on 3.6.1 (v1.16.1)
+### Why We're on 3.6.1 (v1.16.1)
 
-**Current Status**: We are intentionally staying on Kyverno **3.6.1 (v1.16.1)** for the following reasons:
+**Current Status**: We are running Kyverno **3.6.1 (v1.16.1)** installed via Helm.
+
+**Note**: Newer patch versions exist in git (v1.16.2, v1.16.3) but corresponding Helm charts may not be available yet. For most use cases, v1.16.1 is sufficient.
+
+**Reasons to stay on this version:**
 
 1. **ClusterPolicy Support**: Full support for ClusterPolicy-based policies (our current implementation)
 2. **Stability**: Proven stable in production (running for 99+ days)

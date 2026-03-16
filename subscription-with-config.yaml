@@ -13,7 +13,7 @@ spec:
   config:
     env:
     - name: ZAP_LOG_LEVEL
-      value: "2"
+      value: "info"
     - name: ZAP_DEVEL
       value: "false"
     - name: RELATED_IMAGE_MANAGER
