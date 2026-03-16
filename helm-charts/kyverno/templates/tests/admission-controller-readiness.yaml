@@ -1,0 +1,42 @@
+{{- if .Values.admissionController.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "kyverno.fullname" . }}-admission-controller-readiness
+  namespace: {{ template "kyverno.namespace" . }}
+  labels:
+    {{- include "kyverno.test.labels" . | nindent 4 }}
+  annotations:
+    {{- include "kyverno.test.annotations" . | nindent 4 }}
+spec:
+  automountServiceAccountToken: {{ .Values.test.automountServiceAccountToken }}
+  restartPolicy: Never
+  {{- with .Values.test.imagePullSecrets | default .Values.global.imagePullSecrets }}
+  imagePullSecrets:
+    {{- tpl (include "kyverno.sortedImagePullSecrets" .) $ | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: test
+      image: {{ template "kyverno.test.image" . }}
+      imagePullPolicy: {{ template "kyverno.test.imagePullPolicy" . }}
+      {{- with .Values.test.resources }}
+      resources:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.test.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      command:
+        - /bin/sh
+        - -c
+        - sleep {{ .Values.test.sleep }} ; wget -O- -S --no-check-certificate https://{{ template "kyverno.admission-controller.serviceName" . }}.{{ template "kyverno.namespace" . }}:{{ .Values.admissionController.service.port }}/health/readiness
+  {{- with .Values.test.nodeSelector | default .Values.global.nodeSelector }}
+  nodeSelector:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.test.tolerations | default .Values.global.tolerations}}
+  tolerations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+{{- end -}}

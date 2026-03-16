@@ -50,14 +50,43 @@ helm install kyverno /tmp/kyverno-3.6.1.tgz \
   --create-namespace
 ```
 
-### Step 3: Install with Custom Values
+### Step 3: Install with Custom Values (TLS Certificate Fix)
 
-Create a `kyverno-values.yaml`:
+**IMPORTANT**: If you see TLS certificate errors, use the provided values file:
+
+```bash
+# Install with TLS certificate fix
+helm install kyverno /path/to/kyverno-3.6.1.tgz \
+  --namespace kyverno \
+  --create-namespace \
+  --values kyverno-values-tls-fix.yaml
+```
+
+The `kyverno-values-tls-fix.yaml` file is included in this directory and enables automatic certificate generation.
+
+**Or create your own custom values** (with TLS fix included):
 
 ```yaml
 # kyverno-values.yaml
-replicaCount: 3
 
+# Enable TLS certificate generation (fixes certificate errors)
+admissionController:
+  createSelfSignedCert: true
+  replicas: 3
+
+backgroundController:
+  createSelfSignedCert: true
+  replicas: 2
+
+reportsController:
+  createSelfSignedCert: true
+  replicas: 2
+
+cleanupController:
+  createSelfSignedCert: true
+  replicas: 2
+
+# Resource configuration
 resources:
   limits:
     cpu: 2000m
@@ -65,18 +94,6 @@ resources:
   requests:
     cpu: 250m
     memory: 500Mi
-
-admissionController:
-  replicas: 3
-
-backgroundController:
-  replicas: 2
-
-reportsController:
-  replicas: 2
-
-cleanupController:
-  replicas: 2
 ```
 
 Install with custom values:
@@ -253,13 +270,37 @@ oc run test-pull --image=ghcr.io/kyverno/kyverno:v1.16.1 --rm -it --restart=Neve
 
 ### TLS Certificate Issues
 
-```bash
-# Kyverno auto-generates certificates
-# If you see TLS errors, restart the admission controller:
-oc rollout restart deployment kyverno-admission-controller -n kyverno
+**Symptom**: Errors like `secret "kyverno-svc.kyverno.svc.kyverno-tls-pair" not found`
 
+**Solution**: Install with TLS certificate generation enabled:
+
+```bash
+# Uninstall if already installed
+helm uninstall kyverno -n kyverno
+
+# Reinstall with TLS fix
+helm install kyverno /path/to/kyverno-3.6.1.tgz \
+  --namespace kyverno \
+  --create-namespace \
+  --values kyverno-values-tls-fix.yaml
+
+# Or upgrade existing installation
+helm upgrade kyverno /path/to/kyverno-3.6.1.tgz \
+  --namespace kyverno \
+  --values kyverno-values-tls-fix.yaml
+```
+
+**Verify certificates were created**:
+
+```bash
 # Check certificate secrets
 oc get secrets -n kyverno | grep tls
+
+# Should see:
+# kyverno-svc.kyverno.svc.kyverno-tls-ca
+# kyverno-svc.kyverno.svc.kyverno-tls-pair
+# kyverno-cleanup-controller.kyverno.svc.kyverno-tls-ca
+# kyverno-cleanup-controller.kyverno.svc.kyverno-tls-pair
 ```
 
 ---

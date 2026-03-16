@@ -1,0 +1,227 @@
+{{- if .Values.backgroundController.enabled -}}
+{{- if not .Values.global.templating.debug -}}
+{{- $automountSAToken := .Values.backgroundController.rbac.serviceAccount.automountServiceAccountToken -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "kyverno.background-controller.name" . }}
+  namespace: {{ template "kyverno.namespace" . }}
+  labels:
+    {{- include "kyverno.background-controller.labels" . | nindent 4 }}
+  {{- with .Values.backgroundController.annotations }}
+  annotations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ template "kyverno.deployment.replicas" .Values.backgroundController.replicas }}
+  revisionHistoryLimit: {{ .Values.backgroundController.revisionHistoryLimit }}
+  {{- with .Values.backgroundController.updateStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "kyverno.background-controller.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kyverno.background-controller.labels" . | nindent 8 }}
+        {{- with .Values.backgroundController.podLabels }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      {{- with .Values.backgroundController.podAnnotations }}
+      annotations: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.backgroundController.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- tpl (include "kyverno.sortedImagePullSecrets" .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.podSecurityContext }}
+      securityContext:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.nodeSelector | default .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.tolerations | default .Values.global.tolerations}}
+      tolerations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.backgroundController.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      {{- with .Values.backgroundController.dnsPolicy }}
+      dnsPolicy: {{ . }}
+      {{- end }}
+      {{- with .Values.backgroundController.dnsConfig }}
+      dnsConfig:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.backgroundController.antiAffinity.enabled .Values.backgroundController.podAffinity .Values.backgroundController.nodeAffinity }}
+      affinity:
+        {{- if .Values.backgroundController.antiAffinity.enabled }}
+        {{- with .Values.backgroundController.podAntiAffinity }}
+        podAntiAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.backgroundController.podAffinity }}
+        podAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.backgroundController.nodeAffinity }}
+        nodeAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: {{ template "kyverno.background-controller.serviceAccountName" . }}
+      automountServiceAccountToken: {{ $automountSAToken }}
+      containers:
+        - name: controller
+          image: {{ include "kyverno.background-controller.image" (dict "globalRegistry" .Values.global.image.registry "image" .Values.backgroundController.image "defaultTag" .Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ .Values.backgroundController.image.pullPolicy }}
+          ports:
+          - containerPort: {{ .Values.backgroundController.server.port }}
+            name: https
+            protocol: TCP
+          - containerPort: {{ .Values.backgroundController.metering.port }}
+            name: metrics
+            protocol: TCP
+          {{ if .Values.backgroundController.profiling.enabled }}
+          - containerPort: {{ .Values.backgroundController.profiling.port }}
+            name: profiling-port
+            protocol: TCP
+          {{- end }}
+          args:
+            {{- if .Values.backgroundController.tracing.enabled }}
+            - --enableTracing
+            - --tracingAddress={{ .Values.backgroundController.tracing.address }}
+            - --tracingPort={{ .Values.backgroundController.tracing.port }}
+            {{- with .Values.backgroundController.tracing.creds }}
+            - --tracingCreds={{ . }}
+            {{- end }}
+            {{- end }}
+            - --disableMetrics={{ .Values.backgroundController.metering.disabled }}
+            {{- if not .Values.backgroundController.metering.disabled }}
+            - --otelConfig={{ .Values.backgroundController.metering.config }}
+            - --metricsPort={{ .Values.backgroundController.metering.port }}
+            {{- with .Values.backgroundController.metering.collector }}
+            - --otelCollector={{ . }}
+            {{- end }}
+            {{- with .Values.backgroundController.metering.creds }}
+            - --transportCreds={{ . }}
+            {{- end }}
+            {{- end }}
+            {{- if or .Values.imagePullSecrets .Values.existingImagePullSecrets }}
+            - --imagePullSecrets={{- $secretNames := concat (keys .Values.imagePullSecrets | sortAlpha) (.Values.existingImagePullSecrets | sortAlpha) -}}
+              {{- join "," $secretNames -}}
+            {{- end }}
+            - --resyncPeriod={{ .Values.backgroundController.resyncPeriod | default .Values.global.resyncPeriod }}
+            {{- include "kyverno.features.flags" (pick (mergeOverwrite (deepCopy .Values.features) .Values.backgroundController.featuresOverride)
+              "reporting"
+              "configMapCaching"
+              "deferredLoading"
+              "globalContext"
+              "logging"
+              "omitEvents"
+              "policyExceptions"
+            ) | nindent 12 }}
+            {{- range $key, $value := .Values.backgroundController.extraArgs }}
+            {{- if $value }}
+            - --{{ $key }}={{ $value }}
+            {{- end }}
+            {{- end }}
+            {{ if .Values.backgroundController.profiling.enabled }}
+            - --profile=true
+            - --profilePort={{ .Values.backgroundController.profiling.port }}
+            {{- end }}
+          env:
+          - name: KYVERNO_SERVICEACCOUNT_NAME
+            value: {{ template "kyverno.background-controller.serviceAccountName" . }}
+          - name: KYVERNO_DEPLOYMENT
+            value: {{ template "kyverno.background-controller.name" . }}
+          - name: INIT_CONFIG
+            value: {{ template "kyverno.config.configMapName" . }}
+          - name: METRICS_CONFIG
+            value: {{ template "kyverno.config.metricsConfigMapName" . }}
+          - name: KYVERNO_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: KYVERNO_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- with (concat .Values.global.extraEnvVars .Values.backgroundController.extraEnvVars) }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- with .Values.backgroundController.resources }}
+          resources:
+            {{- tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backgroundController.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume (not $automountSAToken)}}
+          volumeMounts:
+            {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume }}
+            - name: ca-certificates
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data }}
+              subPath: ca-certificates.crt
+              {{- end }}
+            {{- end }}
+            {{- if not $automountSAToken }}
+            - name: serviceaccount-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            {{- end }}
+          {{- end }}
+      {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume (not $automountSAToken)}}
+      volumes:
+      {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data }}
+      - name: ca-certificates
+        configMap:
+          name: {{ include "kyverno.background-controller.caCertificatesConfigMapName" . }}
+          items:
+          - key: ca-certificates
+            path: ca-certificates.crt
+      {{- else if or .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume }}
+      {{- with (.Values.backgroundController.caCertificates.volume | default .Values.global.caCertificates.volume) }}
+      - name: ca-certificates
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if not $automountSAToken }}
+      - name: serviceaccount-token
+        projected:
+          defaultMode: 0444
+          sources:
+            - serviceAccountToken:
+                expirationSeconds: 3607
+                path: token
+            - configMap:
+                name: kube-root-ca.crt
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+            - downwardAPI:
+                items:
+                  - path: namespace
+                    fieldRef:
+                      apiVersion: v1
+                      fieldPath: metadata.namespace
+      {{- end }}
+{{- end -}}
+{{- end -}}

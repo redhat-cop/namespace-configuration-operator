@@ -1,0 +1,119 @@
+{{- if .Values.cleanupController.enabled -}}
+{{- if .Values.cleanupController.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ template "kyverno.cleanup-controller.roleName" . }}
+  {{- if .Values.webhooksCleanup.autoDeleteWebhooks.enabled }}
+  {{- if not .Values.global.templating.enabled }}
+  finalizers:
+  - kyverno.io/policywebhooks
+  - kyverno.io/ttlwebhooks
+  {{- end }}
+  {{- end }}
+  labels:
+    {{- include "kyverno.cleanup-controller.labels" . | nindent 4 }}
+  namespace: {{ template "kyverno.namespace" . }}
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - create
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - delete
+      - get
+      - list
+      - update
+      - watch
+    resourceNames:
+      - {{ template "kyverno.cleanup-controller.name" . }}.{{ template "kyverno.namespace" . }}.svc.kyverno-tls-ca
+      - {{ template "kyverno.cleanup-controller.name" . }}.{{ template "kyverno.namespace" . }}.svc.kyverno-tls-pair
+  {{- if .Values.webhooksCleanup.autoDeleteWebhooks.enabled }}
+  {{- if not .Values.global.templating.enabled }}
+  - apiGroups:
+      - ''
+    resources:
+      - serviceaccounts
+    verbs:
+      - delete
+      - get
+      - list
+      - update
+      - watch
+    resourceNames:
+      - {{ template "kyverno.cleanup-controller.serviceAccountName" . }}
+  {{- end }}
+  {{- end }}
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+    resourceNames:
+      - {{ include "kyverno.config.configMapName" . }}
+      - {{ include "kyverno.config.metricsConfigMapName" . }}
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - delete
+      - get
+      - patch
+      - update
+    resourceNames:
+      - kyverno-cleanup-controller
+  {{- if .Values.webhooksCleanup.autoDeleteWebhooks.enabled }}
+  {{- if not .Values.global.templating.enabled }}
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+    resourceNames:
+      - {{ template "kyverno.cleanup-controller.roleName" . }}
+      - {{ template "kyverno.cleanup-controller.roleName" . }}:temporary
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+    verbs:
+      - create
+  {{- end }}
+  {{- end }}
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+      {{- if .Values.webhooksCleanup.autoDeleteWebhooks.enabled }}
+      {{- if not .Values.global.templating.enabled }}
+      - patch
+      - update
+      {{- end }}
+      {{- end }}
+{{- end -}}
+{{- end -}}
