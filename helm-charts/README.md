@@ -481,6 +481,55 @@ For complete OpenShift-specific instructions, see:
 
 ---
 
+## Hack: Patching Operator Image via OLM CSV
+
+> **WARNING**: This is a temporary hack. OLM may revert the image if the subscription is set to `Automatic`. Always set approval to `Manual` first.
+
+Use this when you need to override the operator image in the CSV (e.g. to test a custom build from a personal registry) without going through a full OLM upgrade.
+
+### Step 1: Check the current CSV and container images
+
+```bash
+oc get csv -n namespace-configuration-operator -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.install.spec.deployments[*].spec.template.spec.containers[*].name}{"\t"}{.spec.install.spec.deployments[*].spec.template.spec.containers[*].image}{"\n"}{end}'
+```
+
+Expected output (containers at index 0=kube-rbac-proxy, 1=manager):
+```
+namespace-configuration-operator.v1.2.6   kube-rbac-proxy manager   quay.io/redhat-cop/kube-rbac-proxy@sha256:... quay.io/redhat-cop/namespace-configuration-operator@sha256:...
+```
+
+### Step 2: Set subscription to Manual (prevents OLM from reverting the change)
+
+```bash
+oc patch subscription namespace-configuration-operator \
+  -n namespace-configuration-operator \
+  --type merge \
+  -p '{"spec":{"installPlanApproval":"Manual"}}'
+```
+
+### Step 3: Patch the CSV manager image
+
+```bash
+oc patch csv namespace-configuration-operator.v1.2.6 \
+  -n namespace-configuration-operator \
+  --type='json' \
+  -p='[{"op":"replace","path":"/spec/install/spec/deployments/0/spec/template/spec/containers/1/image","value":"quay.io/ephico2real/namespace-configuration-operator:latest"}]'
+```
+
+### Step 4: Verify the deployment picked up the new image
+
+```bash
+# Check the deployment image
+oc get deployment namespace-configuration-operator-controller-manager \
+  -n namespace-configuration-operator \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}'
+
+# Check pod is running
+oc get pods -n namespace-configuration-operator
+```
+
+---
+
 ## Notes
 
 - **Chart Version**: 3.6.1
