@@ -50,15 +50,7 @@ OpenShift enforces Pod Security Standards. Kyverno is compatible with the `restr
 
 ---
 
-## Installation Methods
-
-There are two methods to install Kyverno:
-1. **Helm Chart Installation** (Recommended) - Using official Helm charts
-2. **Git Repository Installation** - Clone and install from source
-
----
-
-## Method 1: Helm Chart Installation (Recommended)
+## Installation Method: Helm Chart Installation
 
 ### Step 1: Add Kyverno Helm Repository
 
@@ -245,79 +237,24 @@ oc delete cpol require-labels
 
 ---
 
-## Method 2: Git Repository Installation
+## Offline Installation (Air-Gapped / Proxy-Restricted Environments)
 
-This method is useful if you need a specific version not yet available in Helm charts (e.g., v1.16.3).
-
-### Step 1: Clone Kyverno Repository
+For environments with proxy restrictions or limited internet access, use the pre-downloaded Helm chart:
 
 ```bash
-# Clone the Kyverno repository
-git clone https://github.com/kyverno/kyverno.git
-cd kyverno
-
-# List available tags
-git tag | grep "v1.16"
-
-# Expected output:
-# v1.16.0
-# v1.16.1
-# v1.16.2
-# v1.16.3
-# ...
-
-# Checkout the desired version (e.g., v1.16.3)
-git checkout v1.16.3
-```
-
-### Step 2: Install via Local Helm Chart
-
-```bash
-# Install from the local chart directory
-helm install kyverno ./charts/kyverno \
+# Install from local tar.gz file
+helm install kyverno /path/to/kyverno-3.6.1.tgz \
   --namespace kyverno \
   --create-namespace
-
-# Or with custom values
-helm install kyverno ./charts/kyverno \
-  --namespace kyverno \
-  --create-namespace \
-  --values /path/to/your/kyverno-values.yaml
 ```
 
-### Step 3: Verify Installation
+**Pre-downloaded charts are available in `helm-charts/` directory.**
 
-```bash
-# Check pods
-oc get pods -n kyverno
-
-# Verify version
-oc get deploy -n kyverno -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
-
-# Should show something like: ghcr.io/kyverno/kyverno:v1.16.3
-```
-
-### Alternative: Install via Kustomize
-
-Kyverno also provides kustomize manifests:
-
-```bash
-# From the cloned repository
-cd kyverno
-git checkout v1.16.3
-
-# Install using kustomize
-oc apply -k config/install/latest
-
-# Or for a specific version
-oc apply -k config/install/v1.16.3
-```
-
-**Note**: When using git installation:
-- You have access to the latest releases (v1.16.3)
-- You can customize manifests before installation
-- Updates require manual git pulls and reapplication
-- Helm charts may lag behind git releases by a few days/weeks
+For complete offline installation instructions, see:
+- `helm-charts/README.md` - Comprehensive offline installation guide
+- Includes chart download procedures
+- Image mirroring strategies
+- Troubleshooting for restricted environments
 
 ---
 
