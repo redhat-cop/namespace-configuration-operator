@@ -1,0 +1,64 @@
+apiVersion: policies.kyverno.io/v1alpha1
+kind: MutatingPolicy
+metadata:
+  name: configure-operator-log-level
+  annotations:
+    policies.kyverno.io/title: Configure Namespace Configuration Operator Log Level
+    policies.kyverno.io/category: Operator Configuration
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Deployment
+    policies.kyverno.io/description: >-
+      Injects log level environment variables into the namespace-configuration-operator
+      Deployment. This policy works with OLM-managed deployments and ensures log level
+      configuration persists even when OLM updates the Deployment. Uses CEL-based
+      MutatingPolicy (replaces deprecated ClusterPolicy).
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+        namespaces:
+          - namespace-configuration-operator
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          has(object.spec.template.spec.containers) &&
+          object.spec.template.spec.containers.exists(c, c.name == 'manager') &&
+          object.metadata.name == 'namespace-configuration-operator-controller-manager' ?
+            Object{
+              spec: Object.spec{
+                template: Object.spec.template{
+                  spec: Object.spec.template.spec{
+                    containers: object.spec.template.spec.containers.map(c,
+                      c.name == 'manager' ?
+                        Object.spec.template.spec.containers{
+                          name: c.name,
+                          env: [
+                            Object.spec.template.spec.containers.env{
+                              name: 'ZAP_LOG_LEVEL',
+                              value: '2'
+                            },
+                            Object.spec.template.spec.containers.env{
+                              name: 'ZAP_DEVEL',
+                              value: 'false'
+                            }
+                          ] + (has(c.env) ? c.env.filter(e, e.name != 'ZAP_LOG_LEVEL' && e.name != 'ZAP_DEVEL') : [])
+                        } : c
+                    )
+                  }
+                }
+              }
+            } : object
+  evaluation:
+    admission:
+      enabled: true
+  webhookConfiguration:
+    timeoutSeconds: 10

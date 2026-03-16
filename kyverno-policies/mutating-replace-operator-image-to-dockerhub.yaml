@@ -1,0 +1,90 @@
+apiVersion: policies.kyverno.io/v1alpha1
+kind: MutatingPolicy
+metadata:
+  name: replace-operator-image-to-dockerhub
+  annotations:
+    policies.kyverno.io/title: Replace operator manager image to Docker Hub latest
+    policies.kyverno.io/category: Image Registry
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Deployment,Pod
+    policies.kyverno.io/description: >-
+      Replaces the namespace-configuration-operator manager container image with
+      Docker Hub image and injects imagePullSecrets. Uses CEL-based MutatingPolicy
+      (replaces deprecated ClusterPolicy).
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+        namespaces:
+          - namespace-configuration-operator
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+        namespaces:
+          - namespace-configuration-operator
+  mutations:
+    # Mutate Pods - replace manager container image
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          has(object.spec.containers) && object.spec.containers.exists(c, c.name == 'manager') ?
+            Object{
+              spec: Object.spec{
+                containers: object.spec.containers.map(c,
+                  c.name == 'manager' ?
+                    Object.spec.containers{
+                      name: c.name,
+                      image: 'docker.io/ephico2real/namespace-configuration-operator:latest',
+                      imagePullPolicy: 'Always'
+                    } : c
+                ),
+                imagePullSecrets: has(object.spec.imagePullSecrets) ? 
+                  object.spec.imagePullSecrets : 
+                  [Object.spec.imagePullSecrets{name: 'dockerhub-secret'}]
+              }
+            } : object
+    # Mutate Deployments - replace manager container image in template
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: |
+          has(object.spec.template.spec.containers) && 
+          object.spec.template.spec.containers.exists(c, c.name == 'manager') &&
+          object.metadata.name == 'namespace-configuration-operator-controller-manager' ?
+            Object{
+              spec: Object.spec{
+                template: Object.spec.template{
+                  spec: Object.spec.template.spec{
+                    containers: object.spec.template.spec.containers.map(c,
+                      c.name == 'manager' ?
+                        Object.spec.template.spec.containers{
+                          name: c.name,
+                          image: 'docker.io/ephico2real/namespace-configuration-operator:latest',
+                          imagePullPolicy: 'Always'
+                        } : c
+                    ),
+                    imagePullSecrets: has(object.spec.template.spec.imagePullSecrets) ? 
+                      object.spec.template.spec.imagePullSecrets : 
+                      [Object.spec.template.spec.imagePullSecrets{name: 'dockerhub-secret'}]
+                  }
+                }
+              }
+            } : object
+  evaluation:
+    admission:
+      enabled: true
+  webhookConfiguration:
+    timeoutSeconds: 10
