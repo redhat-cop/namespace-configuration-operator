@@ -1,0 +1,82 @@
+# Kyverno Values - Combined Configuration
+#
+# This values file combines all configuration options for Kyverno.
+# Uncomment sections as needed for your environment.
+#
+# Usage:
+#   helm install kyverno /path/to/kyverno-3.6.1.tgz \
+#     --namespace kyverno \
+#     --create-namespace \
+#     --values kyverno-values.yaml
+
+# =============================================================================
+# TLS Certificate Generation
+# =============================================================================
+# Enable self-signed certificate generation (fixes TLS certificate errors)
+# Symptom if missing: "secret kyverno-svc.kyverno.svc.kyverno-tls-pair not found"
+
+admissionController:
+  createSelfSignedCert: true
+  replicas: 3
+  # Image override for air-gapped/internal registry environments
+  # image:
+  #   repository: registry.internal.com/kyverno/kyverno
+  #   tag: v1.16.1
+
+backgroundController:
+  createSelfSignedCert: true
+  replicas: 2
+  # image:
+  #   repository: registry.internal.com/kyverno/background-controller
+  #   tag: v1.16.1
+
+cleanupController:
+  createSelfSignedCert: true
+  replicas: 2
+  # image:
+  #   repository: registry.internal.com/kyverno/cleanup-controller
+  #   tag: v1.16.1
+
+reportsController:
+  createSelfSignedCert: true
+  replicas: 2
+  # image:
+  #   repository: registry.internal.com/kyverno/reports-controller
+  #   tag: v1.16.1
+
+# =============================================================================
+# Resource Configuration
+# =============================================================================
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 250m
+    memory: 500Mi
+
+# =============================================================================
+# Alternative: Use cert-manager instead of self-signed certificates
+# =============================================================================
+# Uncomment below if you have cert-manager installed and prefer it over
+# self-signed certificates. Also set createSelfSignedCert: false above.
+#
+# admissionController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+#
+# backgroundController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+#
+# cleanupController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+#
+# reportsController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
