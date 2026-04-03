@@ -10,7 +10,7 @@ on:
 jobs:
   shared-operator-workflow:
     name: shared-operator-workflow
-    uses: redhat-cop/github-workflows-operators/.github/workflows/release-operator.yml@b9f5e44cec534106ef44b1a9234084da59ba1e9c # v1.1.2
+    uses: redhat-cop/github-workflows-operators/.github/workflows/release-operator.yml@5b0493408637600ef9c71d2321337adac65153a3 # v1.1.6
     secrets:
       COMMUNITY_OPERATOR_PAT: ${{ secrets.COMMUNITY_OPERATOR_PAT }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
