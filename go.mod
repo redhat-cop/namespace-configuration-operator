@@ -2,7 +2,7 @@ module github.com/redhat-cop/namespace-configuration-operator
 
 go 1.21
 
-toolchain go1.21.4
+toolchain go1.27.1
 
 require (
 	github.com/go-logr/logr v1.2.4
