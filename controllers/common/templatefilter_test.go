@@ -5,6 +5,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -329,5 +330,82 @@ func TestIsApplicable_DoesNotReadGuardsFromComments(t *testing.T) {
 	}
 	if !strings.Contains(text, "hasSuffix") {
 		t.Fatal("test setup: the comment must mention a guard function")
+	}
+}
+
+// Render is the controllers' path into the renderer. Its one non-negotiable property, the reason it
+// exists, is that a failure is RETURNED: operator-utils' equivalent returns an empty list with a nil
+// error, which the enforcer then treats as "delete everything this batch used to own".
+func TestRender_ReturnsErrorsInsteadOfAnEmptyBatch(t *testing.T) {
+	f := newTestFilter()
+	good := apis.LockedResourceTemplate{ObjectTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: good\n  namespace: {{ .Name }}\n", ExcludedPaths: []string{".metadata"}}
+	subject := ns("team-a", map[string]string{oudGroupLabel: "app-x"}, nil)
+
+	cases := []struct {
+		name string
+		bad  string
+		want string // substring the error must carry
+	}{
+		{"execution error", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .Nope }}\n", "failed to render for team-a"},
+		{"required label missing", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ required \"team label\" (index .Labels \"team\") }}\n", "team label"},
+		{"invalid yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: [\n", "failed to render"},
+		{"parse error", "{{- if bogus .Name }}\nkind: ConfigMap\n{{- end }}", "does not parse"},
+		{"comment-only render", "{{- if .Name }}\n# nothing but a comment\n{{- end }}\n", "Kind' is missing"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := f.Render(context.Background(), []apis.LockedResourceTemplate{good, {ObjectTemplate: tc.bad}}, subject)
+			if err == nil {
+				t.Fatalf("expected an error, got %d resources", len(out))
+			}
+			if out != nil {
+				t.Errorf("a failed render must not return a partial batch, got %d resources", len(out))
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q should mention %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+func TestRender_HappyPathCarriesExcludedPathsAndSkipsRejected(t *testing.T) {
+	f := newTestFilter()
+	templates := []apis.LockedResourceTemplate{
+		{ObjectTemplate: chartPrefixGuard, ExcludedPaths: []string{".metadata", ".status"}},
+		{ObjectTemplate: chartTruthinessGuard},
+		{ObjectTemplate: "- apiVersion: v1\n  kind: ConfigMap\n  metadata:\n    name: a\n- apiVersion: v1\n  kind: ConfigMap\n  metadata:\n    name: b\n"},
+	}
+	out, err := f.Render(context.Background(), templates, ns("bdp-spark-alpha", map[string]string{oudGroupLabel: "app-bdp-rbac-spark-alpha"}, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 4 {
+		t.Fatalf("expected Role + RoleBinding + two ConfigMaps, got %d", len(out))
+	}
+	if out[0].GetKind() != "Role" || len(out[0].ExcludedPaths) != 2 {
+		t.Errorf("first resource should be the Role with its two excludedPaths, got %s %v", out[0].GetKind(), out[0].ExcludedPaths)
+	}
+	if got := out[0].GetNamespace(); got != "bdp-spark-alpha" {
+		t.Errorf("the render must see the object's fields, namespace = %q", got)
+	}
+	// The prefix guard rejects this one, so only the truthiness-guarded binding and the array remain.
+	out, err = f.Render(context.Background(), templates, ns("bdp-trino", map[string]string{oudGroupLabel: "app-bdp-rbac-trino"}, nil))
+	if err != nil || len(out) != 3 {
+		t.Fatalf("expected 3 resources for a rejected prefix, got %d err=%v", len(out), err)
+	}
+	if out, err := f.Render(context.Background(), templates[:2], ns("plain", nil, nil)); err != nil || len(out) != 0 {
+		t.Errorf("no applicable template must give an empty list and no error, got %d err=%v", len(out), err)
+	}
+}
+
+// The renderer has always received the object by VALUE. Pointer-receiver methods therefore must not
+// resolve in Render either, or a template that only ever worked in the filter would pass and then
+// fail in the real render.
+func TestRender_ExecutesAgainstTheValueLikeTheRenderer(t *testing.T) {
+	f := newTestFilter()
+	tpl := apis.LockedResourceTemplate{ObjectTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .GetName }}\n"}
+	_, err := f.Render(context.Background(), []apis.LockedResourceTemplate{tpl}, ns("team-a", nil, nil))
+	if err == nil || !strings.Contains(err.Error(), "GetName") {
+		t.Errorf("a pointer-receiver method must fail like it does in the renderer, got err=%v", err)
 	}
 }

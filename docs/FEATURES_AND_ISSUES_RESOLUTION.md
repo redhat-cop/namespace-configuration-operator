@@ -970,6 +970,32 @@ namespaces: 40 error lines in under three minutes, with the CRs reporting succes
 
 ---
 
+### Render Failures Fail the Reconcile Instead of Deleting Managed Objects
+
+**Status:** ✅ COMPLETED (issue #1)
+
+**Problem:**
+operator-utils' `GetLockedResourcesFromTemplatesWithRestConfig` logs a parse or render failure and returns an
+EMPTY list with a nil error. The controllers appended that empty batch, so the enforcer saw a desired state
+missing every object of the failing namespace/group/user and deleted them, while the CR reported
+`ReconcileSuccess`. Measured on a cluster: removing a label that a template reads through `required` deleted that
+namespace's RoleBinding under a green status; the only trace was three error-level log lines.
+
+**Solution:**
+- `TemplateFilter.Render` (controllers/common/templatefilter.go) renders through the renderer's own
+  `ProcessTemplateArray` on the filter's cached parse and returns every error, naming the object and the template.
+- `getResourceList` in all three controllers uses it; a failure ends the reconcile in `ManageError`, which sets
+  `ReconcileError` on the CR and emits a Warning event, and the enforcer is never called with a partial batch.
+- Side effect: the controllers no longer touch the library's unsynchronised package-global template map (issue #8).
+
+**Files Modified:**
+- `controllers/common/templatefilter.go` - `Render`, `renderData`
+- `controllers/common/templatefilter_test.go` - error propagation, excludedPaths carried, value-not-pointer semantics
+- `controllers/{namespaceconfig,groupconfig,userconfig}_controller.go` - `getResourceList(ctx, ...)`
+- `controllers/render_errors_test.go` - **NEW** - one failing object fails `getResourceList` in every controller
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED

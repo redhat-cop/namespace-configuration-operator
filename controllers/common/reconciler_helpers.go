@@ -21,7 +21,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	utilsapi "github.com/redhat-cop/operator-utils/api/v1alpha1"
+	"github.com/redhat-cop/operator-utils/pkg/util/apis"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,6 +91,11 @@ func ManageSuccessWithRetry[T client.Object](
 			return reconcile.Result{}, err
 		}
 
+		// A previous cycle may have left ReconcileError=True. The library's ManageSuccess only adds or
+		// replaces ReconcileSuccess, so without this the CR would read as both succeeded and failed
+		// forever after a recovered error. Mark the error condition False; ManageSuccess carries it.
+		clearReconcileError(latestInstance)
+
 		// Attempt to update status
 		result, err := reconciler.ManageSuccess(ctx, latestInstance)
 		if err == nil {
@@ -118,4 +126,30 @@ func ManageSuccessWithRetry[T client.Object](
 
 	// Should never reach here, but just in case
 	return reconcile.Result{}, nil
+}
+
+// clearReconcileError flips a standing ReconcileError=True condition to False on the instance's
+// status (in memory; the caller's status update persists it). Objects without the enforcing status
+// are left alone. The condition is kept rather than removed so its history stays visible, as the
+// Kubernetes conditions convention expects.
+func clearReconcileError(obj client.Object) {
+	aware, ok := obj.(utilsapi.EnforcingReconcileStatusAware)
+	if !ok {
+		return
+	}
+	status := aware.GetEnforcingReconcileStatus()
+	for _, c := range status.Conditions {
+		if c.Type == apis.ReconcileError && c.Status == metav1.ConditionTrue {
+			status.Conditions = apis.AddOrReplaceCondition(metav1.Condition{
+				Type:               apis.ReconcileError,
+				Status:             metav1.ConditionFalse,
+				Reason:             apis.ReconcileSuccessReason,
+				Message:            "",
+				ObservedGeneration: obj.GetGeneration(),
+				LastTransitionTime: metav1.Now(),
+			}, status.Conditions)
+			aware.SetEnforcingReconcileStatus(status)
+			return
+		}
+	}
 }

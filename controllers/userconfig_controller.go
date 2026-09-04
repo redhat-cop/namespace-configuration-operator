@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	errs "errors"
+	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -152,7 +153,7 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 		return r.ManageError(context, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(instance, selectedUsers)
+	lockedResources, err := r.getResourceList(context, instance, selectedUsers)
 	if err != nil {
 		log.Error(err, "unable to process resources", "UserConfig", instance, "users", selectedUsers)
 		return r.ManageError(context, instance, err)
@@ -171,27 +172,26 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 	return common.ManageSuccessWithRetry(r, context, req, log, "userconfig", func() *redhatcopv1alpha1.UserConfig { return &redhatcopv1alpha1.UserConfig{} })
 }
 
-func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
+// getResourceList renders every applicable template for every selected user. A render failure is
+// returned, not swallowed: the caller ends the reconcile in ManageError and the enforcer never sees a
+// partial desired state (see common.TemplateFilter.Render).
+func (r *UserConfigReconciler) getResourceList(ctx context.Context, instance *redhatcopv1alpha1.UserConfig, users []userv1.User) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, user := range users {
-		// Filter templates that are applicable to this user BEFORE processing
-		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, user)
-
-		// Only process templates that are actually applicable
-		if len(applicableTemplates) > 0 {
-			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), user)
-			if err != nil {
-				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", user)
-				return []lockedresource.LockedResource{}, err
-			}
-			lockedresources = append(lockedresources, lrs...)
-		} else {
-			// User is being skipped because no templates in this UserConfig match the user's pattern
-			// This is logged at V(1) level to be visible but not too verbose
+	filter := r.getTemplateFilter()
+	for i := range users {
+		user := &users[i]
+		lrs, err := filter.Render(ctx, instance.Spec.Templates, user)
+		if err != nil {
+			return nil, fmt.Errorf("userconfig %s: %w", instance.Name, err)
+		}
+		if len(lrs) == 0 {
+			// No template in this UserConfig applies to this user; visible at V(1), not an error.
 			r.Log.V(1).Info("skipping user - no UserConfig templates match the user pattern",
 				"user", user.Name,
 				"userconfig", instance.Name)
+			continue
 		}
+		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
 }
