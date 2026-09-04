@@ -393,7 +393,7 @@ func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return res
-		})).
+		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
 		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

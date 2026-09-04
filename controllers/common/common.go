@@ -95,3 +95,14 @@ func ValidateSelectors(labelSelector, annotationSelector metav1.LabelSelector) e
 	}
 	return nil
 }
+
+// SelectedObjectChangedPredicate gates the watches on the objects a CR SELECTS (Namespace, Group,
+// User). Selection reads only labels and annotations, and the templates receive the object as it
+// is at render time, so an update that changes neither cannot change what a CR renders. Without
+// this, every status or resourceVersion bump on any watched object listed every CR, re-rendered
+// every matching one and rewrote its status (one API write per event per CR). Create and Delete
+// events still pass, as does anything that changes labels or annotations.
+//
+// KNOWN LIMIT, on purpose: a template that reads `.Spec` or `.Status` of the selected object via
+// the render fallback is not re-rendered when only those change. Selection is the contract.
+var SelectedObjectChangedPredicate = predicate.Or(predicate.LabelChangedPredicate{}, predicate.AnnotationChangedPredicate{})

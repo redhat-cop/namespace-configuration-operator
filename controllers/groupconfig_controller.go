@@ -390,7 +390,7 @@ func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return reconcileRequests
-		})).
+		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
 		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

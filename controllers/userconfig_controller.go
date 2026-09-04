@@ -435,7 +435,7 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return reconcileRequests
-		})).
+		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
 		Watches(&userv1.Identity{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Identity",
