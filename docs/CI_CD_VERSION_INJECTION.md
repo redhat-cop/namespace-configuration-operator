@@ -69,12 +69,14 @@ The project uses shared workflows from `redhat-cop/github-workflows-operators`:
 
 ### Which Dockerfile is Used in CI/CD?
 
-**Answer: The `Dockerfile` in the root directory is used by the GitHub CI build.**
+**Answer: it depends on the workflow.**
 
-The shared workflow `release-operator.yml` from `redhat-cop/github-workflows-operators`:
-- Uses the standard `Dockerfile` located in the root directory
-- Does **NOT** use `ci.Dockerfile` (which is only for Tiltfile/local development)
-- The workflow builds the image using the full `Dockerfile` which includes the Go build step
+- The shared `release-operator.yml` / `pr-operator.yml` from `redhat-cop/github-workflows-operators` (used by
+  `push.yaml` / `pr.yaml`) build the binary with `make` and then package it with **`ci.Dockerfile`**
+  (`file: "./ci.Dockerfile"` in those workflows), which only copies `bin/manager` onto the base image. That is
+  why `ci.Dockerfile` carries the same `ZAP_*` ENV as the `Dockerfile`.
+- The fork's own `.github/workflows/image.yaml` builds the full **`Dockerfile`** (Go build stage included) and
+  passes `VERSION`, `COMMIT` and `BUILD_DATE` as build args.
 
 **Why `Dockerfile` and not `ci.Dockerfile`?**
 - `Dockerfile` is the standard production Dockerfile with full build process

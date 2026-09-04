@@ -86,14 +86,19 @@ endef
 4. Passes build args to `podman build` or `docker build`
 5. Dockerfile receives these as `ARG VERSION`, `ARG COMMIT`, `ARG BUILD_DATE`
 
-**Makefile `docker-build` target (line 152-153):**
+**Makefile `docker-build` target:**
 ```makefile
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	@BUILD_VERSION=$${VERSION:-$$(git describe --tags --always --dirty 2>/dev/null || echo "$(VERSION)")}; \
+	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	docker build --build-arg VERSION=$$BUILD_VERSION --build-arg COMMIT=$$COMMIT --build-arg BUILD_DATE=$$BUILD_DATE -t ${IMG} .
 ```
 
-**Note:** The standard Makefile `docker-build` target does **not** pass version info. This is a limitation of the standard Makefile. Use `PodmanMakefile` for automatic version injection, or manually pass build args.
+**Note:** `docker-build` passes the three build args itself (it has since commit 2e80123). `hack/push-quay.sh`
+does the same with podman, and `.github/workflows/image.yaml` in CI. Both `build` and the Dockerfile compile the
+package (`.`), not `main.go`, so a build without ldflags still reads the commit from Go's VCS build settings.
 
 ## Variable Injection Flow
 
@@ -256,7 +261,7 @@ VERSION=v2.0.0 COMMIT=xyz789 BUILD_DATE=2025-12-11T00:00:00Z make -f PodmanMakef
 | Feature | Makefile | PodmanMakefile |
 |---------|----------|----------------|
 | **Binary build** | ✅ Automatic version injection | ✅ Automatic version injection |
-| **Container build** | ❌ No version injection (manual only) | ✅ Automatic version injection |
+| **Container build** | ✅ Automatic version injection (build args) | ✅ Automatic version injection |
 | **Container runtime** | Docker only | Podman/Docker auto-detect |
 | **Version display** | No build output | Shows version info during build |
 

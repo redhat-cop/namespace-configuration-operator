@@ -135,9 +135,11 @@ This includes five test cases:
 4. **and with unrecognized functions**: AND logic with eq/hasPrefix (unrecognized)
 5. **No conditionals**: Universal template (no patterns)
 
-You should see log messages like:
-- `"template contains unrecognized conditional logic, applying to all groups (relying on template rendering)"` for test cases 1-4
-- `"template has no patterns, applying to all groups"` for test case 5
+With `--zap-log-level=2` you should see, per group and template, either
+`template applicability decided statically` (test cases 1-4: `eq`, `hasPrefix`, `ne` and `and` are all in the
+filter's static grammar) or `template applicability decided by rendering`; test case 5 has no guard and always
+applies. Groups that no template applies to are logged once at V(1) as `skipping group - no GroupConfig templates
+match the group pattern`.
 
 ### Apply Issue #194 Field Removal Test
 
@@ -284,17 +286,16 @@ oc delete -f examples/test-and-logic/test-deletion-tracking-userconfig.yaml
 
 ## Implementation Details
 
-The AND logic detection works by:
-
-1. **Pattern Detection**: Extracts `hasSuffix` and `contains` patterns from template content
-2. **Logic Detection**: Checks for `{{- if and` or `{{ if and` keywords
-3. **AND Evaluation**: When AND logic is detected, requires ALL patterns to match
-4. **OR Fallback**: When no `and` keyword is found, uses OR logic (any match)
+The filter parses each template and evaluates its top-level `if` / `else if` / `else` chain with the real
+semantics of `and`, `or`, `not`, `eq`, `ne`, `hasPrefix`, `hasSuffix` and `contains` on `.Name`, labels and
+annotations; any guard outside that grammar is decided by rendering the template. See
+`docs/TEMPLATE_FILTERING_LOGS_EXPLANATION.md`.
 
 ### Code Location
 
-- Implementation: `controllers/groupconfig_controller.go` - `isTemplateApplicableToGroup()` function
-- Tests: `controllers/groupconfig_controller_test.go` - `TestIsTemplateApplicableToGroup()` function
+- Implementation: `controllers/common/templatefilter.go` - `TemplateFilter`
+- Tests: `controllers/common/templatefilter_test.go` (a property test against the real renderer) and
+  `controllers/groupconfig_controller_test.go` - `TestGroupIsTemplateApplicable`
 
 ## Related Documentation
 

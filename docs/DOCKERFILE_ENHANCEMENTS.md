@@ -69,8 +69,7 @@ make -f PodmanMakefile build
 # Using PodmanMakefile (recommended - automatic version injection)
 make -f PodmanMakefile podman-build
 
-# Note: Standard Makefile docker-build does NOT inject version info
-# Use PodmanMakefile for container builds
+# The standard Makefile docker-build injects the same version info (build args); so does hack/push-quay.sh
 ```
 
 The Makefiles automatically:
@@ -98,13 +97,14 @@ Building with version info: VERSION=v1.0.0, COMMIT=abc1234, BUILD_DATE=2025-12-1
 The operator displays version information in the startup banner:
 
 ```
-========================================
-Namespace Configuration Operator
-Version: v1.0.0
-Commit: abc1234
-Build Date: 2025-12-10T10:30:00Z
-========================================
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  NAMESPACE CONFIGURATION OPERATOR                                           ║
+║  VERSION:  v1.2.6-84-gbc60603                                                ║
+║  COMMIT:   bc60603                                                           ║
+║  BUILD:    2026-09-04T18:00:37Z                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 ```
+(the exact layout is `internal/version/version.go`'s `PrintStartupBanner`; it goes to stderr)
 
 This information is available via:
 - Operator logs (startup banner)
@@ -282,8 +282,8 @@ podman build \
   -t namespace-configuration-operator:latest \
   .
 
-# Verify version info in image
-podman run --rm namespace-configuration-operator:latest /manager --version
+# Verify version info in image: --version prints the banner and exits 0 (no kubeconfig needed)
+podman run --rm --entrypoint /manager namespace-configuration-operator:latest --version
 ```
 
 **For production builds:** Use Makefile targets in your CI/CD pipeline:

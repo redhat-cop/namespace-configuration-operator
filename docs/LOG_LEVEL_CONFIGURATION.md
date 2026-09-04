@@ -23,11 +23,12 @@ Controls the verbosity of logging.
 - `error` - Only error messages
 - `info` - Info level and above (recommended for production)
 - `debug` - Debug level and above (shows template filtering logs)
-- `0-10` - Integer levels (higher = more verbose)
-  - `0` = error
-  - `1` = info
-  - `2` = debug (shows template filtering debug logs)
+- `0-10` - Integer levels (higher = more verbose). `main.go` maps an integer N to `zapcore.Level(-N)`:
+  - `0` = info
+  - `1` = debug (also shows the template filter's `skipping namespace/group/user` lines, logged at V(1))
+  - `2` = the template filter's per-decision lines (`template applicability decided ...`, V(2))
   - `3+` = even more verbose
+  - the `error` level is only reachable by name (`ZAP_LOG_LEVEL=error`); no integer maps to it
 
 **Default:** `debug` (when `ZAP_DEVEL=true`)
 
@@ -280,18 +281,19 @@ env:
 - ✅ Debug level (more verbose than info)
 - ⚠️ Template filtering logs still require verbosity level 2 or higher
 
-## Template Filtering Debug Logs
+## Template Filter Logs
 
-Template filtering debug logs use verbosity level `V(2)`, so they only appear when:
-- `ZAP_LOG_LEVEL=2` or higher
-- `ZAP_LOG_LEVEL=debug`
-- `ZAP_DEVEL=true` (development mode shows debug by default)
+The template filter (`controllers/common/templatefilter.go`) logs at two verbosities:
 
-These logs show:
-- Which groups are being checked against templates
-- Extracted patterns (hasSuffix, contains)
-- Match/no-match decisions
-- Template previews
+- `V(1)` (`ZAP_LOG_LEVEL=1` or `debug`): `skipping namespace - no NamespaceConfig templates match the
+  namespace pattern` (and the group/user equivalents) once per rejected object per reconcile;
+  `template does not parse, leaving it to the renderer`; `template applicability could not be decided by
+  rendering, leaving it to the renderer`.
+- `V(2)` (`ZAP_LOG_LEVEL=2`): one line per template per object saying how the decision was made,
+  `template applicability decided statically` or `template applicability decided by rendering`, with
+  `applicable=true|false` and a preview of the template.
+
+See `docs/TEMPLATE_FILTERING_LOGS_EXPLANATION.md` for what each line means.
 
 ## Dockerfile Defaults
 
