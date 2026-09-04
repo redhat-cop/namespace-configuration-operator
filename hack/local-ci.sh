@@ -5,9 +5,18 @@
 # brought forward to before the push.
 #
 # Usage:
-#   hack/local-ci.sh              # fmt, vet, build, unit tests (race detector), envtest suite
-#   LOCAL_CI_IMAGE=1 hack/local-ci.sh   # ...plus a container build, to prove the Dockerfile
-#   LOCAL_CI_SKIP_ENVTEST=1 hack/local-ci.sh   # skip the envtest suite (needs a download the first time)
+#   hack/local-ci.sh                       # gofmt, go vet, go build, go test -race
+#   LOCAL_CI_IMAGE=1 hack/local-ci.sh      # ...plus a container build, to prove the Dockerfile
+#   LOCAL_CI_GENERATORS=1 hack/local-ci.sh # ...plus `make manifests generate` — needs Go 1.21, see below
+#
+# WHAT IS NOT HERE, AND WHY.
+#   - `make test`. Its extra work over `go test ./...` is (a) the code generators and (b) envtest
+#     assets for the Ginkgo suite. The Ginkgo suite in controllers/ has no specs, so Ginkgo skips its
+#     BeforeSuite and envtest never starts — (b) is a no-op today. (a) is real but the pinned
+#     controller-gen v0.11.1 panics in go/types under Go 1.22 and later
+#     (kubernetes-sigs/controller-tools#880, fixed in v0.14.0), so on a current toolchain it cannot
+#     run; the shared workflow pins Go ~1.21 and keeps that check. Opt in with LOCAL_CI_GENERATORS=1
+#     when running Go 1.21 locally.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,18 +34,16 @@ step "go build"
 go build ./...
 
 step "unit tests with the race detector"
-# The controllers' unit tests and the envtest suite share a package; -run keeps this step to the
-# plain tests so a missing envtest binary cannot mask a unit failure. The suite runs in the next step.
-go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB' || fail "unit tests"
+# The macOS linker prints an LC_DYSYMTAB warning for every -race test binary; it is noise, not a result.
+go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB'
+[ "${PIPESTATUS[0]}" -eq 0 ] || fail "unit tests"
 
-if [ -z "${LOCAL_CI_SKIP_ENVTEST:-}" ]; then
-  step "envtest suite (make test)"
-  # make test also regenerates manifests and deepcopy code; a diff afterwards means a generator was
-  # skipped in the commit, which the shared workflow would also catch.
-  make test
+if [ -n "${LOCAL_CI_GENERATORS:-}" ]; then
+  step "generated files are current (make manifests generate)"
+  make manifests generate
   if ! git diff --quiet -- config/ api/; then
     git --no-pager diff --stat -- config/ api/
-    fail "make test changed generated files; commit them"
+    fail "the generators changed committed files; commit them"
   fi
 fi
 

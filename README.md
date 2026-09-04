@@ -56,6 +56,31 @@ This creates a rule in which every time a user from the `corp-ldap` provider is 
 
 More advanced templating functions found in the popular k8s management tool [Helm](https://helm.sh/) is also available. These functions are further described in the Helm [templating](https://helm.sh/docs/chart_template_guide/function_list/#kubernetes-and-chart-functions) documentation.
 
+#### Conditional templates
+
+An `objectTemplate` may be wrapped in a guard so that it produces an object only for some of the selected
+objects — for example, only for namespaces whose label value belongs to one team family:
+
+```yaml
+  templates:
+  - objectTemplate: |
+      {{- if hasPrefix "team-a-" (index .Labels "example.com/team") }}
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: team-a-edit
+        namespace: {{ .Name }}
+      ...
+      {{- end }}
+```
+
+Where the guard rejects the object the template renders nothing, and the operator skips it for that object
+(logged once per reconcile at `--zap-log-level=1` as "skipping ..."). Guards built from `hasPrefix`, `hasSuffix`,
+`contains`, `eq`, `ne`, `and`, `or`, `not`, and the truthiness of `.Name` or of `(index .Labels "key")` /
+`(index .Annotations "key")` are evaluated without rendering; any other guard is decided by rendering the
+template and checking for empty output, which costs one extra render for that template. Either way the answer
+is what the renderer would produce. See `controllers/common/templatefilter.go`.
+
 Additionally, there are functions not listed within the Helm documentation that are also available outlined in the table below.
 
 | Function  |  Description |
@@ -334,6 +359,16 @@ docker login quay.io/$repo/namespace-configuration-operator
 make docker-build IMG=quay.io/$repo/namespace-configuration-operator:latest
 make docker-push IMG=quay.io/$repo/namespace-configuration-operator:latest
 ```
+
+This fork also carries two scripts that keep the local flow out of `.github/workflows/`:
+
+```shell
+hack/local-ci.sh                 # gofmt, go vet, go build, go test -race; LOCAL_CI_IMAGE=1 adds a container build
+hack/push-quay.sh                # builds linux/amd64 with podman, pushes an immutable tag (git describe)
+PUSH_LATEST=1 hack/push-quay.sh  # ...and moves :latest, which is what running clusters pull
+```
+
+Both explain their choices in their headers; `local-ci.sh` in particular says why it does not run `make test`.
 
 ### Deploy to OLM via bundle
 
