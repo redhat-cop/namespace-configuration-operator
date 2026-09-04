@@ -2,503 +2,58 @@
 
 ## Overview
 
-This document explains the meaning and significance of template filtering log messages that appear at verbosity level 2 (V(2)) in the operator logs.
+Before a template is rendered for a selected object (a Namespace, Group or User), the operator decides whether
+that template can produce an object for it at all. The decision lives in `controllers/common/templatefilter.go`
+(`TemplateFilter`); this document explains the log lines it writes. The regex-based filter that earlier versions
+of this document described (`suffixPatterns`, `containsPatterns`, "unrecognized conditional") no longer exists.
 
-## Log Level
+## Why the filter exists
 
-These logs appear at `Level(-2)`, which corresponds to **verbosity level 2** (V(2)) in zap logging. They are **debug-level informational logs**, not errors or warnings.
+A guarded template such as
 
-**To see these logs:**
-- Set `ZAP_LOG_LEVEL=2` in the operator deployment
-- Or use Kyverno policy to set log level to 2
-
-## Understanding the Log Messages
-
-### 1. "checking template applicability"
-
-**Meaning**: The operator is evaluating whether a specific template should be applied to a specific group.
-
-**When it appears**: For every combination of:
-- Every group in the cluster
-- Every template in the GroupConfig
-
-**Example**:
-```json
-{
-  "level": "Level(-2)",
-  "ts": "2025-12-10T05:18:01Z",
-  "logger": "controllers.GroupConfig",
-  "msg": "checking template applicability",
-  "group": "app-ocp-rbac-jeff-ns-admin",
-  "suffixPatterns": ["-ns-admin"],
-  "containsPatterns": [],
-  "templatePreview": "{{- if hasSuffix \"-ns-admin\" .Name }}..."
-}
+```
+{{- if hasPrefix "team-a-" (index .Labels "example.com/team") }}
+...
+{{- end }}
 ```
 
-**What it shows**:
-- `group`: The group name being evaluated
-- `suffixPatterns`: Patterns extracted from the template (e.g., `["-ns-admin"]`)
-- `containsPatterns`: Contains patterns extracted from the template
-- `templatePreview`: First 100 characters of the template content
-
-### 2. "group does not match any template patterns"
-
-**Meaning**: The group name does not match the patterns required by this template, so the template will **not** be applied to this group.
-
-**When it appears**: When a group is checked against a template and:
-- The group name doesn't have the required suffix (from `suffixPatterns`)
-- AND the group name doesn't contain the required substring (from `containsPatterns`)
-
-**Example**:
-```json
-{
-  "level": "Level(-2)",
-  "msg": "group does not match any template patterns",
-  "group": "app-ocp-rbac-devops-cluster-admin",
-  "suffixPatterns": ["-ns-admin"],
-  "containsPatterns": []
-}
-```
-
-**Interpretation**: 
-- Group: `app-ocp-rbac-devops-cluster-admin`
-- Template requires suffix: `-ns-admin`
-- Group has suffix: `-cluster-admin`
-- **Result**: ❌ No match - template will NOT be applied
-
-**Is this a problem?** ❌ **No, this is expected behavior!**
-
-Not every group should match every template. This is the **normal filtering behavior** that ensures templates are only applied to appropriate groups.
-
-### 3. "group matches hasSuffix pattern"
-
-**Meaning**: The group name matches the suffix pattern required by the template, so the template **will** be applied to this group.
-
-**When it appears**: When a group is checked against a template and:
-- The group name has the required suffix (from `suffixPatterns`)
-
-**Example**:
-```json
-{
-  "level": "Level(-2)",
-  "msg": "group matches hasSuffix pattern",
-  "group": "app-ocp-rbac-jeff-ns-admin",
-  "pattern": "-ns-admin"
-}
-```
-
-**Interpretation**:
-- Group: `app-ocp-rbac-jeff-ns-admin`
-- Template requires suffix: `-ns-admin`
-- Group has suffix: `-ns-admin`
-- **Result**: ✅ Match - template WILL be applied
-
-## Why Do We See Multiple Checks for the Same Group?
-
-You may notice the same group being checked multiple times. This happens because:
-
-1. **Multiple Templates in One GroupConfig**: If a GroupConfig has multiple templates, each template is checked against each group.
-
-   **Example**:
-   - GroupConfig has 3 templates
-   - Cluster has 10 groups
-   - Total checks: 3 templates × 10 groups = **30 checks**
-
-2. **Multiple GroupConfigs**: If you have multiple GroupConfig resources, each one processes all groups independently.
-
-   **Example**:
-   - 2 GroupConfigs, each with 2 templates
-   - Cluster has 10 groups
-   - Total checks: (2 GroupConfigs × 2 templates × 10 groups) = **40 checks**
-
-3. **Reconciliation Triggers**: Every time a GroupConfig is reconciled (due to changes, periodic reconciliation, or group changes), all templates are re-evaluated against all groups.
-
-## Common Scenarios
-
-### Scenario 1: Template for Database Admins
-
-**Template pattern**: `-database-admin`
-
-**Groups checked**:
-- ✅ `app-ocp-rbac-database-admin` → **Matches** (will get template)
-- ❌ `app-ocp-rbac-platform-cluster-admin` → **No match** (won't get template)
-- ❌ `app-ocp-rbac-alpha-ns-admin` → **No match** (won't get template)
-
-**Logs you'll see**:
-```
-"checking template applicability" for each group
-"group matches hasSuffix pattern" for database-admin group
-"group does not match any template patterns" for other groups
-```
-
-**This is correct behavior!** Only database admin groups should get database admin templates.
-
-### Scenario 2: Template for Namespace Admins
-
-**Template pattern**: `-ns-admin`
-
-**Groups checked**:
-- ❌ `app-ocp-rbac-devops-cluster-admin` → **No match** (has `-cluster-admin`, not `-ns-admin`)
-- ❌ `app-ocp-rbac-jeff-ns-developer` → **No match** (has `-ns-developer`, not `-ns-admin`)
-- ✅ `app-ocp-rbac-jeff-ns-admin` → **Matches** (will get template)
-
-**Logs you'll see**:
-```
-"group does not match any template patterns" for devops-cluster-admin
-"group does not match any template patterns" for jeff-ns-developer
-"group matches hasSuffix pattern" for jeff-ns-admin
-```
-
-**This is correct behavior!** Only namespace admin groups should get namespace admin templates.
-
-## Performance Considerations
-
-### Is This Efficient?
-
-**Yes**, the filtering happens **before** template rendering:
-
-1. **Pre-filtering**: Templates are filtered BEFORE processing, so only applicable templates are rendered
-2. **Avoids unnecessary work**: Groups that don't match patterns skip template rendering entirely
-3. **Logs are debug-only**: These logs only appear at V(2), so they don't impact production performance
-
-### When to Be Concerned
-
-You should only be concerned if:
-
-1. **Too many "checking template applicability" logs**: This might indicate:
-   - Too many groups in the cluster
-   - Too many templates in GroupConfigs
-   - Consider splitting GroupConfigs or using more specific selectors
-
-2. **Unexpected "does not match" messages**: If you expect a group to match but it doesn't:
-   - Check the group name spelling
-   - Verify the pattern in the template (e.g., `-ns-admin` vs `-nsadmin`)
-   - Check if the template uses AND logic (requires multiple conditions)
-
-3. **Unexpected "matches" messages**: If a group matches when it shouldn't:
-   - Review the template patterns
-   - Check if patterns are too broad (e.g., `-admin` matches both `-ns-admin` and `-cluster-admin`)
-
-## Verifying Groups in the Cluster
-
-When troubleshooting template filtering logs, it's helpful to verify that the groups mentioned in the logs actually exist in the cluster.
-
-### List All Groups
-
-```bash
-# List all groups in the cluster
-oc get groups
-
-# List groups with more details
-oc get groups -o wide
-
-# List groups in a specific format
-oc get groups -o custom-columns=NAME:.metadata.name,USERS:.users
-```
-
-### Check if a Specific Group Exists
-
-```bash
-# Check if a specific group exists
-oc get group <group-name>
-
-# Example: Check if the group from the logs exists
-oc get group app-ocp-rbac-jeff-ns-admin
-
-# Get full details of a group
-oc get group app-ocp-rbac-jeff-ns-admin -o yaml
-
-# Get group in JSON format
-oc get group app-ocp-rbac-jeff-ns-admin -o json
-```
-
-### Filter Groups by Pattern
-
-```bash
-# Find groups matching a suffix pattern (e.g., -ns-admin)
-oc get groups | grep -- "-ns-admin$"
-
-# Find groups matching a contains pattern (e.g., "database")
-oc get groups | grep "database"
-
-# Find groups matching multiple patterns
-oc get groups | grep -E "(-ns-admin|-cluster-admin)$"
-
-# Count groups matching a pattern
-oc get groups | grep -- "-ns-admin$" | wc -l
-```
-
-### Advanced Group Queries
-
-```bash
-# List groups with JSONPath filtering
-oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep "ns-admin"
-
-# List groups and their users
-oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.users[*]}{"\n"}{end}'
-
-# Find groups that should match a template pattern
-# Example: Find all groups ending with -database-admin
-oc get groups -o json | jq -r '.items[] | select(.metadata.name | endswith("-database-admin")) | .metadata.name'
-
-# Find groups containing a specific substring
-oc get groups -o json | jq -r '.items[] | select(.metadata.name | contains("database")) | .metadata.name'
-```
-
-### Verify Group from Log Messages
-
-When you see a log message like:
-```json
-{"group": "app-ocp-rbac-jeff-ns-admin", "suffixPatterns": ["-ns-admin"]}
-```
-
-You can verify:
-
-```bash
-# 1. Check if the group exists
-oc get group app-ocp-rbac-jeff-ns-admin
-
-# 2. Verify the group name matches the pattern
-# The group should end with "-ns-admin"
-oc get group app-ocp-rbac-jeff-ns-admin -o jsonpath='{.metadata.name}'
-# Expected output: app-ocp-rbac-jeff-ns-admin
-
-# 3. Check all groups with the same pattern
-oc get groups | grep -- "-ns-admin$"
-
-# 4. Verify the group is selected by the GroupConfig's label/annotation selectors
-oc get group app-ocp-rbac-jeff-ns-admin -o yaml
-# Check if labels/annotations match the GroupConfig's selectors
-```
-
-### Troubleshooting Commands
-
-```bash
-# Compare groups in logs vs groups in cluster
-# Extract group names from logs
-oc logs deployment/namespace-configuration-operator-controller-manager -n namespace-configuration-operator --container=manager --since=10m | grep -o '"group":"[^"]*"' | sort -u
-
-# List all groups in cluster
-oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort
-
-# Find groups that appear in logs but don't exist in cluster (potential issue)
-# This would require comparing the two lists above
-
-# Check if a GroupConfig is selecting the expected groups
-oc get groupconfig <groupconfig-name> -o yaml
-# Review the labelSelector and annotationSelector
-# Then check if groups match:
-oc get groups --show-labels
-oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{": labels="}{.metadata.labels}{"\n"}{end}'
-```
-
-### Example: Verifying a Log Entry
-
-Given this log entry:
-```json
-{
-  "msg": "group does not match any template patterns",
-  "group": "app-ocp-rbac-platform-cluster-admin",
-  "suffixPatterns": ["-database-admin"]
-}
-```
-
-Run these commands:
-
-```bash
-# 1. Verify the group exists
-oc get group app-ocp-rbac-platform-cluster-admin
-
-# 2. Check the group's actual name
-oc get group app-ocp-rbac-platform-cluster-admin -o jsonpath='{.metadata.name}'
-# Output: app-ocp-rbac-platform-cluster-admin
-
-# 3. Verify it doesn't match the pattern (expected)
-# The group ends with "-cluster-admin", not "-database-admin"
-echo "app-ocp-rbac-platform-cluster-admin" | grep -- "-database-admin$"
-# No output = correct, it doesn't match
-
-# 4. Find groups that DO match the pattern
-oc get groups | grep -- "-database-admin$"
-```
-
-## Best Practices
-
-1. **Use Specific Patterns**: Prefer specific patterns like `-database-admin` over generic ones like `-admin`
-
-2. **Monitor Logs During Development**: Use V(2) logs to verify template filtering works as expected
-
-3. **Production Log Level**: In production, use `ZAP_LOG_LEVEL=info` (or 0) to avoid verbose debug logs
-
-4. **Group Naming Convention**: Use consistent naming conventions to make pattern matching predictable
-
-5. **Verify Groups Exist**: When troubleshooting, always verify that groups mentioned in logs actually exist in the cluster
-
-## Summary
-
-| Log Message | Meaning | Is it a Problem? |
-|------------|---------|------------------|
-| `checking template applicability` | Operator is evaluating template for a group | ✅ Normal - informational |
-| `group does not match any template patterns` | Template won't be applied to this group | ✅ Normal - expected filtering |
-| `group matches hasSuffix pattern` | Template will be applied to this group | ✅ Normal - successful match |
-| `group matches all AND logic patterns` | Template will be applied (AND logic) | ✅ Normal - successful match |
-| `group does not match all AND logic patterns` | Template won't be applied (AND logic) | ✅ Normal - expected filtering |
-
-**Key Takeaway**: These are **informational debug logs** showing the template filtering process. Seeing "does not match" messages is **normal and expected** - it means the filtering is working correctly to ensure templates are only applied to appropriate groups.
-
-## Cluster Verification Results
-
-The following verification was performed against an actual OpenShift cluster to demonstrate that the log messages are accurate and the groups exist as expected.
-
-### Groups from Logs - Verification
-
-All groups mentioned in the example logs were verified to exist in the cluster:
-
-```bash
-$ oc get group app-ocp-rbac-jeff-ns-admin
-NAME                         USERS
-app-ocp-rbac-jeff-ns-admin   jeff
-
-$ oc get group app-ocp-rbac-platform-cluster-admin
-NAME                                  USERS
-app-ocp-rbac-platform-cluster-admin   john.doe, alice.cooper
-
-$ oc get group app-ocp-rbac-devops-cluster-admin
-NAME                              USERS
-app-ocp-rbac-devops-cluster-admin
-```
-
-**Result**: ✅ All groups from logs exist in the cluster
-
-### Pattern Matching Statistics
-
-Cluster-wide pattern analysis:
-
-```bash
-$ oc get groups --no-headers | wc -l
-28
-
-$ oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep '\-ns-admin$' | wc -l
-5
-
-$ oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep '\-cluster-admin$' | wc -l
-6
-
-$ oc get groups -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep '\-database-admin$' | wc -l
-0
-```
-
-**Summary**:
-- **Total groups in cluster**: 28
-- **Groups ending with `-ns-admin`**: 5 groups
-- **Groups ending with `-cluster-admin`**: 6 groups
-- **Groups ending with `-database-admin`**: 0 groups (none exist)
-
-### Groups Matching Patterns
-
-**Groups ending with `-ns-admin`**:
-```
-app-ocp-rbac-alpha-ns-admin
-app-ocp-rbac-beta-ns-admin
-app-ocp-rbac-demo-ns-admin
-app-ocp-rbac-jeff-ns-admin
-app-ocp-rbac-platform-ns-admin
-```
-
-**Groups ending with `-cluster-admin`**:
-```
-app-ocp-rbac-alpha-cluster-admin
-app-ocp-rbac-demo-cluster-admin
-app-ocp-rbac-devops-cluster-admin
-app-ocp-rbac-newteam-cluster-admin
-app-ocp-rbac-platform-cluster-admin
-app-ocp-rbac-test-cluster-admin
-```
-
-### Log Message Accuracy Verification
-
-#### Example 1: "Does Not Match" is Correct
-
-**Log Entry**:
-```json
-{
-  "msg": "group does not match any template patterns",
-  "group": "app-ocp-rbac-platform-cluster-admin",
-  "suffixPatterns": ["-database-admin"]
-}
-```
-
-**Verification**:
-```bash
-$ GROUP_NAME="app-ocp-rbac-platform-cluster-admin"
-$ echo "Group name: $GROUP_NAME"
-Group name: app-ocp-rbac-platform-cluster-admin
-$ echo "Expected pattern: -database-admin"
-Expected pattern: -database-admin
-$ echo "Actual suffix: -cluster-admin"
-Actual suffix: -cluster-admin
-```
-
-**Conclusion**: ✅ **CORRECT** - The group ends with `-cluster-admin`, not `-database-admin`. The "does not match" message is **expected and correct behavior**.
-
-#### Example 2: "Matches" is Correct
-
-**Log Entry**:
-```json
-{
-  "msg": "group matches hasSuffix pattern",
-  "group": "app-ocp-rbac-jeff-ns-admin",
-  "pattern": "-ns-admin"
-}
-```
-
-**Verification**:
-```bash
-$ oc get group app-ocp-rbac-jeff-ns-admin -o jsonpath='{.metadata.name}'
-app-ocp-rbac-jeff-ns-admin
-
-$ echo "app-ocp-rbac-jeff-ns-admin" | grep -q "\-ns-admin$" && echo "✅ Group ends with '-ns-admin' - MATCHES pattern"
-✅ Group ends with '-ns-admin' - MATCHES pattern
-```
-
-**Conclusion**: ✅ **CORRECT** - The group ends with `-ns-admin` and matches the pattern. The template **will be applied** to this group.
-
-### Why "Does Not Match" Messages Appear
-
-When you see logs like:
-```json
-{"group": "app-ocp-rbac-platform-cluster-admin", "suffixPatterns": ["-database-admin"]}
-{"msg": "group does not match any template patterns"}
-```
-
-This is **expected behavior** because:
-
-1. **The group exists**: `app-ocp-rbac-platform-cluster-admin` exists in the cluster
-2. **The pattern doesn't match**: The group ends with `-cluster-admin`, but the template requires `-database-admin`
-3. **Filtering is working**: The operator correctly identifies that this template should NOT be applied to this group
-4. **No database-admin groups exist**: There are 0 groups ending with `-database-admin` in the cluster, so this template would only apply if such groups existed
-
-### Final Verification Summary
-
-✅ **All groups from logs EXIST in cluster**
-- `app-ocp-rbac-jeff-ns-admin`: EXISTS
-- `app-ocp-rbac-platform-cluster-admin`: EXISTS
-- `app-ocp-rbac-devops-cluster-admin`: EXISTS
-
-✅ **Pattern matching is CORRECT**
-- Groups ending with `-ns-admin`: 5 groups found
-- Groups ending with `-cluster-admin`: 6 groups found
-- Groups ending with `-database-admin`: 0 groups found (none exist)
-
-✅ **Log messages are ACCURATE**
-- "does not match" when group suffix doesn't match pattern: **CORRECT**
-- "matches" when group suffix matches pattern: **CORRECT**
-
-✅ **Conclusion**: The template filtering logs are working as expected! The "does not match" messages are **informational debug logs** showing that the filtering mechanism is correctly identifying which templates should and should not be applied to each group.
-
-## Related Documentation
-
-- [Template AND/OR Logic Testing](../examples/test-and-logic/README.md)
-- [Log Level Configuration](./LOG_LEVEL_CONFIGURATION.md)
-- [Resolved Issues Tracker](../resolved-issues-tracker/resolved-issues-tracker.md) - Template Filtering Implementation
+renders to nothing for an object the guard rejects. The renderer cannot represent "nothing": an empty render
+becomes the JSON literal `null` and fails with `Object 'Kind' is missing in 'null'`. The filter skips such
+objects before the renderer sees them.
+
+## How a decision is made
+
+1. The template is parsed once (cached by its text, with the renderer's own function map).
+2. If its top level is a single `if` / `else if` / `else` chain over `hasPrefix`, `hasSuffix`, `contains`,
+   `eq`, `ne`, `and`, `or`, `not`, or the truthiness of `.Name` / `(index .Labels "k")` /
+   `(index .Annotations "k")`, it is evaluated **statically** against the object's name, labels and annotations.
+3. Anything else (a top-level variable, a pipeline, `range`, `with`, `.Spec` access, an unknown function) is
+   decided by **rendering** the template against the same value the renderer receives and checking whether the
+   output parses to an object (a comment-only or `---`-only output does not count).
+4. A template that does not parse is left to the renderer, so the parse error is reported there and fails the
+   reconcile with a `ReconcileError` condition and a Warning event.
+
+## Log lines
+
+| verbosity | line | meaning |
+|---|---|---|
+| V(1) | `skipping namespace - no NamespaceConfig templates match the namespace pattern` (also `group`, `user`) | every template was rejected for this object; nothing is rendered for it |
+| V(1) | `template does not parse, leaving it to the renderer` | the template has a syntax error; the reconcile will fail with the error |
+| V(1) | `template applicability could not be decided by rendering, leaving it to the renderer` | executing the template errored (e.g. a `required` value missing); the reconcile will fail with the error |
+| V(2) | `template applicability decided statically ... applicable=true|false` | step 2 above |
+| V(2) | `template applicability decided by rendering ... applicable=true|false` | step 3 above |
+
+Enable them with `--zap-log-level=1` (or `2`), or `ZAP_LOG_LEVEL=1` / `2`; see
+`docs/LOG_LEVEL_CONFIGURATION.md`.
+
+## What you will NOT see any more
+
+An error-level `Error unmarshalling json manifest ... Object 'Kind' is missing in 'null'` followed by
+`unable to process template for` for every rejected object. Those lines meant an older build was rendering a
+rejected object; if they appear, the cluster runs an image from before the filter was rewritten.
+
+## Performance
+
+A statically decided template costs a map lookup and a few string comparisons per object. A template decided by
+rendering costs one extra render per object, including any `lookup` calls in its taken branch; keep guards
+inside the static grammar when you can.

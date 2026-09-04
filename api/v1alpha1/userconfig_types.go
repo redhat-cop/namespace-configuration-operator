@@ -47,15 +47,15 @@ type UserConfigSpec struct {
 	AnnotationSelector metav1.LabelSelector `json:"annotationSelector,omitempty"`
 
 	//IdentityExtraSelector allows you to specify a selector for the extra fields of the User's identities.
-	//If one of the user identities matches the selector the User is selected
-	//This condition is in OR with ProviderName
+	//If one of the user identities matches the selector the User is selected.
+	//This condition is in AND with ProviderName: when both are set, the same identity must satisfy both.
 	// +kubebuilder:validation:Optional
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:selector:"
 	IdentityExtraFieldSelector metav1.LabelSelector `json:"identityExtraFieldSelector,omitempty"`
 
 	//ProviderName allows you to specify an identity provider. If a user logged in with that provider it is selected.
-	//This condition is in OR with IdentityExtraSelector
+	//This condition is in AND with IdentityExtraSelector: when both are set, the same identity must satisfy both.
 	// +kubebuilder:validation:Optional
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:text"
