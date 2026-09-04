@@ -15,10 +15,13 @@
 #   PLATFORM        linux/amd64 (OpenShift nodes), even when building on arm64
 #   PUSH_LATEST     set to 1 to also push :latest
 #
-# Requires a prior `podman login quay.io` (or docker login). Refuses a dirty tree unless ALLOW_DIRTY=1,
-# because git describe stamps "-dirty" into the tag and the binary and that is rarely what you meant.
+# Requires a prior `podman login quay.io` (or docker login). Refuses a tree with modified OR untracked
+# files under the paths the Dockerfile ships unless ALLOW_DIRTY=1, because those files would be baked
+# into an image whose tag claims a clean commit.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib.sh
+. hack/lib.sh
 
 IMAGE_REPO=${IMAGE_REPO:-quay.io/ephico2real/namespace-configuration-operator}
 PLATFORM=${PLATFORM:-linux/amd64}
@@ -27,9 +30,9 @@ registry=${IMAGE_REPO%%/*}
 
 fail() { printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 
-if [ -z "${ALLOW_DIRTY:-}" ] && ! git diff --quiet HEAD --; then
-  git --no-pager status --short
-  fail "working tree is dirty; commit first, or set ALLOW_DIRTY=1 to stamp a -dirty build on purpose"
+if [ -z "${ALLOW_DIRTY:-}" ] && ! tree_is_clean; then
+  dirty_summary
+  fail "shipped paths have modified or untracked files; commit them, or set ALLOW_DIRTY=1 to bake them in on purpose"
 fi
 
 version=$(git describe --tags --always --dirty)
@@ -53,8 +56,19 @@ printf '==> building %s (VERSION=%s COMMIT=%s BUILD_DATE=%s PLATFORM=%s) with %s
   --label org.opencontainers.image.source="local:$(hostname -s)" \
   -t "$image" .
 
+# The digest worth recording is the one the REGISTRY assigns on push. Podman's RepoDigests is the
+# local-storage digest and differs from it (podman converts the manifest on push), so a values
+# file pinned to that would fail to pull. --digestfile captures the registry's answer.
+digest=""
 printf '==> pushing %s\n' "$image"
-"$tool" push "$image"
+if [ "$tool" = podman ]; then
+  digestfile=$(mktemp); trap 'rm -f "$digestfile"' EXIT
+  podman push --digestfile "$digestfile" "$image"
+  digest=$(cat "$digestfile")
+else
+  docker push "$image"
+  digest=$(docker inspect --format '{{ index .RepoDigests 0 }}' "$image" 2>/dev/null | sed 's/.*@//' || true)
+fi
 
 if [ -n "${PUSH_LATEST:-}" ]; then
   printf '==> pushing %s:latest\n' "$IMAGE_REPO"
@@ -62,8 +76,6 @@ if [ -n "${PUSH_LATEST:-}" ]; then
   "$tool" push "$IMAGE_REPO:latest"
 fi
 
-# The digest is what to record in a change log or a values file; a tag can move, a digest cannot.
-digest=$("$tool" inspect --format '{{ index .RepoDigests 0 }}' "$image" 2>/dev/null || true)
 printf '\npushed %s\n' "$image"
-[ -z "$digest" ] || printf 'digest %s\n' "$digest"
+[ -z "$digest" ] || printf 'digest %s@%s   (registry digest; pin this, a tag can move)\n' "$IMAGE_REPO" "$digest"
 [ -z "${PUSH_LATEST:-}" ] || printf 'latest now points at this build\n'

@@ -24,8 +24,13 @@ step() { printf '\n==> %s\n' "$*"; }
 fail() { printf '\nFAILED: %s\n' "$*" >&2; exit 1; }
 
 step "gofmt"
-unformatted=$(gofmt -l $(git ls-files '*.go'))
+# NUL-separated so a path with a space is checked rather than silently skipped.
+unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
 [ -z "$unformatted" ] || fail "files need gofmt:"$'\n'"$unformatted"
+
+step "hack scripts"
+for f in hack/*.sh; do bash -n "$f" || fail "$f does not parse"; done
+bash hack/lib_test.sh
 
 step "go vet"
 go vet ./...
@@ -34,9 +39,16 @@ step "go build"
 go build ./...
 
 step "unit tests with the race detector"
-# The macOS linker prints an LC_DYSYMTAB warning for every -race test binary; it is noise, not a result.
-go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB'
-[ "${PIPESTATUS[0]}" -eq 0 ] || fail "unit tests"
+# The macOS linker prints an LC_DYSYMTAB warning for every -race test binary; it is noise, not a
+# result. The pipeline sits inside `if` so `set -e` cannot abort before the message; with pipefail
+# its status is go test's, not grep's.
+if ! { go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB'; }; then
+  fail "unit tests"
+fi
+
+step "the binary answers --version"
+go build -o bin/manager . 
+bin/manager --version 2>&1 | grep -q 'VERSION:' || fail "bin/manager --version did not print the banner"
 
 step "rendered manifests carry the log flags"
 # Container.Args has no strategic-merge key, so a patch that touches args replaces the whole list;

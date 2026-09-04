@@ -65,6 +65,8 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var showVersion bool
+	flag.BoolVar(&showVersion, "version", false, "Print the version banner and exit.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -122,8 +124,12 @@ func main() {
 	// 2. Environment variables: ZAP_LOG_LEVEL and ZAP_DEVEL (for ConfigMap-based config)
 	// 3. Defaults: Development=true, Level=Debug
 
-	// Print startup banner with version and commit info
+	// Print startup banner with version and commit info. With --version that is all the process does;
+	// it lets a pulled image be asked what it is without a kubeconfig (hack/ci-image.sh pull).
 	version.PrintStartupBanner()
+	if showVersion {
+		os.Exit(0)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 

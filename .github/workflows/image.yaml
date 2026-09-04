@@ -46,6 +46,12 @@ env:
 permissions:
   contents: read
 
+# One build per ref at a time, queued not cancelled: two pushes racing would otherwise both move
+# the sha- and describe tags and the later finisher, not the later commit, would win.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   gate:
     # The same checks hack/local-ci.sh runs on a laptop, on the Go version the Dockerfile builds with.
@@ -115,6 +121,10 @@ jobs:
           context: .
           platforms: ${{ inputs.platforms || 'linux/amd64' }}
           push: true
+          # No provenance attestation: with it the tag becomes an OCI index holding the image plus an
+          # attestation manifest, and every tool that reports "the digest" reports a different one.
+          # A single manifest per tag keeps `podman pull` + RepoDigests equal to the registry digest.
+          provenance: false
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
             COMMIT=${{ steps.meta.outputs.commit }}
