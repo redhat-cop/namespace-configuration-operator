@@ -236,12 +236,16 @@ func (r *UserConfigReconciler) getSelectedUsers(context context.Context, instanc
 
 	selectedUsers := []userv1.User{}
 
-	for _, user := range userList.Items {
-		for _, identity := range identitiesList.Items {
-			if user.GetUID() == identity.User.UID {
-				if r.matches(instance, &user, &identity) {
-					selectedUsers = append(selectedUsers, user)
-				}
+	for i := range userList.Items {
+		user := &userList.Items[i]
+		// A user is selected ONCE, however many of its identities match. Appending per identity
+		// rendered every template N times, and the enforcer then ran N child controllers for the
+		// same object.
+		for j := range identitiesList.Items {
+			identity := &identitiesList.Items[j]
+			if user.GetUID() == identity.User.UID && r.matches(instance, user, identity) {
+				selectedUsers = append(selectedUsers, *user)
+				break
 			}
 		}
 	}
@@ -282,10 +286,13 @@ func (r *UserConfigReconciler) findApplicableUserConfigsFromIdentities(user *use
 		return []redhatcopv1alpha1.UserConfig{}, err
 	}
 	applicableUserConfigs := []redhatcopv1alpha1.UserConfig{}
-	for _, userConfig := range userConfigList.Items {
-		for _, identity := range identities {
-			if r.matches(&userConfig, user, &identity) {
-				applicableUserConfigs = append(applicableUserConfigs, userConfig)
+	for i := range userConfigList.Items {
+		userConfig := &userConfigList.Items[i]
+		// One request per applicable UserConfig, whichever identity made it applicable.
+		for j := range identities {
+			if r.matches(userConfig, user, &identities[j]) {
+				applicableUserConfigs = append(applicableUserConfigs, *userConfig)
+				break
 			}
 		}
 	}
