@@ -17,6 +17,7 @@ import (
 	utilstemplates "github.com/redhat-cop/operator-utils/pkg/util/templates"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const oudGroupLabel = "example.com/oud-group"
@@ -191,6 +192,29 @@ kind: Role
 	`{{- if bogus .Name }}
 kind: Role
 {{- end }}`,
+	// a pointer-receiver method: resolves on a pointer, fails on the value the renderer uses
+	`{{- if hasPrefix "team" .GetName }}
+kind: Role
+{{- end }}`,
+	`{{- if hasSuffix "-prod" .Name }}
+kind: Role
+metadata:
+  name: {{ .GetName }}
+{{- end }}`,
+	// taken branches that are text but not an object
+	`{{- if hasSuffix "-prod" .Name }}
+# only a comment
+{{- end }}`,
+	`{{- if hasSuffix "-prod" .Name }}
+---
+{{- end }}`,
+	`{{- if .Name }}
+# comment first
+kind: Role
+{{- end }}`,
+	`{{- if (index .Labels "example.com/oud-group") }}
+{{/* a template comment renders nothing */}}
+{{- end }}`,
 }
 
 var propertySubjects = []*corev1.Namespace{
@@ -203,20 +227,28 @@ var propertySubjects = []*corev1.Namespace{
 	{ObjectMeta: metav1.ObjectMeta{Name: "finalized"}, Spec: corev1.NamespaceSpec{Finalizers: []corev1.FinalizerName{"kubernetes"}}},
 }
 
-// renderNonBlank is the oracle: what operator-utils would do with the template for this object,
-// reduced to "would it produce an object". A render error maps to true because the filter must
-// leave such a template to the renderer so the error is reported there.
+// renderNonBlank is the oracle: exactly what operator-utils' renderer does with the template for
+// this object, by value, reduced to "would it produce an object or an error". A parse or render
+// error maps to true because the filter must leave such a template to the renderer so the error is
+// reported there (and, since Render returns errors, fails the reconcile visibly).
 func renderNonBlank(t *testing.T, funcs template.FuncMap, text string, obj *corev1.Namespace) bool {
 	t.Helper()
 	tmpl, err := template.New("oracle").Funcs(funcs).Parse(text)
 	if err != nil {
 		return true
 	}
-	var out bytes.Buffer
-	if err := tmpl.Execute(&out, obj); err != nil {
-		return true
+	objs, err := utilstemplates.ProcessTemplateArray(log.IntoContext(context.Background(), logr.Discard()), *obj, tmpl)
+	if err != nil {
+		var out bytes.Buffer
+		if execErr := tmpl.Execute(&out, *obj); execErr != nil {
+			return true // execution error: the renderer reports it
+		}
+		// Executed but produced no object (null, or a YAML error): the renderer would error on
+		// this; the filter must therefore have said "not applicable" for a null-only render, or
+		// "applicable" for a real YAML error. Distinguish exactly as rendersAnObject does.
+		return rendersAnObject(out.Bytes())
 	}
-	return len(bytes.TrimSpace(out.Bytes())) > 0
+	return len(objs) > 0
 }
 
 func TestIsApplicable_MatchesRenderer(t *testing.T) {
@@ -350,7 +382,6 @@ func TestRender_ReturnsErrorsInsteadOfAnEmptyBatch(t *testing.T) {
 		{"required label missing", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ required \"team label\" (index .Labels \"team\") }}\n", "team label"},
 		{"invalid yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: [\n", "failed to render"},
 		{"parse error", "{{- if bogus .Name }}\nkind: ConfigMap\n{{- end }}", "does not parse"},
-		{"comment-only render", "{{- if .Name }}\n# nothing but a comment\n{{- end }}\n", "Kind' is missing"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -395,6 +426,12 @@ func TestRender_HappyPathCarriesExcludedPathsAndSkipsRejected(t *testing.T) {
 	}
 	if out, err := f.Render(context.Background(), templates[:2], ns("plain", nil, nil)); err != nil || len(out) != 0 {
 		t.Errorf("no applicable template must give an empty list and no error, got %d err=%v", len(out), err)
+	}
+	// A taken branch that is only a comment renders to `null`; it is skipped, not rendered into an error.
+	commentOnly := apis.LockedResourceTemplate{ObjectTemplate: "{{- if .Name }}\n# nothing but a comment\n{{- end }}\n"}
+	out, err = f.Render(context.Background(), []apis.LockedResourceTemplate{templates[2], commentOnly}, ns("plain", nil, nil))
+	if err != nil || len(out) != 2 {
+		t.Errorf("a comment-only branch must be skipped silently, got %d err=%v", len(out), err)
 	}
 }
 

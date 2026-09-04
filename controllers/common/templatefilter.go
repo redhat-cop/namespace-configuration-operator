@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 )
 
 // TemplateFilter decides, per selected object (Namespace, Group or User), whether an objectTemplate
@@ -105,14 +106,33 @@ func (f *TemplateFilter) IsApplicable(tpl apis.LockedResourceTemplate, obj metav
 		return applicable
 	}
 
+	// The fallback executes against the same VALUE the renderer receives (renderData), never the
+	// pointer: a pointer would resolve pointer-receiver methods such as {{ .GetName }} that the real
+	// render then fails on, and the two paths must agree. An execution error is left to the renderer
+	// so it is reported there, with the CR attached.
 	var out bytes.Buffer
-	if err := pt.tmpl.Execute(&out, obj); err != nil {
+	if err := pt.tmpl.Execute(&out, renderData(obj)); err != nil {
 		f.log.V(1).Info("template applicability could not be decided by rendering, leaving it to the renderer", "object", obj.GetName(), "error", err.Error())
 		return true
 	}
-	applicable := len(bytes.TrimSpace(out.Bytes())) > 0
+	applicable := rendersAnObject(out.Bytes())
 	f.log.V(2).Info("template applicability decided by rendering", "object", obj.GetName(), "applicable", applicable, "template", preview(tpl.ObjectTemplate))
 	return applicable
+}
+
+// rendersAnObject decides what the renderer will make of a render. "Non-blank" is not enough: a
+// YAML comment or a bare `---` is non-blank text that YAMLToJSON turns into the literal `null`,
+// which the renderer rejects with "Object 'Kind' is missing in 'null'". Output that does not parse
+// is left to the renderer (true), so the parse error is reported there.
+func rendersAnObject(out []byte) bool {
+	if len(bytes.TrimSpace(out)) == 0 {
+		return false
+	}
+	j, err := yaml.YAMLToJSON(out)
+	if err != nil {
+		return true
+	}
+	return !bytes.Equal(bytes.TrimSpace(j), []byte("null"))
 }
 
 // Render turns the templates that apply to obj into LockedResources, using the renderer's own
@@ -240,9 +260,10 @@ func evaluateGuardChain(n *parse.IfNode, s subject) (decided bool, applicable bo
 	}
 }
 
-// listHasContent reports whether a taken branch renders something. Any non-blank text settles it;
-// a branch made only of actions (no literal text) is left to the render fallback, since an action
-// can legitimately print nothing.
+// listHasContent reports whether a taken branch renders an object. Literal text settles it when
+// some line is neither blank, nor a `#` comment, nor a bare `---`, since those all parse to `null`
+// and the renderer rejects `null`. A branch made only of actions (no literal text) is left to the
+// render fallback, since an action can legitimately print nothing.
 func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 	if list == nil {
 		return true, false
@@ -250,7 +271,7 @@ func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 	actions := false
 	for _, n := range list.Nodes {
 		if t, isText := n.(*parse.TextNode); isText {
-			if len(bytes.TrimSpace(t.Text)) > 0 {
+			if textHasYAMLContent(t.Text) {
 				return true, true
 			}
 			continue
@@ -261,6 +282,18 @@ func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 		return false, false
 	}
 	return true, false
+}
+
+// textHasYAMLContent is true when at least one line would contribute to a YAML document.
+func textHasYAMLContent(text []byte) bool {
+	for _, line := range bytes.Split(text, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' || bytes.Equal(line, []byte("---")) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func evalBoolPipe(p *parse.PipeNode, s subject) (value bool, ok bool) {
