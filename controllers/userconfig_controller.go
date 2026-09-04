@@ -357,6 +357,14 @@ func (r *UserConfigReconciler) manageCleanUpLogic(ctx context.Context, instance 
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	// A selector that does not compile means the owned set cannot be computed from this spec at all
+	// (and such a CR never created anything under it, since selection fails before enforcement).
+	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
+	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+		r.Log.Error(err, "cannot recompute the objects owned by a UserConfig whose selector does not compile; nothing is deleted", "userconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
+		return nil
+	}
 	selected, err := r.getSelectedUsers(ctx, instance)
 	if err != nil {
 		return fmt.Errorf("unable to list the users selected by UserConfig %s during deletion: %w", instance.Name, err)

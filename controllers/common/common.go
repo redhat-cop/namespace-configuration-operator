@@ -1,8 +1,11 @@
 package common
 
 import (
+	"fmt"
+
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
 	"github.com/scylladb/go-set/strset"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -79,4 +82,16 @@ var ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate = predicate
 	GenericFunc: func(e event.GenericEvent) bool {
 		return true
 	},
+}
+
+// ValidateSelectors compiles the two selectors every CR carries and returns the first error, so
+// callers can tell "this spec cannot select anything" from an API failure while listing.
+func ValidateSelectors(labelSelector, annotationSelector metav1.LabelSelector) error {
+	if _, err := metav1.LabelSelectorAsSelector(&labelSelector); err != nil {
+		return fmt.Errorf("labelSelector does not compile: %w", err)
+	}
+	if _, err := metav1.LabelSelectorAsSelector(&annotationSelector); err != nil {
+		return fmt.Errorf("annotationSelector does not compile: %w", err)
+	}
+	return nil
 }

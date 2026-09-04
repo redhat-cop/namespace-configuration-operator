@@ -98,3 +98,30 @@ func TestManageCleanUpLogic_ListFailureKeepsTheFinalizer(t *testing.T) {
 		t.Fatal("expected an error when the selected namespaces cannot be listed")
 	}
 }
+
+// A CR whose selector does not compile never selected (or created) anything under that spec. Its
+// deletion must complete, with the gap reported, rather than hang on a finalizer that can never clear.
+func TestManageCleanUpLogic_MalformedSelectorFinalizesWithAWarning(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := redhatcopv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	instance := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc"}, Spec: redhatcopv1alpha1.NamespaceConfigSpec{LabelSelector: malformedSelector}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(instance).Build()
+	recorder := record.NewFakeRecorder(1)
+	r := &NamespaceConfigReconciler{
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(c, scheme, nil, c, recorder, true, true),
+		Log:                 logr.Discard(),
+	}
+	if err := r.manageCleanUpLogic(context.Background(), instance); err != nil {
+		t.Fatalf("a malformed selector must not block deletion: %v", err)
+	}
+	select {
+	case ev := <-recorder.Events:
+		if !strings.Contains(ev, "CleanupIncomplete") || !strings.Contains(ev, "labelSelector does not compile") {
+			t.Errorf("expected a CleanupIncomplete warning about the selector, got %q", ev)
+		}
+	default:
+		t.Error("expected a CleanupIncomplete warning event")
+	}
+}

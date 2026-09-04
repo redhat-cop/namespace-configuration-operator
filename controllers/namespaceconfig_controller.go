@@ -186,6 +186,14 @@ func (r *NamespaceConfigReconciler) manageCleanUpLogic(ctx context.Context, inst
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	// A selector that does not compile means the owned set cannot be computed from this spec at all
+	// (and such a CR never created anything under it, since selection fails before enforcement).
+	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
+	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+		r.Log.Error(err, "cannot recompute the objects owned by a NamespaceConfig whose selector does not compile; nothing is deleted", "namespaceconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
+		return nil
+	}
 	selected, err := r.getSelectedNamespaces(ctx, instance)
 	if err != nil {
 		return fmt.Errorf("unable to list the namespaces selected by NamespaceConfig %s during deletion: %w", instance.Name, err)
@@ -332,15 +340,18 @@ func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(ctx context.C
 	}
 	//for each namespaceconfig see if it selects the namespace
 	for _, nc := range ncl.Items {
+		// A malformed selector is that CR's problem alone: its own reconcile reports it as
+		// ReconcileError. Returning here would enqueue NOTHING for any other CR on every namespace
+		// event, and that outage outlives the bad CR until some unrelated event arrives.
 		labelSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.LabelSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create selector from label selector", "selector", &nc.Spec.LabelSelector)
-			return []redhatcopv1alpha1.NamespaceConfig{}, err
+			r.Log.Error(err, "skipping NamespaceConfig with a malformed labelSelector", "namespaceconfig", nc.Name)
+			continue
 		}
 		annotationSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.AnnotationSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", nc.Spec.AnnotationSelector)
-			return []redhatcopv1alpha1.NamespaceConfig{}, err
+			r.Log.Error(err, "skipping NamespaceConfig with a malformed annotationSelector", "namespaceconfig", nc.Name)
+			continue
 		}
 
 		labelsAslabels := labels.Set(namespace.GetLabels())

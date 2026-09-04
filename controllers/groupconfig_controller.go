@@ -239,16 +239,18 @@ func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.
 	applicableGroupConfigs := []redhatcopv1alpha1.GroupConfig{}
 
 	for _, groupConfig := range groupConfigList.Items {
+		// A malformed selector is that CR's problem alone (its own reconcile reports it); it must
+		// not stop every other GroupConfig from being enqueued on group events.
 		labelSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.LabelSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", groupConfig.Spec.LabelSelector)
-			return []redhatcopv1alpha1.GroupConfig{}, err
+			r.Log.Error(err, "skipping GroupConfig with a malformed labelSelector", "groupconfig", groupConfig.Name)
+			continue
 		}
 
 		annotationSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.AnnotationSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", groupConfig.Spec.AnnotationSelector)
-			return []redhatcopv1alpha1.GroupConfig{}, err
+			r.Log.Error(err, "skipping GroupConfig with a malformed annotationSelector", "groupconfig", groupConfig.Name)
+			continue
 		}
 
 		labelsAslabels := labels.Set(group.GetLabels())
@@ -310,6 +312,14 @@ func (r *GroupConfigReconciler) manageCleanUpLogic(ctx context.Context, instance
 	if err := r.Terminate(instance, true); err != nil {
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
+	}
+	// A selector that does not compile means the owned set cannot be computed from this spec at all
+	// (and such a CR never created anything under it, since selection fails before enforcement).
+	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
+	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+		r.Log.Error(err, "cannot recompute the objects owned by a GroupConfig whose selector does not compile; nothing is deleted", "groupconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
+		return nil
 	}
 	selected, err := r.getSelectedGroups(ctx, instance)
 	if err != nil {
