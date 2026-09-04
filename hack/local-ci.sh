@@ -47,8 +47,11 @@ if ! { go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB'; }; t
 fi
 
 step "the binary answers --version"
-go build -o bin/manager . 
+go build -o bin/manager .
 bin/manager --version 2>&1 | grep -q 'VERSION:' || fail "bin/manager --version did not print the banner"
+# Building the package (not main.go) is what lets Go record vcs.* settings; internal/version reads
+# them when no ldflags were given. A file argument would silently lose them again.
+go version -m bin/manager | grep -q 'vcs.revision' || fail "bin/manager carries no vcs.revision: was it built from main.go instead of the package?"
 
 step "rendered manifests carry the log flags"
 # Container.Args has no strategic-merge key, so a patch that touches args replaces the whole list;

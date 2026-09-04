@@ -15,7 +15,9 @@ COPY api/ api/
 COPY controllers/ controllers/
 COPY internal/ internal/
 
-# Build with version information
+# Build with version information. The PACKAGE (`.`) is built, not main.go: a file argument compiles
+# as `command-line-arguments` and carries no vcs.* build settings. There is no .git in this context,
+# so the ldflags below are the only source of the stamps here; the fallbacks matter for `make build`.
 # Note: These args should be passed at build time for accurate version info.
 # The Makefile handles this automatically. For manual builds, use:
 #   podman build --build-arg VERSION=$(git describe --tags --always --dirty) \
@@ -29,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a \
     -ldflags "-X github.com/redhat-cop/namespace-configuration-operator/internal/version.Version=${VERSION} \
               -X github.com/redhat-cop/namespace-configuration-operator/internal/version.Commit=${COMMIT} \
               -X github.com/redhat-cop/namespace-configuration-operator/internal/version.BuildDate=${BUILD_DATE}" \
-    -o manager main.go
+    -o manager .
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
