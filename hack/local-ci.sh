@@ -7,16 +7,12 @@
 # Usage:
 #   hack/local-ci.sh                       # gofmt, go vet, go build, go test -race
 #   LOCAL_CI_IMAGE=1 hack/local-ci.sh      # ...plus a container build, to prove the Dockerfile
-#   LOCAL_CI_GENERATORS=1 hack/local-ci.sh # ...plus `make manifests generate` — needs Go 1.21, see below
+#   LOCAL_CI_SKIP_GENERATORS=1 hack/local-ci.sh   # skip `make manifests generate` (first run downloads controller-gen)
 #
-# WHAT IS NOT HERE, AND WHY.
-#   - `make test`. Its extra work over `go test ./...` is (a) the code generators and (b) envtest
-#     assets for the Ginkgo suite. The Ginkgo suite in controllers/ has no specs, so Ginkgo skips its
-#     BeforeSuite and envtest never starts — (b) is a no-op today. (a) is real but the pinned
-#     controller-gen v0.11.1 panics in go/types under Go 1.22 and later
-#     (kubernetes-sigs/controller-tools#880, fixed in v0.14.0), so on a current toolchain it cannot
-#     run; the shared workflow pins Go ~1.21 and keeps that check. Opt in with LOCAL_CI_GENERATORS=1
-#     when running Go 1.21 locally.
+# WHAT IS NOT HERE, AND WHY. `make test` adds only envtest assets over `go test ./...`, and the Ginkgo
+# suite in controllers/ has no specs, so Ginkgo skips its BeforeSuite and envtest never starts; the
+# generator check that `make test` also implies runs here on its own. controller-gen is pinned to
+# v0.19.0, the version that produced the committed CRDs, so it runs on a current toolchain.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -78,13 +74,16 @@ else
   echo "kubectl not found; skipping the kustomize render checks"
 fi
 
-if [ -n "${LOCAL_CI_GENERATORS:-}" ]; then
+if [ -z "${LOCAL_CI_SKIP_GENERATORS:-}" ]; then
   step "generated files are current (make manifests generate)"
-  make manifests generate
+  # controller-gen is pinned to the version that produced the committed files, so any diff here is a
+  # real drift: a marker edited without regenerating, or a generator bump without committing.
+  make -s manifests generate
   if ! git diff --quiet -- config/ api/; then
     git --no-pager diff --stat -- config/ api/
     fail "the generators changed committed files; commit them"
   fi
+  echo "generated files are current"
 fi
 
 if [ -n "${LOCAL_CI_IMAGE:-}" ]; then
