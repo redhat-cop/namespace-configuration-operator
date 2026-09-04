@@ -69,12 +69,12 @@ type NamespaceConfigReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
-func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *NamespaceConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("namespaceconfig", req.NamespacedName)
 	common.LogReconcilingStarted(log, "namespaceconfig", req.NamespacedName)
 	// Fetch the NamespaceConfig instance
 	instance := &redhatcopv1alpha1.NamespaceConfig{}
-	err := r.GetClient().Get(context, req.NamespacedName, instance)
+	err := r.GetClient().Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -87,10 +87,10 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return reconcile.Result{}, err
 	}
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(context, instance)
+		err := r.GetClient().Update(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
@@ -115,10 +115,10 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 			return reconcile.Result{}, nil
 		}
 
-		err := r.manageCleanUpLogic(context, instance)
+		err := r.manageCleanUpLogic(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 
 		// Remove all old finalizer variants and new finalizer if present
@@ -131,7 +131,7 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Update(context, instance)
+		err = r.GetClient().Update(ctx, instance)
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if apierrors.IsNotFound(err) {
@@ -139,35 +139,35 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 				return reconcile.Result{}, nil
 			}
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		log.Info("resource deletion completed successfully", "namespaceconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 	//get selected namespaces
-	selectedNamespaces, err := r.getSelectedNamespaces(context, instance)
+	selectedNamespaces, err := r.getSelectedNamespaces(ctx, instance)
 	if err != nil {
 		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(context, instance, selectedNamespaces)
+	lockedResources, err := r.getResourceList(ctx, instance, selectedNamespaces)
 	if err != nil {
 		log.Error(err, "unable to process resources", "NamespaceConfig", instance, "namespaces", selectedNamespaces)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	err = r.UpdateLockedResources(context, instance, lockedResources, []lockedpatch.LockedPatch{})
+	err = r.UpdateLockedResources(ctx, instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
 	common.LogResourcesProcessedSuccessfully(log, "namespaceconfig", instance.Name, len(selectedNamespaces), len(lockedResources), "namespaces")
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
-	return common.ManageSuccessWithRetry(r, context, req, log, "namespaceconfig", func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
+	return common.ManageSuccessWithRetry(r, ctx, req, log, "namespaceconfig", instance.GetGeneration(), func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
 }
 
 // manageCleanUpLogic removes everything this NamespaceConfig owns before its finalizer goes.
@@ -216,12 +216,18 @@ func (r *NamespaceConfigReconciler) manageCleanUpLogic(ctx context.Context, inst
 
 // IsInitialized none
 func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.NamespaceConfig) bool {
-	needsUpdate := true
+	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	initialized := true
+	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
+	// Update in the middle of the deletion for no benefit.
+	if util.IsBeingDeleted(instance) {
+		return true
+	}
 	for i := range instance.Spec.Templates {
 		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
 		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
 			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
@@ -230,22 +236,22 @@ func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.Na
 	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
 		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
-		needsUpdate = false
+		initialized = false
 	}
 
 	// Only add/remove finalizers if not being deleted
 	if !util.IsBeingDeleted(instance) {
 		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
 			util.AddFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
 			util.RemoveFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
-	return needsUpdate
+	return initialized
 }
 
 // getResourceList renders every applicable template for every selected namespace. A render failure is

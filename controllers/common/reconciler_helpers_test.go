@@ -45,7 +45,7 @@ func TestManageSuccessWithRetry_ClearsAStandingReconcileError(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build()
 	r := &recordingReconciler{c: c}
 
-	_, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig",
+	_, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig", 3,
 		func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
 	if err != nil {
 		t.Fatal(err)
@@ -78,11 +78,28 @@ func TestManageSuccessWithRetry_LeavesConditionsAloneWithoutAnError(t *testing.T
 	}})
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build()
 	r := &recordingReconciler{c: c}
-	if _, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig",
+	if _, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig", 0,
 		func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} }); err != nil {
 		t.Fatal(err)
 	}
 	if len(r.seen) != 1 || r.seen[0].Type != apis.ReconcileSuccess {
 		t.Errorf("no ReconcileError must be invented, got %+v", r.seen)
+	}
+}
+
+func TestManageSuccessWithRetry_SkipsAStaleGeneration(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := redhatcopv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	nc := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc", Generation: 5}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build()
+	r := &recordingReconciler{c: c}
+	if _, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig", 4,
+		func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} }); err != nil {
+		t.Fatal(err)
+	}
+	if r.seen != nil {
+		t.Errorf("success must not be written for generation 4 when the object is at 5, but ManageSuccess was called")
 	}
 }

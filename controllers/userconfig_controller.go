@@ -68,13 +68,13 @@ type UserConfigReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
-func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *UserConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("userconfig", req.NamespacedName)
 	common.LogReconcilingStarted(log, "userconfig", req.NamespacedName)
 
 	// Fetch the UserConfig instance
 	instance := &redhatcopv1alpha1.UserConfig{}
-	err := r.GetClient().Get(context, req.NamespacedName, instance)
+	err := r.GetClient().Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -88,10 +88,10 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 	}
 
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(context, instance)
+		err := r.GetClient().Update(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
@@ -116,10 +116,10 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 			return reconcile.Result{}, nil
 		}
 
-		err := r.manageCleanUpLogic(context, instance)
+		err := r.manageCleanUpLogic(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 
 		// Remove all old finalizer variants and new finalizer if present
@@ -132,7 +132,7 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Update(context, instance)
+		err = r.GetClient().Update(ctx, instance)
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if errors.IsNotFound(err) {
@@ -140,36 +140,36 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 				return reconcile.Result{}, nil
 			}
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		log.Info("resource deletion completed successfully", "userconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
 	//get selected users
-	selectedUsers, err := r.getSelectedUsers(context, instance)
+	selectedUsers, err := r.getSelectedUsers(ctx, instance)
 	if err != nil {
 		log.Error(err, "unable to get users selected by", "UserConfig", instance)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(context, instance, selectedUsers)
+	lockedResources, err := r.getResourceList(ctx, instance, selectedUsers)
 	if err != nil {
 		log.Error(err, "unable to process resources", "UserConfig", instance, "users", selectedUsers)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	err = r.UpdateLockedResources(context, instance, lockedResources, []lockedpatch.LockedPatch{})
+	err = r.UpdateLockedResources(ctx, instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
 	common.LogResourcesProcessedSuccessfully(log, "userconfig", instance.Name, len(selectedUsers), len(lockedResources), "users")
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
-	return common.ManageSuccessWithRetry(r, context, req, log, "userconfig", func() *redhatcopv1alpha1.UserConfig { return &redhatcopv1alpha1.UserConfig{} })
+	return common.ManageSuccessWithRetry(r, ctx, req, log, "userconfig", instance.GetGeneration(), func() *redhatcopv1alpha1.UserConfig { return &redhatcopv1alpha1.UserConfig{} })
 }
 
 // getResourceList renders every applicable template for every selected user. A render failure is
@@ -278,9 +278,9 @@ func (r *UserConfigReconciler) matches(instance *redhatcopv1alpha1.UserConfig, u
 	return extraFieldSelector.Matches(extraFieldAsLabels) && labelSelector.Matches(labelsAsLabels) && annotationSelector.Matches(annotationsAsLabels)
 }
 
-func (r *UserConfigReconciler) findApplicableUserConfigsFromIdentities(user *userv1.User, identities []userv1.Identity) ([]redhatcopv1alpha1.UserConfig, error) {
+func (r *UserConfigReconciler) findApplicableUserConfigsFromIdentities(ctx context.Context, user *userv1.User, identities []userv1.Identity) ([]redhatcopv1alpha1.UserConfig, error) {
 	userConfigList := &redhatcopv1alpha1.UserConfigList{}
-	err := r.GetClient().List(context.TODO(), userConfigList, &client.ListOptions{})
+	err := r.GetClient().List(ctx, userConfigList, &client.ListOptions{})
 	if err != nil {
 		r.Log.Error(err, "unable to get all userconfigs")
 		return []redhatcopv1alpha1.UserConfig{}, err
@@ -311,17 +311,23 @@ func (r *UserConfigReconciler) findApplicableUserConfigsFromUser(ctx context.Con
 		cidentity := identity.DeepCopy()
 		matchingIdentities = append(matchingIdentities, *cidentity)
 	}
-	return r.findApplicableUserConfigsFromIdentities(user, matchingIdentities)
+	return r.findApplicableUserConfigsFromIdentities(ctx, user, matchingIdentities)
 }
 
 // IsInitialized none
 func (r *UserConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.UserConfig) bool {
-	needsUpdate := true
+	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	initialized := true
+	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
+	// Update in the middle of the deletion for no benefit.
+	if util.IsBeingDeleted(instance) {
+		return true
+	}
 	for i := range instance.Spec.Templates {
 		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
 		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
 			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
@@ -330,22 +336,22 @@ func (r *UserConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.UserCon
 	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
 		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
-		needsUpdate = false
+		initialized = false
 	}
 
 	// Only add/remove finalizers if not being deleted
 	if !util.IsBeingDeleted(instance) {
 		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
 			util.AddFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
 			util.RemoveFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
-	return needsUpdate
+	return initialized
 }
 
 // manageCleanUpLogic removes everything this UserConfig owns before its finalizer goes.
@@ -445,10 +451,12 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			identity := a.(*userv1.Identity)
 			user, err := r.findUserFromIdentity(ctx, identity)
 			if err != nil {
-				r.Log.Error(err, "unable to find applicable User for", "identity", identity)
+				// An Identity without a User is an ordinary state (the User is created after the
+				// Identity, or was deleted): nothing to enqueue, not an error worth a line per event.
+				r.Log.V(1).Info("identity has no user yet, nothing to enqueue", "identity", identity.Name, "reason", err.Error())
 				return []reconcile.Request{}
 			}
-			userConfigs, err := r.findApplicableUserConfigsFromIdentities(user, []userv1.Identity{*identity})
+			userConfigs, err := r.findApplicableUserConfigsFromIdentities(ctx, user, []userv1.Identity{*identity})
 			if err != nil {
 				r.Log.Error(err, "unable to find applicable UserConfigs for", "identity", identity)
 				return []reconcile.Request{}

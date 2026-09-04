@@ -3,10 +3,8 @@ package common
 import (
 	"fmt"
 
-	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
 	"github.com/scylladb/go-set/strset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -16,14 +14,6 @@ var DefaultExcludedPaths = []string{".metadata", ".status", ".spec.replicas"}
 
 // DefaultExcludedPathsSet represents paths that are excluded by default in all resources
 var DefaultExcludedPathsSet = strset.New(DefaultExcludedPaths...)
-
-func GetResources(lockedResources []lockedresource.LockedResource) []client.Object {
-	resources := []client.Object{}
-	for _, lockedResource := range lockedResources {
-		resources = append(resources, &lockedResource.Unstructured)
-	}
-	return resources
-}
 
 // ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate is a predicate that triggers reconciliation when:
 // 1. Resource generation changes (spec updates)

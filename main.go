@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -133,14 +134,10 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	var syncPeriod = 36000 * time.Second //Defaults to every 10Hrs
-	if syncPeriodSeconds, ok := os.LookupEnv("SYNC_PERIOD_SECONDS"); ok && syncPeriodSeconds != "" {
-		if syncPeriodSecondsInt, err := strconv.ParseInt(syncPeriodSeconds, 10, 64); err == nil {
-			syncPeriod = time.Duration(syncPeriodSecondsInt) * time.Second
-		} else if err != nil {
-			setupLog.Error(err, "unable to start manager")
-			os.Exit(1)
-		}
+	syncPeriod, err := parseSyncPeriod(os.Getenv("SYNC_PERIOD_SECONDS"))
+	if err != nil {
+		setupLog.Error(err, "invalid SYNC_PERIOD_SECONDS")
+		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -178,9 +175,10 @@ func main() {
 		Kind:    "User",
 	}); !ok || err != nil {
 		if err != nil {
-			setupLog.Error(err, "unable to set check whether resource User.user.openshift.io exists")
+			setupLog.Error(err, "unable to check whether resource User.user.openshift.io exists")
 			os.Exit(1)
 		}
+		setupLog.Info("User.user.openshift.io is not served by this cluster; the UserConfig controller is not started")
 	} else {
 		if err = (userConfigController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "UserConfig")
@@ -199,9 +197,10 @@ func main() {
 		Kind:    "Group",
 	}); !ok || err != nil {
 		if err != nil {
-			setupLog.Error(err, "unable to set check wheter resource Group.user.openshift.io exists")
+			setupLog.Error(err, "unable to check whether resource Group.user.openshift.io exists")
 			os.Exit(1)
 		}
+		setupLog.Info("Group.user.openshift.io is not served by this cluster; the GroupConfig controller is not started")
 	} else {
 		if err = (groupConfigController).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "GroupConfig")
@@ -227,13 +226,41 @@ func main() {
 }
 
 func checkNamespaceScope() bool {
-	value := os.Getenv(AllowSystemNamespacesEnvVarKey)
-	if len(value) == 0 {
-		return false
-	}
-	res, err := strconv.ParseBool(value)
+	allow, err := parseAllowSystemNamespaces(os.Getenv(AllowSystemNamespacesEnvVarKey))
 	if err != nil {
-		return false
+		// Not fatal: the safe default (system namespaces excluded) applies, but say so, because a
+		// typo here used to be indistinguishable from "false".
+		setupLog.Error(err, "ignoring invalid "+AllowSystemNamespacesEnvVarKey+"; system namespaces stay excluded")
 	}
-	return res
+	return allow
+}
+
+// parseSyncPeriod reads SYNC_PERIOD_SECONDS: empty means the default (every 10 hours); otherwise a
+// positive integer number of seconds.
+func parseSyncPeriod(value string) (time.Duration, error) {
+	const defaultSyncPeriod = 36000 * time.Second
+	if value == "" {
+		return defaultSyncPeriod, nil
+	}
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("SYNC_PERIOD_SECONDS must be an integer number of seconds, got %q: %w", value, err)
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("SYNC_PERIOD_SECONDS must be positive, got %d", seconds)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
+// parseAllowSystemNamespaces reads ALLOW_SYSTEM_NAMESPACES: empty means false; anything else must
+// parse as a bool. A parse error also yields false, with the error returned so it can be logged.
+func parseAllowSystemNamespaces(value string) (bool, error) {
+	if value == "" {
+		return false, nil
+	}
+	allow, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean, got %q: %w", AllowSystemNamespacesEnvVarKey, value, err)
+	}
+	return allow, nil
 }
