@@ -33,7 +33,7 @@ origin_repo() {
   url=${url%/}
   case $url in
     git@*:*) printf '%s\n' "${url#*:}" ;;
-    https://*|http://*|ssh://*) url=${url#*://}; url=${url#*/}; printf '%s\n' "$url" ;;
+    https://*|http://*|ssh://*|git://*) url=${url#*://}; url=${url#*/}; printf '%s\n' "$url" ;;
     *) return 1 ;;
   esac
 }

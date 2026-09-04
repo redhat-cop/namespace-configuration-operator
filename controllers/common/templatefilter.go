@@ -210,14 +210,11 @@ type subject struct {
 // shape or the guard expression is outside the recognised grammar, so the caller renders instead.
 func evaluateStatically(root *parse.ListNode, s subject) (decided bool, applicable bool) {
 	var guard *parse.IfNode
+	var outside []byte
 	for _, n := range root.Nodes {
 		switch n := n.(type) {
 		case *parse.TextNode:
-			if len(bytes.TrimSpace(n.Text)) > 0 {
-				// Unconditional content: the render can never be blank, whatever a guard does to the
-				// rest of the document.
-				return true, true
-			}
+			outside = append(outside, n.Text...)
 		case *parse.IfNode:
 			if guard != nil {
 				return false, false
@@ -229,8 +226,15 @@ func evaluateStatically(root *parse.ListNode, s subject) (decided bool, applicab
 		}
 	}
 	if guard == nil {
-		// Nothing but whitespace: an empty objectTemplate renders no object.
-		return true, false
+		// Literal only: the renderer's oracle decides exactly. Measured in review (second pass): the
+		// previous "any non-blank text is content" rule declared `# comment`, `---`, `null` and `~`
+		// applicable, and the render then failed the whole reconcile with "Kind is missing in null".
+		return true, rendersAnObject(outside)
+	}
+	if len(bytes.TrimSpace(outside)) > 0 {
+		// Text outside the guard (a header comment, a `---`) can itself be null to the renderer, or
+		// combine with document markers the branch prints; only the render can tell.
+		return false, false
 	}
 	return evaluateGuardChain(guard, s)
 }
@@ -260,12 +264,13 @@ func evaluateGuardChain(n *parse.IfNode, s subject) (decided bool, applicable bo
 	}
 }
 
-// listHasContent reports whether a taken branch renders an object. The renderer parses only the
-// FIRST YAML document of the output (sigs.k8s.io/yaml -> yaml.v2 Unmarshal), so the branch's literal
-// text is judged the same way: the first document must contain a line that is neither blank nor a
-// `#` comment. A leading `---` opens document one; a second `---` right after it closes it empty,
-// and everything after is never seen. A branch made only of actions (no literal text) is left to
-// the render fallback, since an action can legitimately print nothing.
+// listHasContent reports whether a taken branch renders an object. The branch's literal text is
+// judged by the same oracle the render fallback uses, rendersAnObject: YAMLToJSON of the text is not
+// `null`. That is exactly what operator-utils' renderer sees (sigs.k8s.io/yaml parses only the FIRST
+// YAML document), so a comment-only branch, a `---` followed by another `---`, a bare `--- # note`,
+// a literal `null` or `~`, or an anchor with no node are all "no object", as measured in review. A
+// branch made only of actions (no literal text) is left to the render fallback, since an action can
+// legitimately print nothing.
 func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 	if list == nil {
 		return true, false
@@ -279,33 +284,13 @@ func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 		}
 		actions = true
 	}
-	if firstDocumentHasContent(text) {
+	if rendersAnObject(text) {
 		return true, true
 	}
 	if actions {
 		return false, false
 	}
 	return true, false
-}
-
-// firstDocumentHasContent mirrors what the renderer will parse: the first YAML document only.
-func firstDocumentHasContent(text []byte) bool {
-	opened := false
-	for _, line := range bytes.Split(text, []byte("\n")) {
-		line = bytes.TrimSpace(line)
-		if bytes.Equal(line, []byte("---")) {
-			if opened {
-				return false // the first document ended without content
-			}
-			opened = true
-			continue
-		}
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-		return true
-	}
-	return false
 }
 
 func evalBoolPipe(p *parse.PipeNode, s subject) (value bool, ok bool) {
