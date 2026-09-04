@@ -2,6 +2,9 @@ package common
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -9,9 +12,11 @@ import (
 
 	"github.com/go-logr/logr"
 	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
+	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
 	utilstemplates "github.com/redhat-cop/operator-utils/pkg/util/templates"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // TemplateFilter decides, per selected object (Namespace, Group or User), whether an objectTemplate
@@ -107,6 +112,53 @@ func (f *TemplateFilter) IsApplicable(tpl apis.LockedResourceTemplate, obj metav
 	applicable := len(bytes.TrimSpace(out.Bytes())) > 0
 	f.log.V(2).Info("template applicability decided by rendering", "object", obj.GetName(), "applicable", applicable, "template", preview(tpl.ObjectTemplate))
 	return applicable
+}
+
+// Render turns the templates that apply to obj into LockedResources, using the renderer's own
+// ProcessTemplateArray on the filter's cached parse, and RETURNS every error.
+//
+// WHY THE CONTROLLERS RENDER HERE RATHER THAN THROUGH operator-utils' GetLockedResourcesFromTemplates*.
+// That function logs a parse or render failure and then returns an EMPTY list with a nil error, so
+// a caller cannot tell "nothing wanted" from "something went wrong". The enforcing reconciler then
+// treats the empty list as the desired state and deletes every object it was enforcing for that
+// batch, while the CR reports ReconcileSuccess (measured: a `required` label removed from one
+// namespace deleted that namespace's RoleBinding under a green status). Returning the error lets the
+// reconcile end in ManageError, which records the failure on the CR and never reaches the enforcer.
+// It also keeps the controllers off that function's unsynchronised package-global template map.
+//
+// The template is executed against the VALUE obj points to, which is what the renderer has always
+// received: a pointer would additionally resolve pointer-receiver methods that a later real render
+// would not, and the two must agree.
+func (f *TemplateFilter) Render(ctx context.Context, templates []apis.LockedResourceTemplate, obj metav1.Object) ([]lockedresource.LockedResource, error) {
+	ctx = log.IntoContext(ctx, f.log)
+	data := renderData(obj)
+	out := []lockedresource.LockedResource{}
+	for i, t := range templates {
+		if !f.IsApplicable(t, obj) {
+			continue
+		}
+		pt := f.parse(t.ObjectTemplate)
+		if pt.err != nil {
+			return nil, fmt.Errorf("template %d does not parse: %w (template starts %q)", i, pt.err, preview(t.ObjectTemplate))
+		}
+		objs, err := utilstemplates.ProcessTemplateArray(ctx, data, pt.tmpl)
+		if err != nil {
+			return nil, fmt.Errorf("template %d failed to render for %s: %w (template starts %q)", i, obj.GetName(), err, preview(t.ObjectTemplate))
+		}
+		for _, o := range objs {
+			out = append(out, lockedresource.LockedResource{Unstructured: o, ExcludedPaths: t.ExcludedPaths})
+		}
+	}
+	return out, nil
+}
+
+// renderData is the value the renderer executes against: the object itself, not a pointer to it.
+func renderData(obj metav1.Object) any {
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr && !v.IsNil() {
+		return v.Elem().Interface()
+	}
+	return obj
 }
 
 func (f *TemplateFilter) parse(text string) *parsedTemplate {

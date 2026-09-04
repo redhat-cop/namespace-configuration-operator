@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -151,7 +152,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 		return r.ManageError(context, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(instance, selectedGroups)
+	lockedResources, err := r.getResourceList(context, instance, selectedGroups)
 	if err != nil {
 		log.Error(err, "unable to process resources", "GroupConfig", instance, "groups", selectedGroups)
 		return r.ManageError(context, instance, err)
@@ -170,27 +171,26 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	return common.ManageSuccessWithRetry(r, context, req, log, "groupconfig", func() *redhatcopv1alpha1.GroupConfig { return &redhatcopv1alpha1.GroupConfig{} })
 }
 
-func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
+// getResourceList renders every applicable template for every selected group. A render failure is
+// returned, not swallowed: the caller ends the reconcile in ManageError and the enforcer never sees a
+// partial desired state (see common.TemplateFilter.Render).
+func (r *GroupConfigReconciler) getResourceList(ctx context.Context, instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, group := range groups {
-		// Filter templates that are applicable to this group BEFORE processing
-		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, group)
-
-		// Only process templates that are actually applicable
-		if len(applicableTemplates) > 0 {
-			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), group)
-			if err != nil {
-				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", group)
-				return []lockedresource.LockedResource{}, err
-			}
-			lockedresources = append(lockedresources, lrs...)
-		} else {
-			// Group is being skipped because no templates in this GroupConfig match the group's pattern
-			// This is logged at V(1) level to be visible but not too verbose
+	filter := r.getTemplateFilter()
+	for i := range groups {
+		group := &groups[i]
+		lrs, err := filter.Render(ctx, instance.Spec.Templates, group)
+		if err != nil {
+			return nil, fmt.Errorf("groupconfig %s: %w", instance.Name, err)
+		}
+		if len(lrs) == 0 {
+			// No template in this GroupConfig applies to this group; visible at V(1), not an error.
 			r.Log.V(1).Info("skipping group - no GroupConfig templates match the group pattern",
 				"group", group.Name,
 				"groupconfig", instance.Name)
+			continue
 		}
+		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
 }

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -150,7 +151,7 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return r.ManageError(context, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(instance, selectedNamespaces)
+	lockedResources, err := r.getResourceList(context, instance, selectedNamespaces)
 	if err != nil {
 		log.Error(err, "unable to process resources", "NamespaceConfig", instance, "namespaces", selectedNamespaces)
 		return r.ManageError(context, instance, err)
@@ -212,27 +213,26 @@ func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.Na
 	return needsUpdate
 }
 
-func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, namespaces []corev1.Namespace) ([]lockedresource.LockedResource, error) {
+// getResourceList renders every applicable template for every selected namespace. A render failure is
+// returned, not swallowed: the caller ends the reconcile in ManageError and the enforcer never sees a
+// partial desired state (see common.TemplateFilter.Render).
+func (r *NamespaceConfigReconciler) getResourceList(ctx context.Context, instance *redhatcopv1alpha1.NamespaceConfig, namespaces []corev1.Namespace) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, namespace := range namespaces {
-		// Filter templates that are applicable to this namespace BEFORE processing
-		applicableTemplates := r.filterApplicableTemplates(instance.Spec.Templates, namespace)
-
-		// Only process templates that are actually applicable
-		if len(applicableTemplates) > 0 {
-			lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(applicableTemplates, r.GetRestConfig(), namespace)
-			if err != nil {
-				r.Log.Error(err, "unable to process", "templates", applicableTemplates, "with param", namespace)
-				return []lockedresource.LockedResource{}, err
-			}
-			lockedresources = append(lockedresources, lrs...)
-		} else {
-			// Namespace is being skipped because no templates in this NamespaceConfig match the namespace's pattern
-			// This is logged at V(1) level to be visible but not too verbose
+	filter := r.getTemplateFilter()
+	for i := range namespaces {
+		namespace := &namespaces[i]
+		lrs, err := filter.Render(ctx, instance.Spec.Templates, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespaceconfig %s: %w", instance.Name, err)
+		}
+		if len(lrs) == 0 {
+			// No template in this NamespaceConfig applies to this namespace; visible at V(1), not an error.
 			r.Log.V(1).Info("skipping namespace - no NamespaceConfig templates match the namespace pattern",
 				"namespace", namespace.Name,
 				"namespaceconfig", instance.Name)
+			continue
 		}
+		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
 }
