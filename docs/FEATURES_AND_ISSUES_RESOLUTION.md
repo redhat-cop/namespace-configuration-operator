@@ -1071,6 +1071,16 @@ A user with N matching identities was appended N times by `getSelectedUsers` (an
 
 ---
 
+### Selected-Object Watches Only React to Label and Annotation Changes
+
+**Status:** ✅ COMPLETED (issue #5)
+
+The Namespace, Group and User watches had no predicate, so every status or resourceVersion bump on any watched object listed every CR, re-rendered each matching one and rewrote its status. Selection reads only labels and annotations, so `common.SelectedObjectChangedPredicate` (label or annotation changed; Create and Delete always pass) now gates those watches. Measured on a cluster: 5 status-only namespace updates caused 5 reconciles before and 0 after; a label change still causes 1. Known limit, deliberate: a template reading `.Spec`/`.Status` of the selected object through the render fallback is not re-rendered when only those change.
+
+**Files Modified:** `controllers/common/common.go`, `controllers/common/predicate_test.go` (**NEW**), the three controllers' `SetupWithManager`
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED
