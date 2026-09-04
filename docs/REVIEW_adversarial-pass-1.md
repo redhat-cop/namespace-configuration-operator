@@ -1,11 +1,12 @@
 # Review — adversarial pass 1 on the merged work of 2026-09-04/05
 
-Adversarial second-opinion pass, 2026-09-05, on two briefs: 9 claims over `git diff e8c92ea..2cf0e19` of this
+Adversarial second-opinion passes, 2026-09-05. First pass: 9 claims over `git diff e8c92ea..2cf0e19` of this
 repository (branch feature/finalizer-fixes-template-filtering-tests) and 5 claims over commit 84aa264 of the
-operator-utils fork. Codex (gpt-5.6-sol, xhigh, via the codex-rescue plugin) had a shell but its sandbox refused
-temp files, so it measured with read-only commands only; Cursor (Grok 4.6 high fast, ask mode) traced from source
-and in the library brief ran measurements in `/tmp` copies. Every verdict was re-checked here before a decision.
-Briefs and raw outputs: session scratchpad `adv/review_brief_*.md`, `adv/review_{codex,cursor}_*.txt`.
+operator-utils fork. Second pass: 6 claims over the operator fixes (`git diff 2cf0e19..205b33a`) and 5 over the
+library fixes. Reviewers: Codex (gpt-5.6-sol, xhigh) and Cursor (Grok 4.6 high fast, ask mode). Which of them
+could measure varied by run and is stated per section; a verdict without an artefact was treated as a hint.
+Every verdict was re-measured here before a decision. Briefs and raw outputs: session scratchpad
+`adv/review_brief_*.md`, `adv/review_{codex,cursor}_*.txt`.
 
 ## Verdicts, operator brief
 
@@ -103,18 +104,59 @@ overlay retags). Codex's fix (retag the base) rejected: the base must stay upstr
 is permissions: the nested jobs request `id-token: write`, a fork's token is read-only; fixed on PR #37 and proven
 (job skipped).
 
-## Verdicts, library brief
+## Verdicts, library brief (first pass, commit 84aa264)
 
-Recorded in the companion section once the Codex run completes; Cursor's measured verdicts: C1 pointer-keyed
-cache grows with fresh configs (accepted, key by config fingerprint); C2/C4 `NormalizeJSONPaths` collapses
-bracketed dotted keys (accepted on the fact; recorded as a limitation of code the SSA branch deletes); C3 the
-tolerated `invalid index` text also covers negative indexes (accepted, reject negative indexes at conversion);
-C5 an unprefixed path now gains a root slash (accepted, prefix only when the input began with `.` or `$`);
-"not asked": the cache test depends on global map state (accepted, reset in the test).
+Cursor measured in `/tmp` copies; Codex (via the plugin) had a shell and measured in a copy with a redirected
+build cache. The fixes for this pass are commits 5265b70, 3b9a9b3 and 05cfe9e on the library branch.
+
+| Claim | Codex | Cursor | Decision |
+|---|---|---|---|
+| C1 cache is safe and keyed by config | REFUTED | REFUTED | **Accepted**: 1000 fresh `&rest.Config{}` retained 1000 entries. Keyed by the config's material (5265b70). Codex's text-only key with clone-and-rebind and a 256-entry FIFO rejected: the material key already collapses equivalent configs; growth by distinct template text is upstream's behaviour and bounded by the templates ever written to CRs |
+| C2 quoted keys are handled | REFUTED | REFUTED | **Accepted on the fact, recorded, no change**: `FilterOutPaths` removes the literal key correctly (measured for `a.b`, `x/y`, a slashed label), but `NormalizeJSONPaths`' dotted form makes `.data['a.b']` also shield nested `data.a.b` in the null-injection check. That code (the #194 null injection) is not carried to the server-side-apply branch |
+| C3 tolerated `invalid index` text | REFUTED | REFUTED | **Accepted**: Codex's table of the 11 json-patch sites shows the text covers negative indexes too. Rejected by name in every spelling (5265b70, 05cfe9e). Codex's `pathExists` preflight and pointer-canonical rewrite of patch.go rejected: a second traversal per path and a new exported pointer API to reach the same outcome as validating the spelling |
+| C4 null injection respects excluded paths | REFUTED | PLAUSIBLE | **Accepted on the fact, recorded, no change**: an excluded descendant under an ancestor the template omits skips the whole ancestor (`.spec.template.spec` excluded, live `spec.unrelated` kept; `.rules[0]` excluded, whole array kept). Same as upstream without #194; deleted with SSA. Codex's recursion plus rejection of partial array exclusions would turn every existing `.rules[0]`-style exclusion into a reconcile error |
+| C5 no observable change for documented spellings | REFUTED | REFUTED | **Accepted in part**: `spec.replicas` unrooted kept its no-op meaning (5265b70); `.data.` no longer deletes the parent (3b9a9b3). The other changed forms (`.data['a.b']` no-op to removal, `.rules[0]` error to removal) are the bugs the change exists to fix. A `FilterOutPathsV2` rejected |
+
+**Volunteered by Codex, accepted as recorded:** `GetLockedResourcesFromTemplates*` returns `[]LockedResource{},
+nil` on parse and execute errors. True, and it is upstream's exported contract; this operator renders through its
+own `TemplateFilter.Render` for exactly that reason (see the comment in templatefilter.go). A change to the
+exported contract belongs to the upstream conversation, not this branch.
+
+**Found while re-checking, fixed:** `.data.` deleted all of `data` (a trailing-dot trim carried over from the old
+`]` handling, introduced at 84aa264) and `.data[` did nothing, silently: both are reported by name (3b9a9b3).
+The negative-index check ran on the pointer, so a quoted key `.data['-1']` was rejected as an index: the checks
+now run on the spelling with quoted keys removed (05cfe9e). Tests for every case fail before and pass after.
+
+## Second pass, operator (fixes at 205b33a)
+
+Cursor's and Codex's sandboxes both refused every shell call and temp file for this run, so their verdicts are
+traced from source; every runtime claim was measured here in a detached worktree of 205b33a.
+
+| Claim | Cursor | Codex | Decision |
+|---|---|---|---|
+| C1 first-document rule ≡ YAMLToJSON | REFUTED | PLAUSIBLE | **Accepted**: measured over 21 shapes, four diverge (`null`, `~`, an anchor with no node, a bare `--- # note`); three of Cursor's rows were backwards (`...` and a lone `%YAML` are parse errors, so applicable; a comment before the first `---` is the object). Fix from both reviewers: judge the literal text with `rendersAnObject`, delete the line scanner |
+| C2 gate on Namespace only; only labels/annotations read | REFUTED | REFUTED | **Accepted on the second half, no predicate change**: tests exercise `.Spec.Finalizers` through the render fallback; examples read `.Name` (immutable). The spec-aware predicate both proposed rejected: `Namespace.spec` holds only `finalizers`, written by the API server; no shipped template reads it; the limit is documented in common.go. FEATURES paragraph corrected (it still said the gate was on all three watches). Codex's finding that the predicate test's "spec only" case set nil to nil accepted: the case now changes a finalizer |
+| C3 Requeue cannot loop or double-write | REFUTED | REFUTED | **Accepted; pass-1 decision C4(b) retracted**: measured with client-go's workqueue, a dirty mark plus `AddRateLimited` gives 3 reconciles where the watch alone gives 2, because `Forget` does not cancel the delayed add. The requeue also never achieved its stated purpose: under perpetual churn every cycle skips again. `Requeue` removed. Live on the cluster: two spec edits, two reconciles, ReconcileSuccess at the final generation |
+| C4 every selector validated, named as in the CRD | CONFIRMED | CONFIRMED | — |
+| C5 every GitHub URL form; `--platforms` value | REFUTED | PLAUSIBLE | **Accepted in part**: `git://` added to the arm (a generalised `*://*` arm tried first accepted `file://` with a bogus result and was caught by the new test). `insteadOf` refuted by measurement: `git remote get-url` expands it (Cursor claimed the opposite). `--platforms=` unchanged: an unadvertised form that fails loudly with "unknown option". Codex's 40-line `origin_repo` with host and owner validation rejected for a helper whose only consumer is `gh -R` |
+| C6 two gate runs identical | PLAUSIBLE | PLAUSIBLE | **Measured, confirmed**: two runs in a clean worktree, exit 0 both, identical tracked, untracked and ignored state, logs identical except the first run's controller-gen download. Only `bin/` (ignored, the Makefile's tool cache by design) differs from a fresh clone. Codex's scratch-dir redesign rejected: it re-downloads controller-gen on every run |
+
+**Volunteered by Codex, measured, accepted:** the static path declared any non-blank unguarded text applicable,
+so a comment-only template, a `---`, a `null`, and, wider than reported, a header comment above a guard that is
+false were all "applicable"; the render then failed the whole reconcile for that namespace with the original
+"Object 'Kind' is missing in 'null'". Literal-only templates are now judged by the oracle and literal text outside
+a guard sends the template to the render fallback; the shapes are in the property test. The shipped chart has no
+header comment above a guard, so it was not affected.
+
+**Volunteered by Cursor:** the stale FEATURES paragraph, accepted; a test that greps controller sources for the
+predicate name rejected (it tests no behaviour).
 
 ## Outcome
 
-Operator: 6 claims refuted or partly refuted, 4 fixes applied (predicate scope, requeue, first-document rule,
-selector validation) plus two script fixes; 4 reviewer snippets rejected with reasons above. Re-validated:
-`go test -race ./...`, `hack/lib_test.sh`, the gate, a CRC run of the fixed head (below). Second pass: pending
-on the fixed head.
+Operator, first pass: 6 claims refuted or partly refuted, 4 fixes applied (predicate scope, requeue, first-document
+rule, selector validation) plus two script fixes; 4 reviewer snippets rejected with reasons above. Second pass: the
+requeue reversed, the first-document rule replaced by the renderer's oracle (guarded, unguarded and outside a
+guard), the predicate test made to assert something, `git://` accepted, a stale paragraph fixed. Library: three
+fix commits; four findings recorded without change because the server-side-apply branch replaces that code.
+Re-validated after each pass: `go test -race ./...`, `hack/lib_test.sh`, the gate, a cluster run of the fixed head.
+Library second pass: see the companion section once its reviewers report.

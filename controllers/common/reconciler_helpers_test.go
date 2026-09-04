@@ -103,7 +103,7 @@ func TestManageSuccessWithRetry_SkipsAStaleGeneration(t *testing.T) {
 	if r.seen != nil {
 		t.Errorf("success must not be written for generation 4 when the object is at 5, but ManageSuccess was called")
 	}
-	if !res.Requeue {
-		t.Errorf("a generation that moved during the reconcile must requeue, or a spec that changes every cycle never gets a status")
+	if res.Requeue || res.RequeueAfter != 0 {
+		t.Errorf("a moved generation must not requeue: its update is already queued by the generation predicate, and a requeue is an AddRateLimited that Forget does not cancel (measured: 3 reconciles instead of 2), got %+v", res)
 	}
 }

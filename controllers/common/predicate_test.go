@@ -13,7 +13,10 @@ import (
 
 func TestSelectedObjectChangedPredicate(t *testing.T) {
 	base := func() *corev1.Namespace {
-		return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "n", ResourceVersion: "1", Labels: map[string]string{"team": "a"}, Annotations: map[string]string{"note": "x"}}}
+		return &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "n", ResourceVersion: "1", Labels: map[string]string{"team": "a"}, Annotations: map[string]string{"note": "x"}},
+			Spec:       corev1.NamespaceSpec{Finalizers: []corev1.FinalizerName{"kubernetes"}},
+		}
 	}
 	cases := []struct {
 		name string
@@ -22,7 +25,9 @@ func TestSelectedObjectChangedPredicate(t *testing.T) {
 	}{
 		{"resourceVersion only", func(n *corev1.Namespace) { n.ResourceVersion = "2" }, false},
 		{"status only", func(n *corev1.Namespace) { n.Status.Phase = corev1.NamespaceTerminating }, false},
-		{"spec only", func(n *corev1.Namespace) { n.Spec.Finalizers = nil }, false},
+		// the documented limit: a spec-only change is dropped on purpose (the case must change something;
+		// a nil-to-nil mutation, as first written, asserted nothing)
+		{"spec only", func(n *corev1.Namespace) { n.Spec.Finalizers = append(n.Spec.Finalizers, "example.com/extra") }, false},
 		{"label changed", func(n *corev1.Namespace) { n.Labels["team"] = "b" }, true},
 		{"label added", func(n *corev1.Namespace) { n.Labels["x"] = "y" }, true},
 		{"label removed", func(n *corev1.Namespace) { delete(n.Labels, "team") }, true},
