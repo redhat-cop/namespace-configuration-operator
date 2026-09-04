@@ -996,6 +996,28 @@ namespace's RoleBinding under a green status; the only trace was three error-lev
 
 ---
 
+### CR Deletion Recomputes the Owned Set
+
+**Status:** ✅ COMPLETED (issue #2)
+
+**Problem:**
+`Terminate` deletes only what the in-memory enforcer was started with. That map is empty after an operator
+restart and the entry is dropped after a failed Terminate, so a CR deleted in either state finalized with every
+managed object orphaned; the chart's orphan-sweeper Job was papering over it.
+
+**Solution:**
+`manageCleanUpLogic` in all three controllers calls `Terminate` first, then recomputes the owned set from the spec
+(`TemplateFilter.OwnedResources` over the selected namespaces/groups/users) and deletes it explicitly. A selected
+object whose templates no longer render is reported as a `CleanupIncomplete` Warning event and an error-level log
+line, and deletion proceeds; a failed DELETE keeps the finalizer.
+
+**Files Modified:**
+- `controllers/common/templatefilter.go` - `OwnedResources`
+- `controllers/{namespaceconfig,groupconfig,userconfig}_controller.go` - `manageCleanUpLogic(ctx, ...)`
+- `controllers/cleanup_test.go` - **NEW** - owned objects deleted without a started enforcer; list failure keeps the finalizer
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED

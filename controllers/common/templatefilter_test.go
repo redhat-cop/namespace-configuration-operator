@@ -409,3 +409,20 @@ func TestRender_ExecutesAgainstTheValueLikeTheRenderer(t *testing.T) {
 		t.Errorf("a pointer-receiver method must fail like it does in the renderer, got err=%v", err)
 	}
 }
+
+func TestOwnedResources_BestEffortAcrossObjects(t *testing.T) {
+	f := newTestFilter()
+	templates := []apis.LockedResourceTemplate{{ObjectTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ required \"team\" (index .Labels \"team\") }}\n  namespace: {{ .Name }}\n"}}
+	objs := []metav1.Object{
+		ns("a", map[string]string{"team": "x"}, nil),
+		ns("b", nil, nil), // cannot render
+		ns("c", map[string]string{"team": "y"}, nil),
+	}
+	owned, failures := f.OwnedResources(context.Background(), templates, objs)
+	if len(owned) != 2 || owned[0].GetNamespace() != "a" || owned[1].GetNamespace() != "c" {
+		t.Errorf("expected the two renderable objects in order, got %d", len(owned))
+	}
+	if len(failures) != 1 || !strings.Contains(failures[0].Error(), "for b") {
+		t.Errorf("expected exactly one failure naming b, got %v", failures)
+	}
+}

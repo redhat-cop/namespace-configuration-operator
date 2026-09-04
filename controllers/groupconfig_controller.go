@@ -115,7 +115,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 			return reconcile.Result{}, nil
 		}
 
-		err := r.manageCleanUpLogic(instance)
+		err := r.manageCleanUpLogic(context, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
 			return r.ManageError(context, instance, err)
@@ -295,12 +295,39 @@ func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupC
 	return needsUpdate
 }
 
-func (r *GroupConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.GroupConfig) error {
-	err := r.Terminate(instance, true)
-	if err != nil {
+// manageCleanUpLogic removes everything this GroupConfig owns before its finalizer goes.
+//
+// Terminate alone is not enough: it deletes only what the in-memory enforcer was started with, which
+// is nothing after an operator restart and nothing after a failed attempt (the entry is dropped), so a
+// CR deleted in either state used to finalize with every managed object orphaned. The owned set is
+// therefore recomputed from the spec and deleted explicitly (NotFound is ignored). Terminate runs
+// first so a started enforcer cannot recreate what is deleted next.
+//
+// A group whose templates no longer render cannot have its objects recomputed; that is reported as
+// a Warning event and an error-level log line naming the group, and deletion proceeds, because a
+// finalizer that can never clear is worse than a documented orphan. A failed DELETE keeps the finalizer.
+func (r *GroupConfigReconciler) manageCleanUpLogic(ctx context.Context, instance *redhatcopv1alpha1.GroupConfig) error {
+	if err := r.Terminate(instance, true); err != nil {
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	selected, err := r.getSelectedGroups(ctx, instance)
+	if err != nil {
+		return fmt.Errorf("unable to list the groups selected by GroupConfig %s during deletion: %w", instance.Name, err)
+	}
+	objs := make([]metav1.Object, 0, len(selected))
+	for i := range selected {
+		objs = append(objs, &selected[i])
+	}
+	owned, failures := r.getTemplateFilter().OwnedResources(ctx, instance.Spec.Templates, objs)
+	for _, f := range failures {
+		r.Log.Error(f, "could not recompute the objects owned for one group; anything created from that template there is NOT deleted", "groupconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", f.Error())
+	}
+	if err := r.DeleteUnstructuredResources(ctx, owned); err != nil {
+		return fmt.Errorf("unable to delete the objects owned by GroupConfig %s: %w", instance.Name, err)
+	}
+	r.Log.Info("deleted the objects owned by the GroupConfig", "groupconfig", instance.Name, "objects", len(owned), "groups", len(selected))
 	return nil
 }
 
