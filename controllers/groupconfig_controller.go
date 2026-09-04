@@ -67,13 +67,13 @@ type GroupConfigReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
-func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("groupconfig", req.NamespacedName)
 	common.LogReconcilingStarted(log, "groupconfig", req.NamespacedName)
 
 	// Fetch the GroupConfig instance
 	instance := &redhatcopv1alpha1.GroupConfig{}
-	err := r.GetClient().Get(context, req.NamespacedName, instance)
+	err := r.GetClient().Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -87,10 +87,10 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	}
 
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(context, instance)
+		err := r.GetClient().Update(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
@@ -115,10 +115,10 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 			return reconcile.Result{}, nil
 		}
 
-		err := r.manageCleanUpLogic(context, instance)
+		err := r.manageCleanUpLogic(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 
 		// Remove all old finalizer variants and new finalizer if present
@@ -131,7 +131,7 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Update(context, instance)
+		err = r.GetClient().Update(ctx, instance)
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if errors.IsNotFound(err) {
@@ -139,36 +139,36 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 				return reconcile.Result{}, nil
 			}
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		log.Info("resource deletion completed successfully", "groupconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
 	//get selected users
-	selectedGroups, err := r.getSelectedGroups(context, instance)
+	selectedGroups, err := r.getSelectedGroups(ctx, instance)
 	if err != nil {
 		log.Error(err, "unable to get groups selected by", "GroupConfig", instance)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(context, instance, selectedGroups)
+	lockedResources, err := r.getResourceList(ctx, instance, selectedGroups)
 	if err != nil {
 		log.Error(err, "unable to process resources", "GroupConfig", instance, "groups", selectedGroups)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	err = r.UpdateLockedResources(context, instance, lockedResources, []lockedpatch.LockedPatch{})
+	err = r.UpdateLockedResources(ctx, instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
 	common.LogResourcesProcessedSuccessfully(log, "groupconfig", instance.Name, len(selectedGroups), len(lockedResources), "groups")
 
 	// Use retry mechanism to handle optimistic concurrency conflicts
 	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
-	return common.ManageSuccessWithRetry(r, context, req, log, "groupconfig", func() *redhatcopv1alpha1.GroupConfig { return &redhatcopv1alpha1.GroupConfig{} })
+	return common.ManageSuccessWithRetry(r, ctx, req, log, "groupconfig", instance.GetGeneration(), func() *redhatcopv1alpha1.GroupConfig { return &redhatcopv1alpha1.GroupConfig{} })
 }
 
 // getResourceList renders every applicable template for every selected group. A render failure is
@@ -265,12 +265,18 @@ func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.
 
 // IsInitialized none
 func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupConfig) bool {
-	needsUpdate := true
+	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	initialized := true
+	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
+	// Update in the middle of the deletion for no benefit.
+	if util.IsBeingDeleted(instance) {
+		return true
+	}
 	for i := range instance.Spec.Templates {
 		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
 		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
 			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
@@ -279,22 +285,22 @@ func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupC
 	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
 		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
-		needsUpdate = false
+		initialized = false
 	}
 
 	// Only add/remove finalizers if not being deleted
 	if !util.IsBeingDeleted(instance) {
 		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
 			util.AddFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
 			util.RemoveFinalizer(instance, r.controllerName)
-			needsUpdate = false
+			initialized = false
 		}
 	}
 
-	return needsUpdate
+	return initialized
 }
 
 // manageCleanUpLogic removes everything this GroupConfig owns before its finalizer goes.

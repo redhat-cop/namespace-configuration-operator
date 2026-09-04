@@ -50,7 +50,7 @@ func TestUserSelection_OnePerUserAcrossIdentities(t *testing.T) {
 	if err != nil || len(lrs) != 1 {
 		t.Fatalf("expected one rendered resource, got %d err=%v", len(lrs), err)
 	}
-	applicable, err := r.findApplicableUserConfigsFromIdentities(user, identities)
+	applicable, err := r.findApplicableUserConfigsFromIdentities(context.Background(), user, identities)
 	if err != nil || len(applicable) != 1 {
 		t.Fatalf("expected the UserConfig once, got %d err=%v", len(applicable), err)
 	}

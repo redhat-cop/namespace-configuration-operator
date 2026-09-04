@@ -39,9 +39,9 @@ type EnforcingReconcilerInterface interface {
 	ManageSuccess(ctx context.Context, obj client.Object) (reconcile.Result, error)
 }
 
-// LogReconcilingStarted logs the "reconciling started" message with the proper resource type name.
+// LogReconcilingStarted logs the "reconciling started" message naming the resource.
 func LogReconcilingStarted(log logr.Logger, resourceTypeName string, namespacedName types.NamespacedName) {
-	log.Info("reconciling started")
+	log.Info("reconciling started", resourceTypeName, namespacedName.Name)
 }
 
 // LogResourcesProcessedSuccessfully logs the "resources processed successfully" message
@@ -63,6 +63,8 @@ func LogResourcesProcessedSuccessfully(log logr.Logger, resourceTypeName string,
 //   - req: Controller request with the resource's namespaced name
 //   - log: Logger instance
 //   - resourceTypeName: The resource type name for logging (e.g., "groupconfig", "namespaceconfig", "userconfig")
+//   - reconciledGeneration: the generation that was actually processed; if the object has moved on
+//     since, no success is written for it (the newer generation's reconcile is already queued)
 //   - newInstance: Factory function that creates a new instance of type T
 //
 // Returns:
@@ -73,6 +75,7 @@ func ManageSuccessWithRetry[T client.Object](
 	req ctrl.Request,
 	log logr.Logger,
 	resourceTypeName string,
+	reconciledGeneration int64,
 	newInstance func() T,
 ) (reconcile.Result, error) {
 	const maxRetries = 5
@@ -89,6 +92,14 @@ func ManageSuccessWithRetry[T client.Object](
 			}
 			log.Error(err, "unable to re-fetch instance for status update", "attempt", attempt+1)
 			return reconcile.Result{}, err
+		}
+
+		// The library stamps ObservedGeneration from the object it is handed. If the spec changed
+		// between render and this write, writing success now would claim the NEW generation was
+		// processed. Its reconcile is already queued by the generation predicate; let it report.
+		if latestInstance.GetGeneration() != reconciledGeneration {
+			log.V(1).Info("spec changed during reconcile; leaving status to the next cycle", resourceTypeName, latestInstance.GetName(), "reconciled", reconciledGeneration, "current", latestInstance.GetGeneration())
+			return reconcile.Result{}, nil
 		}
 
 		// A previous cycle may have left ReconcileError=True. The library's ManageSuccess only adds or
