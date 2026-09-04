@@ -7,6 +7,17 @@ on:
     tags:
       - v*
 
+# Permissions the nested reusable workflow's jobs request (id-token for signing, packages for
+# attestations, actions to detect the environment). Without this block GitHub refuses to START the
+# run on a repository whose default token is read-only, which is every fork: measured as
+# conclusion=startup_failure with zero jobs, with and without the fork guard below. The same block
+# is in redhat-cop/group-sync-operator's push.yml ("Permissions required by nested workflow").
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+  actions: read
+
 jobs:
   shared-operator-workflow:
     name: shared-operator-workflow
