@@ -138,11 +138,14 @@ kind-setup: kind kubectl helm
 ##@ Build
 
 .PHONY: build
+# Build the PACKAGE (`.`), not `main.go`: a file argument compiles as `command-line-arguments`, for
+# which Go records no vcs.* build settings, so internal/version's fallbacks never saw a commit.
+# -buildvcs defaults to auto, which stamps them whenever a .git directory is present.
 build: manifests generate fmt vet ## Build manager binary.
 	@BUILD_VERSION=$${VERSION:-$$(git describe --tags --always --dirty 2>/dev/null || echo "$(VERSION)")}; \
 	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
 	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
-	go build -buildvcs -ldflags "-X github.com/redhat-cop/namespace-configuration-operator/internal/version.Version=$$BUILD_VERSION -X github.com/redhat-cop/namespace-configuration-operator/internal/version.Commit=$$COMMIT -X github.com/redhat-cop/namespace-configuration-operator/internal/version.BuildDate=$$BUILD_DATE" -o bin/manager main.go
+	go build -ldflags "-X github.com/redhat-cop/namespace-configuration-operator/internal/version.Version=$$BUILD_VERSION -X github.com/redhat-cop/namespace-configuration-operator/internal/version.Commit=$$COMMIT -X github.com/redhat-cop/namespace-configuration-operator/internal/version.BuildDate=$$BUILD_DATE" -o bin/manager .
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
