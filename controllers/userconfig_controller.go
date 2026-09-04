@@ -19,8 +19,7 @@ package controllers
 import (
 	"context"
 	errs "errors"
-	"regexp"
-	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
@@ -49,6 +48,9 @@ type UserConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
 	Log            logr.Logger
 	controllerName string
+	// templateFilter is built lazily by getTemplateFilter; see there.
+	templateFilter     *common.TemplateFilter
+	templateFilterOnce sync.Once
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=userconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -194,153 +196,26 @@ func (r *UserConfigReconciler) getResourceList(instance *redhatcopv1alpha1.UserC
 	return lockedresources, nil
 }
 
-// Filter templates that are applicable to the given user based on template conditionals
+// filterApplicableTemplates keeps the templates that would render something for this user, so a
+// guarded template is never handed to the renderer for a user its guard rejects. The decision
+// logic, and why an empty render must be avoided, lives in common.TemplateFilter.
 func (r *UserConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, user userv1.User) []apis.LockedResourceTemplate {
-	applicableTemplates := []apis.LockedResourceTemplate{}
-
-	for _, template := range templates {
-		if r.isTemplateApplicableToUser(template, user) {
-			applicableTemplates = append(applicableTemplates, template)
-		}
-	}
-
-	return applicableTemplates
+	return r.getTemplateFilter().FilterApplicable(templates, &user)
 }
 
-// Dynamically check if template is applicable by extracting patterns from template content
+// isTemplateApplicableToUser reports whether one template would render something for the user.
 func (r *UserConfigReconciler) isTemplateApplicableToUser(template apis.LockedResourceTemplate, user userv1.User) bool {
-	templateContent := template.ObjectTemplate
-	userName := user.Name
-
-	// Extract both hasSuffix and contains patterns
-	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
-	containsPatterns := r.extractContainsPatterns(templateContent)
-
-	// Debug logging for template filtering (V(2) - only shown with --zap-log-level=2 or higher)
-	r.Log.V(2).Info("checking template applicability",
-		"user", userName,
-		"suffixPatterns", suffixPatterns,
-		"containsPatterns", containsPatterns,
-		"templatePreview", func() string {
-			if len(templateContent) > 100 {
-				return templateContent[:100] + "..."
-			}
-			return templateContent
-		}())
-
-	// If no conditional patterns found, template applies to all users
-	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
-		// Check for unrecognized conditional logic
-		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
-			r.Log.V(2).Info("template contains unrecognized conditional logic, applying to all users (relying on template rendering)", "user", userName)
-			return true
-		}
-		r.Log.V(2).Info("template has no patterns, applying to all users", "user", userName)
-		return true
-	}
-
-	// Detect if template uses AND logic (requires all conditions to match)
-	// vs OR logic (requires any condition to match)
-	// Look for "and" keyword in conditional statements
-	usesAndLogic := strings.Contains(templateContent, "{{- if and") || strings.Contains(templateContent, "{{ if and")
-
-	if usesAndLogic {
-		// AND logic: ALL patterns must match
-		allSuffixMatch := true
-		if len(suffixPatterns) > 0 {
-			for _, pattern := range suffixPatterns {
-				if !strings.HasSuffix(userName, pattern) {
-					allSuffixMatch = false
-					break
-				}
-			}
-		} else {
-			allSuffixMatch = true
-		}
-
-		allContainsMatch := true
-		if len(containsPatterns) > 0 {
-			for _, pattern := range containsPatterns {
-				if !strings.Contains(userName, pattern) {
-					allContainsMatch = false
-					break
-				}
-			}
-		} else {
-			allContainsMatch = true
-		}
-
-		if allSuffixMatch && allContainsMatch {
-			r.Log.V(2).Info("user matches all AND logic patterns", "user", userName)
-			return true
-		}
-		r.Log.V(2).Info("user does not match all AND logic patterns", "user", userName)
-		return false
-
-	} else {
-		// OR logic: ANY pattern can match (original behavior)
-		// Check hasSuffix patterns
-		for _, pattern := range suffixPatterns {
-			if strings.HasSuffix(userName, pattern) {
-				r.Log.V(2).Info("user matches hasSuffix pattern",
-					"user", userName,
-					"pattern", pattern)
-				return true
-			}
-		}
-
-		// Check contains patterns
-		for _, pattern := range containsPatterns {
-			if strings.Contains(userName, pattern) {
-				r.Log.V(2).Info("user matches contains pattern",
-					"user", userName,
-					"pattern", pattern)
-				return true
-			}
-		}
-	}
-
-	// User doesn't match any patterns
-	r.Log.V(2).Info("user does not match any template patterns",
-		"user", userName,
-		"suffixPatterns", suffixPatterns,
-		"containsPatterns", containsPatterns)
-	return false
+	return r.getTemplateFilter().IsApplicable(template, &user)
 }
 
-// Extract all hasSuffix patterns from template content
-func (r *UserConfigReconciler) extractHasSuffixPatterns(templateContent string) []string {
-	patterns := []string{}
-
-	// Regex to match: hasSuffix "some-pattern" or hasSuffix "-some-pattern"
-	// Handles both: {{- if hasSuffix "-cluster-admin" .Name }} and similar patterns
-	re := regexp.MustCompile(`hasSuffix\s+"([^"]+)"`)
-	matches := re.FindAllStringSubmatch(templateContent, -1)
-
-	for _, match := range matches {
-		if len(match) > 1 {
-			patterns = append(patterns, match[1])
-		}
-	}
-
-	return patterns
-}
-
-// Extract contains patterns for templates using 'contains' instead of 'hasSuffix'
-func (r *UserConfigReconciler) extractContainsPatterns(templateContent string) []string {
-	patterns := []string{}
-
-	// Regex to match: contains "some-pattern" or contains "-some-pattern"
-	re := regexp.MustCompile(`contains\s+"([^"]+)"`)
-	matches := re.FindAllStringSubmatch(templateContent, -1)
-
-	for _, match := range matches {
-		if len(match) > 1 {
-			patterns = append(patterns, match[1])
-		}
-	}
-
-	return patterns
+// getTemplateFilter builds the filter on first use. The rest config its render fallback may need is
+// only set once the reconciler is wired to a manager; unit tests construct the reconciler bare, and
+// there a nil config is fine because their templates never reach an API lookup.
+func (r *UserConfigReconciler) getTemplateFilter() *common.TemplateFilter {
+	r.templateFilterOnce.Do(func() {
+		r.templateFilter = common.NewTemplateFilter(r.Log.WithName("templatefilter"), r.GetRestConfig())
+	})
+	return r.templateFilter
 }
 
 func (r *UserConfigReconciler) getSelectedUsers(context context.Context, instance *redhatcopv1alpha1.UserConfig) ([]userv1.User, error) {

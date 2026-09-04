@@ -4,7 +4,6 @@
 package controllers
 
 import (
-	"reflect"
 	"testing"
 
 	userv1 "github.com/openshift/api/user/v1"
@@ -12,236 +11,119 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestExtractHasSuffixPatterns(t *testing.T) {
-	reconciler := &GroupConfigReconciler{}
+// The decision logic itself is tested exhaustively in controllers/common (templatefilter_test.go),
+// including a property test that checks every guard shape against the real renderer. These tests
+// pin the reconciler's wiring: the group it passes is the one the guard reads, name, labels and
+// annotations included.
 
-	tests := []struct {
-		name            string
-		templateContent string
-		expected        []string
-	}{
-		{
-			name: "single hasSuffix pattern",
-			templateContent: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			expected: []string{"-cluster-admin"},
-		},
-		{
-			name: "multiple hasSuffix patterns",
-			templateContent: `{{- if hasSuffix "-cluster-admin" .Name }}
-admin stuff
-{{- else if hasSuffix "-cluster-audit" .Name }}
-audit stuff
-{{- end }}`,
-			expected: []string{"-cluster-admin", "-cluster-audit"},
-		},
-		{
-			name: "no hasSuffix patterns",
-			templateContent: `kind: Role
-metadata:
-  name: basic-role`,
-			expected: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patterns := reconciler.extractHasSuffixPatterns(tt.templateContent)
-			if !reflect.DeepEqual(patterns, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, patterns)
-			}
-		})
-	}
+func GroupSubject(name string, labels map[string]string, annotations map[string]string) userv1.Group {
+	return userv1.Group{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels, Annotations: annotations}}
 }
 
-func TestExtractContainsPatterns(t *testing.T) {
-	reconciler := &GroupConfigReconciler{}
-
-	tests := []struct {
-		name            string
-		templateContent string
-		expected        []string
-	}{
-		{
-			name: "single contains pattern",
-			templateContent: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			expected: []string{"monitoring"},
-		},
-		{
-			name: "multiple contains patterns",
-			templateContent: `{{- if contains "monitoring" .Name }}
-monitoring role
-{{- else if contains "developer" .Name }}
-developer role
-{{- end }}`,
-			expected: []string{"monitoring", "developer"},
-		},
-		{
-			name: "no contains patterns",
-			templateContent: `kind: Role
-metadata:
-  name: basic-role`,
-			expected: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patterns := reconciler.extractContainsPatterns(tt.templateContent)
-			if !reflect.DeepEqual(patterns, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, patterns)
-			}
-		})
-	}
-}
-
-func TestIsTemplateApplicableToGroup(t *testing.T) {
+func TestGroupIsTemplateApplicable(t *testing.T) {
 	reconciler := &GroupConfigReconciler{}
 
 	tests := []struct {
 		name     string
-		template apis.LockedResourceTemplate
-		group    userv1.Group
+		template string
+		subject  userv1.Group
 		expected bool
 	}{
 		{
-			name: "group matches hasSuffix pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-admin",
-				},
-			},
+			name:     "matches hasSuffix pattern",
+			template: "{{- if hasSuffix \"-cluster-admin\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("my-app-cluster-admin", nil, nil),
 			expected: true,
 		},
 		{
-			name: "group does not match hasSuffix pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-audit",
-				},
-			},
+			name:     "does not match hasSuffix pattern",
+			template: "{{- if hasSuffix \"-cluster-admin\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("my-app-cluster-audit", nil, nil),
 			expected: false,
 		},
 		{
-			name: "group matches contains pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "user-workload-monitoring-admin",
-				},
-			},
+			name:     "matches contains pattern",
+			template: "{{- if contains \"developer\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("team-developer-x", nil, nil),
 			expected: true,
 		},
 		{
-			name: "template with no patterns applies to all",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `kind: Role
-metadata:
-  name: basic-role`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "any-group-name",
-				},
-			},
+			name:     "template with no guard applies to all",
+			template: "kind: ClusterRoleBinding\nmetadata:\n  name: basic",
+			subject:  GroupSubject("any-name", nil, nil),
 			expected: true,
 		},
 		{
-			name: "group matches multiple patterns (OR logic - any match)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- else if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "user-workload-monitoring-admin",
-				},
-			},
-			expected: true, // Should match because contains "monitoring"
+			name:     "else-if chain: any branch qualifies",
+			template: "{{- if hasSuffix \"-cluster-admin\" .Name }}\nkind: ClusterRoleBinding\n{{- else if contains \"developer\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("team-developer-x", nil, nil),
+			expected: true,
 		},
 		{
-			name: "group matches one of multiple patterns",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-admin
-{{- else if hasSuffix "-cluster-audit" .Name }}
-audit
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-admin",
-				},
-			},
-			expected: true, // Should match hasSuffix "-cluster-admin"
+			name:     "and: all conditions hold",
+			template: "{{- if and (hasSuffix \"-cluster-admin\" .Name) (contains \"my-app\" .Name) }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("my-app-cluster-admin", nil, nil),
+			expected: true,
 		},
 		{
-			name: "AND logic - group matches all patterns",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-cluster-admin" .Name) (contains "app-ocp-rbac" .Name) }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-admin",
-				},
-			},
-			expected: true, // Should match because BOTH conditions are true
+			name:     "and: only one condition holds",
+			template: "{{- if and (hasSuffix \"-cluster-admin\" .Name) (contains \"developer\" .Name) }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("my-app-cluster-admin", nil, nil),
+			expected: false,
 		},
 		{
-			name: "AND logic - group matches only one pattern (should fail)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-cluster-admin" .Name) (contains "monitoring" .Name) }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-admin",
-				},
-			},
-			expected: false, // Should NOT match because only hasSuffix matches, but contains "monitoring" doesn't
+			name:     "and: no condition holds",
+			template: "{{- if and (hasSuffix \"-cluster-audit\" .Name) (contains \"developer\" .Name) }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("my-app-cluster-admin", nil, nil),
+			expected: false,
 		},
 		{
-			name: "AND logic - group matches none of the patterns (should fail)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-cluster-audit" .Name) (contains "monitoring" .Name) }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			group: userv1.Group{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "app-ocp-rbac-alpha-cluster-admin",
-				},
-			},
-			expected: false, // Should NOT match because neither pattern matches
+			name:     "hasPrefix on a label value: in the family",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("bdp-spark-alpha", map[string]string{"example.com/oud-group": "app-bdp-rbac-spark-alpha"}, nil),
+			expected: true,
+		},
+		{
+			name:     "hasPrefix on a label value: another family",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("bdp-trino-apps", map[string]string{"example.com/oud-group": "app-bdp-rbac-trino-apps"}, nil),
+			expected: false,
+		},
+		{
+			name:     "hasPrefix on a label value: label absent",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("plain", nil, nil),
+			expected: false,
+		},
+		{
+			name:     "truthiness of a label value: empty value does not qualify",
+			template: "{{- if (index .Labels \"example.com/oud-group\") }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("bdp-empty", map[string]string{"example.com/oud-group": ""}, nil),
+			expected: false,
+		},
+		{
+			name:     "ne on an annotation value",
+			template: "{{- if ne (index .Annotations \"allow-pvc\") \"true\" }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("quota", nil, map[string]string{"allow-pvc": "true"}),
+			expected: false,
+		},
+		{
+			name:     "ne on an annotation value: annotation absent",
+			template: "{{- if ne (index .Annotations \"allow-pvc\") \"true\" }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("quota", nil, nil),
+			expected: true,
+		},
+		{
+			name:     "eq on the name, the documented unrecognized example",
+			template: "{{- if eq .Name \"admin\" }}\nkind: ClusterRoleBinding\n{{- end }}",
+			subject:  GroupSubject("dev", nil, nil),
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := reconciler.isTemplateApplicableToGroup(tt.template, tt.group)
+			result := reconciler.isTemplateApplicableToGroup(apis.LockedResourceTemplate{ObjectTemplate: tt.template}, tt.subject)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
@@ -249,66 +131,39 @@ kind: ClusterRoleBinding
 	}
 }
 
-func TestFilterApplicableTemplates(t *testing.T) {
+func TestGroupFilterApplicableTemplates(t *testing.T) {
 	reconciler := &GroupConfigReconciler{}
 
-	t.Run("filters templates based on group matching", func(t *testing.T) {
+	t.Run("keeps the matching guarded template and the unconditional one", func(t *testing.T) {
 		templates := []apis.LockedResourceTemplate{
-			{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-audit" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `kind: Role
-metadata:
-  name: basic-role`,
-			},
+			{ObjectTemplate: "{{- if hasSuffix \"-cluster-admin\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}"},
+			{ObjectTemplate: "{{- if hasSuffix \"-cluster-audit\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}"},
+			{ObjectTemplate: "kind: ClusterRoleBinding\nmetadata:\n  name: basic"},
 		}
-
-		group := userv1.Group{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "app-ocp-rbac-alpha-cluster-admin",
-			},
-		}
-
-		filteredTemplates := reconciler.filterApplicableTemplates(templates, group)
-
-		// Should return 2 templates: the matching hasSuffix one and the unconditional one
-		if len(filteredTemplates) != 2 {
-			t.Errorf("Expected 2 templates, got %d", len(filteredTemplates))
+		filtered := reconciler.filterApplicableTemplates(templates, GroupSubject("my-app-cluster-admin", nil, nil))
+		if len(filtered) != 2 {
+			t.Errorf("Expected 2 templates, got %d", len(filtered))
 		}
 	})
 
-	t.Run("returns empty slice when no templates match", func(t *testing.T) {
+	t.Run("returns an empty slice when no template matches", func(t *testing.T) {
 		templates := []apis.LockedResourceTemplate{
-			{
-				ObjectTemplate: `{{- if hasSuffix "-cluster-admin" .Name }}
-kind: ClusterRoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
+			{ObjectTemplate: "{{- if hasSuffix \"-cluster-admin\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}"},
+			{ObjectTemplate: "{{- if contains \"developer\" .Name }}\nkind: ClusterRoleBinding\n{{- end }}"},
 		}
-
-		group := userv1.Group{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "app-ocp-rbac-alpha-cluster-audit",
-			},
+		filtered := reconciler.filterApplicableTemplates(templates, GroupSubject("my-app-cluster-audit", nil, nil))
+		if len(filtered) != 0 {
+			t.Errorf("Expected 0 templates, got %d", len(filtered))
 		}
+	})
 
-		filteredTemplates := reconciler.filterApplicableTemplates(templates, group)
-
-		if len(filteredTemplates) != 0 {
-			t.Errorf("Expected 0 templates, got %d", len(filteredTemplates))
+	t.Run("a label-guarded template is skipped for a group outside its family", func(t *testing.T) {
+		templates := []apis.LockedResourceTemplate{
+			{ObjectTemplate: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: ClusterRoleBinding\n{{- end }}"},
+		}
+		filtered := reconciler.filterApplicableTemplates(templates, GroupSubject("bdp-trino-apps", map[string]string{"example.com/oud-group": "app-bdp-rbac-trino-apps"}, nil))
+		if len(filtered) != 0 {
+			t.Errorf("Expected 0 templates, got %d", len(filtered))
 		}
 	})
 }

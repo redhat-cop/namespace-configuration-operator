@@ -4,7 +4,6 @@
 package controllers
 
 import (
-	"strings"
 	"testing"
 
 	userv1 "github.com/openshift/api/user/v1"
@@ -12,63 +11,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// A guard outside the statically understood grammar used to make the template "apply to every
+// object, relying on the renderer" — and the renderer cannot represent an empty render, so every
+// rejected object produced "Object 'Kind' is missing in 'null'" at error level and dropped the rest
+// of that object's batch. Such guards are now decided by rendering the template, so the answer is
+// exactly what the renderer would produce, without the error.
 func TestUnrecognizedConditionals(t *testing.T) {
 	reconciler := &GroupConfigReconciler{}
 
-	// Template with conditional logic that is NOT hasSuffix or contains
-	// e.g. using 'eq' or 'hasPrefix'
-	templateContent := `{{- if eq .Name "admin" }}
-kind: ConfigMap
+	t.Run("a guard on a field outside the grammar is decided by rendering", func(t *testing.T) {
+		// .Users is a Group field the static evaluator does not know.
+		template := apis.LockedResourceTemplate{ObjectTemplate: `{{- if .Users }}
+kind: ClusterRoleBinding
 metadata:
-  name: admin-config
+  name: {{ .Name }}-members
 {{- end }}
-`
+`}
+		withMembers := userv1.Group{ObjectMeta: metav1.ObjectMeta{Name: "admins"}, Users: []string{"alice"}}
+		empty := userv1.Group{ObjectMeta: metav1.ObjectMeta{Name: "nobody"}}
 
-	template := apis.LockedResourceTemplate{
-		ObjectTemplate: templateContent,
-	}
-
-	// Case 1: Group is "admin" (should match)
-	adminGroup := userv1.Group{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "admin",
-		},
-	}
-
-	// Case 2: Group is "dev" (should NOT match logically, but currently matches because no patterns extracted)
-	devGroup := userv1.Group{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "dev",
-		},
-	}
-
-	// Test extraction - should be empty
-	suffixPatterns := reconciler.extractHasSuffixPatterns(templateContent)
-	if len(suffixPatterns) != 0 {
-		t.Errorf("Expected 0 suffix patterns, got %v", suffixPatterns)
-	}
-
-	containsPatterns := reconciler.extractContainsPatterns(templateContent)
-	if len(containsPatterns) != 0 {
-		t.Errorf("Expected 0 contains patterns, got %v", containsPatterns)
-	}
-
-	// Check logic for Unrecognized Conditionals
-	// It should return TRUE so that the template renderer can handle the logic
-	if !reconciler.isTemplateApplicableToGroup(template, adminGroup) {
-		t.Errorf("Expected template to apply to admin group (via fallthrough)")
-	}
-
-	if !reconciler.isTemplateApplicableToGroup(template, devGroup) {
-		t.Errorf("Expected template to apply to dev group (via fallthrough, relying on renderer)")
-	}
-
-	// Verify the logic detection (manually checking what the code does)
-	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
-		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
-			t.Log("Correctly detected unrecognized conditional logic")
-		} else {
-			t.Error("Failed to detect unrecognized conditional logic")
+		if !reconciler.isTemplateApplicableToGroup(template, withMembers) {
+			t.Errorf("expected the template to apply to a group with members")
 		}
-	}
+		if reconciler.isTemplateApplicableToGroup(template, empty) {
+			t.Errorf("expected the template to be skipped for a group without members: it renders nothing")
+		}
+	})
+
+	t.Run("a template that does not parse is left to the renderer", func(t *testing.T) {
+		template := apis.LockedResourceTemplate{ObjectTemplate: `{{- if bogus .Name }}
+kind: ConfigMap
+{{- end }}
+`}
+		group := userv1.Group{ObjectMeta: metav1.ObjectMeta{Name: "admins"}}
+		if !reconciler.isTemplateApplicableToGroup(template, group) {
+			t.Errorf("a template with a parse error must reach the renderer so the error is reported there")
+		}
+	})
 }

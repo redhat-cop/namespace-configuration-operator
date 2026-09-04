@@ -926,6 +926,50 @@ Enhanced detection of unrecognized template conditionals (eq, hasPrefix, ne, etc
 
 ---
 
+### Template Filtering: Guards on Labels and Annotations, Render Fallback
+
+**Status:** ✅ COMPLETED — supersedes the two sections above. Their scenarios still hold; the mechanism changed.
+
+**Problem:**
+The pattern-based filter only understood `hasSuffix "…"` and `contains "…"`, and always compared them
+against `.Name`. A guard on a label or an annotation — for example
+`{{- if hasPrefix "app-team-" (index .Labels "example.com/oud-group") }}` — or any other conditional
+(`eq`, `ne`, `not`, a bare truthiness check) fell through to "apply to every object, rely on the renderer".
+The renderer cannot represent an empty render: operator-utils turns it into the JSON literal `null`, fails it
+with `Object 'Kind' is missing in 'null'` at error level, and drops every object it had already rendered for that
+param while returning a nil error. Measured on a cluster with two label-guarded NamespaceConfigs and four labelled
+namespaces: 40 error lines in under three minutes, with the CRs reporting success throughout.
+
+**Solution:**
+- One implementation, `controllers/common/templatefilter.go`, used by all three controllers.
+- The template is parsed once (cached by text, with the renderer's own function map) and its syntax tree is
+  inspected. A single top-level `if` / `else if` / `else` chain over `hasPrefix`, `hasSuffix`, `contains`, `eq`,
+  `ne`, `and`, `or`, `not`, and the truthiness of `.Name` or `(index .Labels "k")` / `(index .Annotations "k")`
+  is evaluated statically against the object's name, labels and annotations.
+- Any other shape — a top-level variable, a pipeline, `range`, `with`, `.Spec` access, an unknown function — is
+  decided by rendering the template and checking for blank output. That is exactly what the renderer sees, so
+  it is always right; it costs one extra render for that template only.
+- A template that does not parse is still handed to the renderer, so the parse error is reported with the
+  resource attached, as before.
+- Guard-looking text inside YAML comments no longer influences the decision (the old regexes scanned comments).
+
+**Files Modified:**
+- `controllers/common/templatefilter.go` - **NEW** - the filter
+- `controllers/common/templatefilter_test.go` - **NEW** - includes a property test asserting, for every guard shape
+  and subject, that the filter's answer equals "the real render is non-blank"
+- `controllers/{groupconfig,namespaceconfig,userconfig}_controller.go` - delegate to the common filter; the
+  regex extractors are gone (-440 lines)
+- `controllers/*_controller_test.go`, `controllers/unrecognized_conditionals_test.go` - rewritten for the new API
+- `hack/local-ci.sh`, `hack/push-quay.sh` - **NEW** - the pre-push gate and the image publish step, kept out of
+  `.github/workflows/` on purpose
+
+**Verification:**
+- `go test -race ./...` green.
+- Run against a cluster with the same two CRs and four namespaces: zero error lines, the rejected namespaces logged
+  once at V(1) as "skipping namespace", the matching namespaces received the same Role and RoleBinding as before.
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED

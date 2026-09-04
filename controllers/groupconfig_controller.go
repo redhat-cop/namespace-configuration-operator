@@ -18,8 +18,7 @@ package controllers
 
 import (
 	"context"
-	"regexp"
-	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
@@ -48,6 +47,9 @@ type GroupConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
 	Log            logr.Logger
 	controllerName string
+	// templateFilter is built lazily by getTemplateFilter; see there.
+	templateFilter     *common.TemplateFilter
+	templateFilterOnce sync.Once
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=groupconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -302,158 +304,26 @@ func (r *GroupConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.G
 	return nil
 }
 
-// Dynamic template filtering based on extracted patterns from template content
+// filterApplicableTemplates keeps the templates that would render something for this group, so a
+// guarded template is never handed to the renderer for a group its guard rejects. The decision
+// logic, and why an empty render must be avoided, lives in common.TemplateFilter.
 func (r *GroupConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, group userv1.Group) []apis.LockedResourceTemplate {
-	applicableTemplates := []apis.LockedResourceTemplate{}
-
-	for _, template := range templates {
-		if r.isTemplateApplicableToGroup(template, group) {
-			applicableTemplates = append(applicableTemplates, template)
-		}
-	}
-
-	return applicableTemplates
+	return r.getTemplateFilter().FilterApplicable(templates, &group)
 }
 
-// Dynamically check if template is applicable by extracting patterns from template content
+// isTemplateApplicableToGroup reports whether one template would render something for the group.
 func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.LockedResourceTemplate, group userv1.Group) bool {
-	templateContent := template.ObjectTemplate
-	groupName := group.Name
-
-	// Extract both hasSuffix and contains patterns
-	suffixPatterns := r.extractHasSuffixPatterns(templateContent)
-	containsPatterns := r.extractContainsPatterns(templateContent)
-
-	// Debug logging for template filtering (V(2) - only shown with --zap-log-level=2 or higher)
-	// To enable: ./bin/manager --zap-log-level=2
-	// Or set environment variable: ZAP_LOG_LEVEL=2
-	r.Log.V(2).Info("checking template applicability",
-		"group", groupName,
-		"suffixPatterns", suffixPatterns,
-		"containsPatterns", containsPatterns,
-		"templatePreview", func() string {
-			if len(templateContent) > 100 {
-				return templateContent[:100] + "..."
-			}
-			return templateContent
-		}())
-
-	// If no conditional patterns found, template applies to all groups
-	if len(suffixPatterns) == 0 && len(containsPatterns) == 0 {
-		// Check for unrecognized conditional logic
-		if strings.Contains(templateContent, "{{- if") || strings.Contains(templateContent, "{{ if") {
-			r.Log.V(2).Info("template contains unrecognized conditional logic, applying to all groups (relying on template rendering)", "group", groupName)
-			return true
-		}
-		r.Log.V(2).Info("template has no patterns, applying to all groups", "group", groupName)
-		return true
-	}
-
-	// Detect if template uses AND logic (requires all conditions to match)
-	// vs OR logic (requires any condition to match)
-	// Look for "and" keyword in conditional statements
-	usesAndLogic := strings.Contains(templateContent, "{{- if and") || strings.Contains(templateContent, "{{ if and")
-
-	if usesAndLogic {
-		// AND logic: ALL patterns must match
-		allSuffixMatch := true
-		if len(suffixPatterns) > 0 {
-			for _, pattern := range suffixPatterns {
-				if !strings.HasSuffix(groupName, pattern) {
-					allSuffixMatch = false
-					break
-				}
-			}
-		} else {
-			// If no suffix patterns are defined, they are considered to match if no other patterns are defined.
-			// If there are contains patterns, this will be handled below.
-			// If there are no patterns at all, it would have returned true earlier.
-			allSuffixMatch = true
-		}
-
-		allContainsMatch := true
-		if len(containsPatterns) > 0 {
-			for _, pattern := range containsPatterns {
-				if !strings.Contains(groupName, pattern) {
-					allContainsMatch = false
-					break
-				}
-			}
-		} else {
-			allContainsMatch = true
-		}
-
-		if allSuffixMatch && allContainsMatch {
-			r.Log.V(2).Info("group matches all AND logic patterns", "group", groupName)
-			return true
-		}
-		r.Log.V(2).Info("group does not match all AND logic patterns", "group", groupName)
-		return false
-
-	} else {
-		// OR logic: ANY pattern can match (original behavior)
-		// Check hasSuffix patterns
-		for _, pattern := range suffixPatterns {
-			if strings.HasSuffix(groupName, pattern) {
-				r.Log.V(2).Info("group matches hasSuffix pattern",
-					"group", groupName,
-					"pattern", pattern)
-				return true
-			}
-		}
-
-		// Check contains patterns
-		for _, pattern := range containsPatterns {
-			if strings.Contains(groupName, pattern) {
-				r.Log.V(2).Info("group matches contains pattern",
-					"group", groupName,
-					"pattern", pattern)
-				return true
-			}
-		}
-	}
-
-	// Group doesn't match any patterns
-	r.Log.V(2).Info("group does not match any template patterns",
-		"group", groupName,
-		"suffixPatterns", suffixPatterns,
-		"containsPatterns", containsPatterns)
-	return false
+	return r.getTemplateFilter().IsApplicable(template, &group)
 }
 
-// Extract all hasSuffix patterns from template content
-func (r *GroupConfigReconciler) extractHasSuffixPatterns(templateContent string) []string {
-	patterns := []string{}
-
-	// Regex to match: hasSuffix "some-pattern" or hasSuffix "-some-pattern"
-	// Handles both: {{- if hasSuffix "-cluster-admin" .Name }} and similar patterns
-	re := regexp.MustCompile(`hasSuffix\s+"([^"]+)"`)
-	matches := re.FindAllStringSubmatch(templateContent, -1)
-
-	for _, match := range matches {
-		if len(match) > 1 {
-			patterns = append(patterns, match[1])
-		}
-	}
-
-	return patterns
-}
-
-// Extract contains patterns for templates using 'contains' instead of 'hasSuffix'
-func (r *GroupConfigReconciler) extractContainsPatterns(templateContent string) []string {
-	patterns := []string{}
-
-	// Regex to match: contains "some-pattern" or contains "-some-pattern"
-	re := regexp.MustCompile(`contains\s+"([^"]+)"`)
-	matches := re.FindAllStringSubmatch(templateContent, -1)
-
-	for _, match := range matches {
-		if len(match) > 1 {
-			patterns = append(patterns, match[1])
-		}
-	}
-
-	return patterns
+// getTemplateFilter builds the filter on first use. The rest config its render fallback may need is
+// only set once the reconciler is wired to a manager; unit tests construct the reconciler bare, and
+// there a nil config is fine because their templates never reach an API lookup.
+func (r *GroupConfigReconciler) getTemplateFilter() *common.TemplateFilter {
+	r.templateFilterOnce.Do(func() {
+		r.templateFilter = common.NewTemplateFilter(r.Log.WithName("templatefilter"), r.GetRestConfig())
+	})
+	return r.templateFilter
 }
 
 // SetupWithManager sets up the controller with the Manager.

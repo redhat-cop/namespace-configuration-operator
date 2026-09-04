@@ -4,7 +4,6 @@
 package controllers
 
 import (
-	"reflect"
 	"testing"
 
 	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
@@ -12,236 +11,119 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestNamespaceExtractHasSuffixPatterns(t *testing.T) {
-	reconciler := &NamespaceConfigReconciler{}
+// The decision logic itself is tested exhaustively in controllers/common (templatefilter_test.go),
+// including a property test that checks every guard shape against the real renderer. These tests
+// pin the reconciler's wiring: the namespace it passes is the one the guard reads, name, labels and
+// annotations included.
 
-	tests := []struct {
-		name            string
-		templateContent string
-		expected        []string
-	}{
-		{
-			name: "single hasSuffix pattern",
-			templateContent: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			expected: []string{"-prod"},
-		},
-		{
-			name: "multiple hasSuffix patterns",
-			templateContent: `{{- if hasSuffix "-prod" .Name }}
-prod stuff
-{{- else if hasSuffix "-dev" .Name }}
-dev stuff
-{{- end }}`,
-			expected: []string{"-prod", "-dev"},
-		},
-		{
-			name: "no hasSuffix patterns",
-			templateContent: `kind: Role
-metadata:
-  name: basic-role`,
-			expected: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patterns := reconciler.extractHasSuffixPatterns(tt.templateContent)
-			if !reflect.DeepEqual(patterns, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, patterns)
-			}
-		})
-	}
+func NamespaceSubject(name string, labels map[string]string, annotations map[string]string) corev1.Namespace {
+	return corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels, Annotations: annotations}}
 }
 
-func TestNamespaceExtractContainsPatterns(t *testing.T) {
+func TestNamespaceIsTemplateApplicable(t *testing.T) {
 	reconciler := &NamespaceConfigReconciler{}
 
 	tests := []struct {
-		name            string
-		templateContent string
-		expected        []string
+		name     string
+		template string
+		subject  corev1.Namespace
+		expected bool
 	}{
 		{
-			name: "single contains pattern",
-			templateContent: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			expected: []string{"monitoring"},
-		},
-		{
-			name: "multiple contains patterns",
-			templateContent: `{{- if contains "monitoring" .Name }}
-monitoring role
-{{- else if contains "logging" .Name }}
-logging role
-{{- end }}`,
-			expected: []string{"monitoring", "logging"},
-		},
-		{
-			name: "no contains patterns",
-			templateContent: `kind: Role
-metadata:
-  name: basic-role`,
-			expected: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patterns := reconciler.extractContainsPatterns(tt.templateContent)
-			if !reflect.DeepEqual(patterns, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, patterns)
-			}
-		})
-	}
-}
-
-func TestIsTemplateApplicableToNamespace(t *testing.T) {
-	reconciler := &NamespaceConfigReconciler{}
-
-	tests := []struct {
-		name      string
-		template  apis.LockedResourceTemplate
-		namespace corev1.Namespace
-		expected  bool
-	}{
-		{
-			name: "namespace matches hasSuffix pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-prod",
-				},
-			},
+			name:     "matches hasSuffix pattern",
+			template: "{{- if hasSuffix \"-prod\" .Name }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("my-app-prod", nil, nil),
 			expected: true,
 		},
 		{
-			name: "namespace does not match hasSuffix pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-dev",
-				},
-			},
+			name:     "does not match hasSuffix pattern",
+			template: "{{- if hasSuffix \"-prod\" .Name }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("my-app-dev", nil, nil),
 			expected: false,
 		},
 		{
-			name: "namespace matches contains pattern",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "user-workload-monitoring",
-				},
-			},
+			name:     "matches contains pattern",
+			template: "{{- if contains \"monitoring\" .Name }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("team-monitoring-x", nil, nil),
 			expected: true,
 		},
 		{
-			name: "template with no patterns applies to all",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `kind: Role
-metadata:
-  name: basic-role`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "any-namespace-name",
-				},
-			},
+			name:     "template with no guard applies to all",
+			template: "kind: RoleBinding\nmetadata:\n  name: basic",
+			subject:  NamespaceSubject("any-name", nil, nil),
 			expected: true,
 		},
 		{
-			name: "namespace matches multiple patterns (OR logic - any match)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- else if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "user-workload-monitoring",
-				},
-			},
-			expected: true, // Should match because contains "monitoring"
+			name:     "else-if chain: any branch qualifies",
+			template: "{{- if hasSuffix \"-prod\" .Name }}\nkind: RoleBinding\n{{- else if contains \"monitoring\" .Name }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("team-monitoring-x", nil, nil),
+			expected: true,
 		},
 		{
-			name: "namespace matches one of multiple patterns",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-prod
-{{- else if hasSuffix "-dev" .Name }}
-dev
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-prod",
-				},
-			},
-			expected: true, // Should match hasSuffix "-prod"
+			name:     "and: all conditions hold",
+			template: "{{- if and (hasSuffix \"-prod\" .Name) (contains \"my-app\" .Name) }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("my-app-prod", nil, nil),
+			expected: true,
 		},
 		{
-			name: "AND logic - namespace matches all patterns",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-prod" .Name) (contains "my-app" .Name) }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-prod",
-				},
-			},
-			expected: true, // Should match because BOTH conditions are true
+			name:     "and: only one condition holds",
+			template: "{{- if and (hasSuffix \"-prod\" .Name) (contains \"monitoring\" .Name) }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("my-app-prod", nil, nil),
+			expected: false,
 		},
 		{
-			name: "AND logic - namespace matches only one pattern (should fail)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-prod" .Name) (contains "monitoring" .Name) }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-prod",
-				},
-			},
-			expected: false, // Should NOT match because only hasSuffix matches, but contains "monitoring" doesn't
+			name:     "and: no condition holds",
+			template: "{{- if and (hasSuffix \"-dev\" .Name) (contains \"monitoring\" .Name) }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("my-app-prod", nil, nil),
+			expected: false,
 		},
 		{
-			name: "AND logic - namespace matches none of the patterns (should fail)",
-			template: apis.LockedResourceTemplate{
-				ObjectTemplate: `{{- if and (hasSuffix "-dev" .Name) (contains "monitoring" .Name) }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			namespace: corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-app-prod",
-				},
-			},
-			expected: false, // Should NOT match because neither pattern matches
+			name:     "hasPrefix on a label value: in the family",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("bdp-spark-alpha", map[string]string{"example.com/oud-group": "app-bdp-rbac-spark-alpha"}, nil),
+			expected: true,
+		},
+		{
+			name:     "hasPrefix on a label value: another family",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("bdp-trino-apps", map[string]string{"example.com/oud-group": "app-bdp-rbac-trino-apps"}, nil),
+			expected: false,
+		},
+		{
+			name:     "hasPrefix on a label value: label absent",
+			template: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("plain", nil, nil),
+			expected: false,
+		},
+		{
+			name:     "truthiness of a label value: empty value does not qualify",
+			template: "{{- if (index .Labels \"example.com/oud-group\") }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("bdp-empty", map[string]string{"example.com/oud-group": ""}, nil),
+			expected: false,
+		},
+		{
+			name:     "ne on an annotation value",
+			template: "{{- if ne (index .Annotations \"allow-pvc\") \"true\" }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("quota", nil, map[string]string{"allow-pvc": "true"}),
+			expected: false,
+		},
+		{
+			name:     "ne on an annotation value: annotation absent",
+			template: "{{- if ne (index .Annotations \"allow-pvc\") \"true\" }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("quota", nil, nil),
+			expected: true,
+		},
+		{
+			name:     "eq on the name, the documented unrecognized example",
+			template: "{{- if eq .Name \"admin\" }}\nkind: RoleBinding\n{{- end }}",
+			subject:  NamespaceSubject("dev", nil, nil),
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := reconciler.isTemplateApplicableToNamespace(tt.template, tt.namespace)
+			result := reconciler.isTemplateApplicableToNamespace(apis.LockedResourceTemplate{ObjectTemplate: tt.template}, tt.subject)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
@@ -252,63 +134,36 @@ kind: RoleBinding
 func TestNamespaceFilterApplicableTemplates(t *testing.T) {
 	reconciler := &NamespaceConfigReconciler{}
 
-	t.Run("filters templates based on namespace matching", func(t *testing.T) {
+	t.Run("keeps the matching guarded template and the unconditional one", func(t *testing.T) {
 		templates := []apis.LockedResourceTemplate{
-			{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `{{- if hasSuffix "-dev" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `kind: Role
-metadata:
-  name: basic-role`,
-			},
+			{ObjectTemplate: "{{- if hasSuffix \"-prod\" .Name }}\nkind: RoleBinding\n{{- end }}"},
+			{ObjectTemplate: "{{- if hasSuffix \"-dev\" .Name }}\nkind: RoleBinding\n{{- end }}"},
+			{ObjectTemplate: "kind: RoleBinding\nmetadata:\n  name: basic"},
 		}
-
-		namespace := corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "my-app-prod",
-			},
-		}
-
-		filteredTemplates := reconciler.filterApplicableTemplates(templates, namespace)
-
-		// Should return 2 templates: the matching hasSuffix one and the unconditional one
-		if len(filteredTemplates) != 2 {
-			t.Errorf("Expected 2 templates, got %d", len(filteredTemplates))
+		filtered := reconciler.filterApplicableTemplates(templates, NamespaceSubject("my-app-prod", nil, nil))
+		if len(filtered) != 2 {
+			t.Errorf("Expected 2 templates, got %d", len(filtered))
 		}
 	})
 
-	t.Run("returns empty slice when no templates match", func(t *testing.T) {
+	t.Run("returns an empty slice when no template matches", func(t *testing.T) {
 		templates := []apis.LockedResourceTemplate{
-			{
-				ObjectTemplate: `{{- if hasSuffix "-prod" .Name }}
-kind: RoleBinding
-{{- end }}`,
-			},
-			{
-				ObjectTemplate: `{{- if contains "monitoring" .Name }}
-kind: Role
-{{- end }}`,
-			},
+			{ObjectTemplate: "{{- if hasSuffix \"-prod\" .Name }}\nkind: RoleBinding\n{{- end }}"},
+			{ObjectTemplate: "{{- if contains \"monitoring\" .Name }}\nkind: RoleBinding\n{{- end }}"},
 		}
-
-		namespace := corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "my-app-dev",
-			},
+		filtered := reconciler.filterApplicableTemplates(templates, NamespaceSubject("my-app-dev", nil, nil))
+		if len(filtered) != 0 {
+			t.Errorf("Expected 0 templates, got %d", len(filtered))
 		}
+	})
 
-		filteredTemplates := reconciler.filterApplicableTemplates(templates, namespace)
-
-		if len(filteredTemplates) != 0 {
-			t.Errorf("Expected 0 templates, got %d", len(filteredTemplates))
+	t.Run("a label-guarded template is skipped for a namespace outside its family", func(t *testing.T) {
+		templates := []apis.LockedResourceTemplate{
+			{ObjectTemplate: "{{- if hasPrefix \"app-bdp-rbac-spark-\" (index .Labels \"example.com/oud-group\") }}\nkind: RoleBinding\n{{- end }}"},
+		}
+		filtered := reconciler.filterApplicableTemplates(templates, NamespaceSubject("bdp-trino-apps", map[string]string{"example.com/oud-group": "app-bdp-rbac-trino-apps"}, nil))
+		if len(filtered) != 0 {
+			t.Errorf("Expected 0 templates, got %d", len(filtered))
 		}
 	})
 }

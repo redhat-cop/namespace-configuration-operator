@@ -1,0 +1,376 @@
+package common
+
+import (
+	"bytes"
+	"strings"
+	"sync"
+	"text/template"
+	"text/template/parse"
+
+	"github.com/go-logr/logr"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
+	utilstemplates "github.com/redhat-cop/operator-utils/pkg/util/templates"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+)
+
+// TemplateFilter decides, per selected object (Namespace, Group or User), whether an objectTemplate
+// would render anything for it, so the reconcilers can skip it BEFORE handing it to operator-utils.
+//
+// WHY THE SKIP MATTERS. A guarded template such as
+//
+//	{{- if hasPrefix "team-a-" (index .Labels "example.com/team") }} ... {{- end }}
+//
+// renders to an empty string for every object the guard rejects. operator-utils turns that empty
+// string into the JSON literal `null`, fails it with "Object 'Kind' is missing in 'null'", logs the
+// failure at error level, and then DROPS every object it had already rendered for that param while
+// returning a nil error — so the CR reports success, the log fills with an error per rejected object
+// per reconcile, and any other template in the same batch silently loses its objects. Deciding
+// applicability here, with the same semantics the renderer applies, is what prevents all of that.
+//
+// HOW IT DECIDES. The template is parsed once (cached by its text) with the same function map the
+// renderer uses, and its syntax tree is inspected:
+//
+//   - A template whose top level is a single if / else-if / else chain over the recognised guard
+//     functions is evaluated statically against the object's name, labels and annotations. The
+//     recognised guard grammar is: hasPrefix, hasSuffix, contains, eq, ne, and, or, not, the bare
+//     truthiness of `.Name` or of `(index .Labels "key")` / `(index .Annotations "key")`, and
+//     parenthesised nesting of those. Operands are string literals, `.Name`, or an index into
+//     .Labels / .Annotations. This is the cheap path and it covers every guard this operator's
+//     own policies use.
+//   - Anything the static evaluator does not fully understand — a variable declaration at the top
+//     level, a pipeline, a `range`, a lookup, `.Spec` access, a function outside the grammar — is
+//     decided by RENDERING the template and checking whether the output is blank. That is always
+//     correct because it is exactly what the renderer will see; it merely costs a second render for
+//     that template.
+//   - A template that does not parse is left to the renderer, which reports the parse error with
+//     the context it already has.
+//
+// Unconditional templates (any non-blank text outside a top-level guard) always apply, exactly as
+// before this filter existed.
+type TemplateFilter struct {
+	log   logr.Logger
+	funcs template.FuncMap
+	// cache maps template text to *parsedTemplate. Templates are immutable once read from a CR, and
+	// text/template values are safe for concurrent Execute, so one parse serves every reconcile.
+	cache sync.Map
+}
+
+type parsedTemplate struct {
+	tmpl *template.Template
+	err  error
+}
+
+// NewTemplateFilter builds a filter whose render fallback uses the same function map as the real
+// renderer. restConfig may be nil (unit tests); only the API-lookup functions need it, and they are
+// only reached by the render fallback.
+func NewTemplateFilter(log logr.Logger, restConfig *rest.Config) *TemplateFilter {
+	return &TemplateFilter{
+		log:   log,
+		funcs: utilstemplates.AdvancedTemplateFuncMap(restConfig, log),
+	}
+}
+
+// FilterApplicable returns the templates that would render at least one object for obj.
+func (f *TemplateFilter) FilterApplicable(templates []apis.LockedResourceTemplate, obj metav1.Object) []apis.LockedResourceTemplate {
+	applicable := []apis.LockedResourceTemplate{}
+	for _, t := range templates {
+		if f.IsApplicable(t, obj) {
+			applicable = append(applicable, t)
+		}
+	}
+	return applicable
+}
+
+// IsApplicable reports whether tpl would render something for obj. obj is also the data the render
+// fallback executes the template against, so it must be the same object the renderer receives.
+func (f *TemplateFilter) IsApplicable(tpl apis.LockedResourceTemplate, obj metav1.Object) bool {
+	pt := f.parse(tpl.ObjectTemplate)
+	if pt.err != nil {
+		// The renderer will fail on the same text and log it with the resource attached; deciding
+		// "not applicable" here would hide that failure instead.
+		f.log.V(1).Info("template does not parse, leaving it to the renderer", "object", obj.GetName(), "error", pt.err.Error())
+		return true
+	}
+
+	s := subject{name: obj.GetName(), labels: obj.GetLabels(), annotations: obj.GetAnnotations()}
+	if decided, applicable := evaluateStatically(pt.tmpl.Tree.Root, s); decided {
+		f.log.V(2).Info("template applicability decided statically", "object", obj.GetName(), "applicable", applicable, "template", preview(tpl.ObjectTemplate))
+		return applicable
+	}
+
+	var out bytes.Buffer
+	if err := pt.tmpl.Execute(&out, obj); err != nil {
+		f.log.V(1).Info("template applicability could not be decided by rendering, leaving it to the renderer", "object", obj.GetName(), "error", err.Error())
+		return true
+	}
+	applicable := len(bytes.TrimSpace(out.Bytes())) > 0
+	f.log.V(2).Info("template applicability decided by rendering", "object", obj.GetName(), "applicable", applicable, "template", preview(tpl.ObjectTemplate))
+	return applicable
+}
+
+func (f *TemplateFilter) parse(text string) *parsedTemplate {
+	if cached, ok := f.cache.Load(text); ok {
+		return cached.(*parsedTemplate)
+	}
+	tmpl, err := template.New("objectTemplate").Funcs(f.funcs).Parse(text)
+	pt := &parsedTemplate{tmpl: tmpl, err: err}
+	actual, _ := f.cache.LoadOrStore(text, pt)
+	return actual.(*parsedTemplate)
+}
+
+func preview(text string) string {
+	if len(text) > 100 {
+		return text[:100] + "..."
+	}
+	return text
+}
+
+// subject is the string view of an object that the recognised guards can read.
+type subject struct {
+	name        string
+	labels      map[string]string
+	annotations map[string]string
+}
+
+// evaluateStatically inspects the template's top level. It returns decided=false whenever the
+// shape or the guard expression is outside the recognised grammar, so the caller renders instead.
+func evaluateStatically(root *parse.ListNode, s subject) (decided bool, applicable bool) {
+	var guard *parse.IfNode
+	for _, n := range root.Nodes {
+		switch n := n.(type) {
+		case *parse.TextNode:
+			if len(bytes.TrimSpace(n.Text)) > 0 {
+				// Unconditional content: the render can never be blank, whatever a guard does to the
+				// rest of the document.
+				return true, true
+			}
+		case *parse.IfNode:
+			if guard != nil {
+				return false, false
+			}
+			guard = n
+		default:
+			// A declaration, an action, a range, a with, a template call: the render decides.
+			return false, false
+		}
+	}
+	if guard == nil {
+		// Nothing but whitespace: an empty objectTemplate renders no object.
+		return true, false
+	}
+	return evaluateGuardChain(guard, s)
+}
+
+// evaluateGuardChain walks an if / else if / else chain. text/template parses `{{ else if }}` as an
+// else list holding exactly one IfNode, which is also the shape of `{{ else }}{{ if }}…{{ end }}` and
+// means the same thing, so both are followed.
+func evaluateGuardChain(n *parse.IfNode, s subject) (decided bool, applicable bool) {
+	for {
+		cond, ok := evalBoolPipe(n.Pipe, s)
+		if !ok {
+			return false, false
+		}
+		if cond {
+			return listHasContent(n.List)
+		}
+		if n.ElseList == nil {
+			return true, false
+		}
+		if len(n.ElseList.Nodes) == 1 {
+			if next, isIf := n.ElseList.Nodes[0].(*parse.IfNode); isIf {
+				n = next
+				continue
+			}
+		}
+		return listHasContent(n.ElseList)
+	}
+}
+
+// listHasContent reports whether a taken branch renders something. Any non-blank text settles it;
+// a branch made only of actions (no literal text) is left to the render fallback, since an action
+// can legitimately print nothing.
+func listHasContent(list *parse.ListNode) (decided bool, content bool) {
+	if list == nil {
+		return true, false
+	}
+	actions := false
+	for _, n := range list.Nodes {
+		if t, isText := n.(*parse.TextNode); isText {
+			if len(bytes.TrimSpace(t.Text)) > 0 {
+				return true, true
+			}
+			continue
+		}
+		actions = true
+	}
+	if actions {
+		return false, false
+	}
+	return true, false
+}
+
+func evalBoolPipe(p *parse.PipeNode, s subject) (value bool, ok bool) {
+	if p == nil || len(p.Decl) != 0 || len(p.Cmds) != 1 {
+		return false, false
+	}
+	return evalBoolCmd(p.Cmds[0], s)
+}
+
+// evalBoolCmd evaluates one command in boolean context, with Go template truthiness: every operand
+// this grammar produces is a string, and a string is true when non-empty.
+func evalBoolCmd(c *parse.CommandNode, s subject) (value bool, ok bool) {
+	if len(c.Args) == 0 {
+		return false, false
+	}
+	ident, isIdent := c.Args[0].(*parse.IdentifierNode)
+	if !isIdent {
+		if len(c.Args) != 1 {
+			return false, false
+		}
+		return evalBoolNode(c.Args[0], s)
+	}
+	args := c.Args[1:]
+	switch ident.Ident {
+	case "hasPrefix", "hasSuffix", "contains":
+		// Sprig argument order: (needle, haystack).
+		if len(args) != 2 {
+			return false, false
+		}
+		needle, ok1 := evalStringNode(args[0], s)
+		haystack, ok2 := evalStringNode(args[1], s)
+		if !ok1 || !ok2 {
+			return false, false
+		}
+		switch ident.Ident {
+		case "hasPrefix":
+			return strings.HasPrefix(haystack, needle), true
+		case "hasSuffix":
+			return strings.HasSuffix(haystack, needle), true
+		default:
+			return strings.Contains(haystack, needle), true
+		}
+	case "eq":
+		// eq arg1 arg2 arg3… is true when arg1 equals any of the others.
+		if len(args) < 2 {
+			return false, false
+		}
+		first, ok := evalStringNode(args[0], s)
+		if !ok {
+			return false, false
+		}
+		result := false
+		for _, a := range args[1:] {
+			v, ok := evalStringNode(a, s)
+			if !ok {
+				return false, false
+			}
+			result = result || v == first
+		}
+		return result, true
+	case "ne":
+		if len(args) != 2 {
+			return false, false
+		}
+		a, ok1 := evalStringNode(args[0], s)
+		b, ok2 := evalStringNode(args[1], s)
+		if !ok1 || !ok2 {
+			return false, false
+		}
+		return a != b, true
+	case "and", "or":
+		if len(args) == 0 {
+			return false, false
+		}
+		for _, a := range args {
+			v, ok := evalBoolNode(a, s)
+			if !ok {
+				return false, false
+			}
+			if ident.Ident == "and" && !v {
+				return false, true
+			}
+			if ident.Ident == "or" && v {
+				return true, true
+			}
+		}
+		return ident.Ident == "and", true
+	case "not":
+		if len(args) != 1 {
+			return false, false
+		}
+		v, ok := evalBoolNode(args[0], s)
+		return !v, ok
+	case "index":
+		v, ok := evalStringCmd(c, s)
+		return v != "", ok
+	}
+	return false, false
+}
+
+func evalBoolNode(n parse.Node, s subject) (value bool, ok bool) {
+	switch n := n.(type) {
+	case *parse.PipeNode:
+		return evalBoolPipe(n, s)
+	default:
+		v, ok := evalStringNode(n, s)
+		return v != "", ok
+	}
+}
+
+// evalStringNode resolves an operand: a string literal, `.Name`, or a parenthesised
+// `(index .Labels "key")` / `(index .Annotations "key")`.
+func evalStringNode(n parse.Node, s subject) (value string, ok bool) {
+	switch n := n.(type) {
+	case *parse.StringNode:
+		return n.Text, true
+	case *parse.FieldNode:
+		if isField(n, "Name") {
+			return s.name, true
+		}
+		return "", false
+	case *parse.PipeNode:
+		if len(n.Decl) != 0 || len(n.Cmds) != 1 {
+			return "", false
+		}
+		return evalStringCmd(n.Cmds[0], s)
+	}
+	return "", false
+}
+
+// evalStringCmd resolves `index .Labels "key"` and `index .Annotations "key"`, or a lone operand.
+// A missing key yields "", which is what `index` returns for a map[string]string.
+func evalStringCmd(c *parse.CommandNode, s subject) (value string, ok bool) {
+	if len(c.Args) == 1 {
+		return evalStringNode(c.Args[0], s)
+	}
+	if len(c.Args) != 3 {
+		return "", false
+	}
+	ident, isIdent := c.Args[0].(*parse.IdentifierNode)
+	field, isField := c.Args[1].(*parse.FieldNode)
+	key, isKey := c.Args[2].(*parse.StringNode)
+	if !isIdent || ident.Ident != "index" || !isField || !isKey {
+		return "", false
+	}
+	switch {
+	case isMetaField(field, "Labels"):
+		return s.labels[key.Text], true
+	case isMetaField(field, "Annotations"):
+		return s.annotations[key.Text], true
+	}
+	return "", false
+}
+
+// isField matches `.Field`.
+func isField(f *parse.FieldNode, name string) bool {
+	return len(f.Ident) == 1 && f.Ident[0] == name
+}
+
+// isMetaField matches `.Field` and its explicit spelling `.ObjectMeta.Field`.
+func isMetaField(f *parse.FieldNode, name string) bool {
+	if isField(f, name) {
+		return true
+	}
+	return len(f.Ident) == 2 && f.Ident[0] == "ObjectMeta" && f.Ident[1] == name
+}
