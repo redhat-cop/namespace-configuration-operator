@@ -370,6 +370,18 @@ PUSH_LATEST=1 hack/push-quay.sh  # ...and moves :latest, which is what running c
 
 Both explain their choices in their headers; `local-ci.sh` in particular says why it does not run `make test`.
 
+The same image is also built by CI: `.github/workflows/image.yaml` runs on every push to a `feature/**` or
+`fix/**` branch and on manual dispatch, runs `hack/local-ci.sh` as its gate, and pushes
+`quay.io/ephico2real/namespace-configuration-operator:<git describe>` (plus `sha-<short>`); a manual run can also
+move `:latest`. It needs the `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` repository secrets (a quay robot). From a
+laptop:
+
+```shell
+hack/ci-image.sh run [--latest]   # dispatch the workflow for the pushed current branch and follow it
+hack/ci-image.sh status           # recent runs
+hack/ci-image.sh pull [tag]       # pull what CI built for HEAD (or a tag) and print its labels and version stamp
+```
+
 ### Deploy to OLM via bundle
 
 ```shell

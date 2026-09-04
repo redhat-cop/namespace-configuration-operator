@@ -43,8 +43,14 @@ if [ "$tool" = podman ]; then
 fi
 
 printf '==> building %s (VERSION=%s COMMIT=%s BUILD_DATE=%s PLATFORM=%s) with %s\n' "$image" "$version" "$commit" "$build_date" "$PLATFORM" "$tool"
+# The same OCI labels .github/workflows/image.yaml stamps, so hack/ci-image.sh pull reads either build alike.
 "$tool" build --platform "$PLATFORM" \
   --build-arg VERSION="$version" --build-arg COMMIT="$commit" --build-arg BUILD_DATE="$build_date" \
+  --label org.opencontainers.image.version="$version" \
+  --label org.opencontainers.image.revision="$(git rev-parse HEAD)" \
+  --label org.opencontainers.image.created="$build_date" \
+  --label org.opencontainers.image.ref.name="$(git rev-parse --abbrev-ref HEAD)" \
+  --label org.opencontainers.image.source="local:$(hostname -s)" \
   -t "$image" .
 
 printf '==> pushing %s\n' "$image"
