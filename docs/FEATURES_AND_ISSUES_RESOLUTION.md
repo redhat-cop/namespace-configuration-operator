@@ -1061,6 +1061,16 @@ branch's content. The property test's oracle is now operator-utils' own `Process
 
 ---
 
+### One Selection per User Across Identities
+
+**Status:** ✅ COMPLETED (issue #6)
+
+A user with N matching identities was appended N times by `getSelectedUsers` (and enqueued N times by the identity watch), so every template rendered N times and the enforcer ran N child controllers for one object. Both loops now stop at the first matching identity.
+
+**Files Modified:** `controllers/userconfig_controller.go`, `controllers/user_dedupe_test.go` (**NEW**)
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED
