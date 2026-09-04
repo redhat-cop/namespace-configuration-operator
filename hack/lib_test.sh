@@ -42,4 +42,10 @@ out=$(print_header s.sh)
 printf '%s' "$out" | grep -q 'set -euo' && fail "print_header must stop before code"
 [ "$(printf '%s' "$out" | tail -1)" = "Last comment line." ] || fail "print_header must keep the last comment line"
 
+for url in git@github.com:ephico2real2/namespace-configuration-operator.git https://github.com/ephico2real2/namespace-configuration-operator.git https://github.com/ephico2real2/namespace-configuration-operator ssh://git@github.com/ephico2real2/namespace-configuration-operator.git; do
+  git remote remove origin 2>/dev/null || true
+  git remote add origin "$url"
+  [ "$(origin_repo)" = "ephico2real2/namespace-configuration-operator" ] || fail "origin_repo failed for $url: $(origin_repo)"
+done
+
 echo "lib_test: ok"

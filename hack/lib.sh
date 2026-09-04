@@ -21,3 +21,17 @@ dirty_summary() {
 print_header() {
   awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$1"
 }
+
+# origin_repo prints owner/name for the `origin` remote, ssh or https form, with or without .git.
+# Used instead of `gh repo view`, which on a fork resolves to the PARENT repository unless a default
+# has been set with `gh repo set-default`; the workflows live in the fork.
+origin_repo() {
+  local url
+  url=$(git remote get-url origin 2>/dev/null) || return 1
+  url=${url%.git}
+  case $url in
+    git@*:*) printf '%s\n' "${url#*:}" ;;
+    https://*|http://*|ssh://*) url=${url#*://}; url=${url#*/}; printf '%s\n' "$url" ;;
+    *) return 1 ;;
+  esac
+}
