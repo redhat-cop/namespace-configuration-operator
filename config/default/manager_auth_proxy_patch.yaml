@@ -25,10 +25,15 @@ spec:
         - containerPort: 8443
           name: https
       - name: manager
+        # Container.Args has no strategic-merge key, so this list REPLACES the one in
+        # config/manager/manager.yaml wholesale. Every flag the manager must run with has to be
+        # repeated here, or it silently disappears from the rendered Deployment (the zap flags did).
         args:
         - "--health-probe-bind-address=:8081"
         - "--metrics-bind-address=127.0.0.1:8080"
         - "--leader-elect"
+        - "--zap-log-level=info"
+        - "--zap-devel=false"
       volumes:
       - name: tls-cert
         secret:
