@@ -98,8 +98,11 @@ func ManageSuccessWithRetry[T client.Object](
 		// between render and this write, writing success now would claim the NEW generation was
 		// processed. Its reconcile is already queued by the generation predicate; let it report.
 		if latestInstance.GetGeneration() != reconciledGeneration {
+			// Requeue explicitly rather than rely on the generation predicate's event alone: under a
+			// spec that changes on every cycle (a mutating webhook, an editor in a loop) the status
+			// would otherwise never be written. The requeue costs one extra reconcile at most.
 			log.V(1).Info("spec changed during reconcile; leaving status to the next cycle", resourceTypeName, latestInstance.GetName(), "reconciled", reconciledGeneration, "current", latestInstance.GetGeneration())
-			return reconcile.Result{}, nil
+			return reconcile.Result{Requeue: true}, nil
 		}
 
 		// A previous cycle may have left ReconcileError=True. The library's ManageSuccess only adds or

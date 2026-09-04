@@ -28,7 +28,9 @@ print_header() {
 origin_repo() {
   local url
   url=$(git remote get-url origin 2>/dev/null) || return 1
+  url=${url%/}
   url=${url%.git}
+  url=${url%/}
   case $url in
     git@*:*) printf '%s\n' "${url#*:}" ;;
     https://*|http://*|ssh://*) url=${url#*://}; url=${url#*/}; printf '%s\n' "$url" ;;

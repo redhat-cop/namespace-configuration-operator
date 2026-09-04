@@ -373,7 +373,7 @@ func (r *UserConfigReconciler) manageCleanUpLogic(ctx context.Context, instance 
 	// A selector that does not compile means the owned set cannot be computed from this spec at all
 	// (and such a CR never created anything under it, since selection fails before enforcement).
 	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
-	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+	if err := common.ValidateSelectors(common.NamedSelector{Name: "labelSelector", Selector: instance.Spec.LabelSelector}, common.NamedSelector{Name: "annotationSelector", Selector: instance.Spec.AnnotationSelector}, common.NamedSelector{Name: "identityExtraFieldSelector", Selector: instance.Spec.IdentityExtraFieldSelector}); err != nil {
 		r.Log.Error(err, "cannot recompute the objects owned by a UserConfig whose selector does not compile; nothing is deleted", "userconfig", instance.Name)
 		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
 		return nil
@@ -441,7 +441,7 @@ func (r *UserConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return reconcileRequests
-		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
+		})).
 		Watches(&userv1.Identity{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Identity",

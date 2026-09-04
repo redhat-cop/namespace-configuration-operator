@@ -215,6 +215,48 @@ kind: Role
 	`{{- if (index .Labels "example.com/oud-group") }}
 {{/* a template comment renders nothing */}}
 {{- end }}`,
+	// review shapes: the renderer parses only the FIRST YAML document
+	`{{- if .Name }}
+---
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: never-seen
+{{- end }}`,
+	`{{- if .Name }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: first-doc
+{{- end }}`,
+	"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n",
+	// review shapes: outside the grammar, decided by rendering
+	`{{- range .Labels }}
+kind: Role
+{{- end }}`,
+	`{{- define "cm" }}apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: x
+{{- end }}{{ template "cm" . }}`,
+	`{{ define "r" }}kind: Role{{ end }}`,
+	`{{- with (index .Annotations "missing") }}
+kind: Role
+{{- end }}`,
+	`{{- if .Name }}
+data:
+{{- end }}`,
+	`{{- if eq .Name 5 }}
+kind: Role
+{{- end }}`,
+	`{{- if eq (index .Annotations "k") "v" }}
+kind: Role
+{{- end }}`,
+	`{{ if index .Annotations "enabled" }}
+kind: ConfigMap
+{{ end }}`,
 }
 
 var propertySubjects = []*corev1.Namespace{
@@ -228,9 +270,12 @@ var propertySubjects = []*corev1.Namespace{
 }
 
 // renderNonBlank is the oracle: exactly what operator-utils' renderer does with the template for
-// this object, by value, reduced to "would it produce an object or an error". A parse or render
-// error maps to true because the filter must leave such a template to the renderer so the error is
-// reported there (and, since Render returns errors, fails the reconcile visibly).
+// this object, by value. The contract it encodes, precisely: the filter says "applicable" iff the
+// renderer would produce at least one object, OR would fail with anything other than the
+// null-output failure. A render whose only failure is "Object 'Kind' is missing in 'null'" (blank,
+// comment-only, `---`-only, an empty first document) is NOT applicable: preventing exactly that
+// failure is why the filter exists. Any other parse or execution error maps to true so the renderer
+// reports it and the reconcile fails visibly.
 func renderNonBlank(t *testing.T, funcs template.FuncMap, text string, obj *corev1.Namespace) bool {
 	t.Helper()
 	tmpl, err := template.New("oracle").Funcs(funcs).Parse(text)
@@ -461,5 +506,26 @@ func TestOwnedResources_BestEffortAcrossObjects(t *testing.T) {
 	}
 	if len(failures) != 1 || !strings.Contains(failures[0].Error(), "for b") {
 		t.Errorf("expected exactly one failure naming b, got %v", failures)
+	}
+}
+
+// The renderer parses only the first YAML document. A taken branch whose first document is empty
+// (a `---` immediately followed by another) renders `null`, whatever comes after.
+func TestIsApplicable_FirstDocumentRule(t *testing.T) {
+	f := newTestFilter()
+	subject := ns("team-a", nil, nil)
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"{{- if .Name }}\n---\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n{{- end }}", false},
+		{"{{- if .Name }}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n{{- end }}", true},
+		{"{{- if .Name }}\n# comment\n---\nkind: Role\n{{- end }}", true},
+		{"{{- if .Name }}\n# only a comment\n{{- end }}", false},
+	}
+	for _, tc := range cases {
+		if got := f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: tc.text}, subject); got != tc.want {
+			t.Errorf("IsApplicable = %v, want %v for\n%s", got, tc.want, tc.text)
+		}
 	}
 }

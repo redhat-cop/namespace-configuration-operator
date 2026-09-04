@@ -260,23 +260,27 @@ func evaluateGuardChain(n *parse.IfNode, s subject) (decided bool, applicable bo
 	}
 }
 
-// listHasContent reports whether a taken branch renders an object. Literal text settles it when
-// some line is neither blank, nor a `#` comment, nor a bare `---`, since those all parse to `null`
-// and the renderer rejects `null`. A branch made only of actions (no literal text) is left to the
-// render fallback, since an action can legitimately print nothing.
+// listHasContent reports whether a taken branch renders an object. The renderer parses only the
+// FIRST YAML document of the output (sigs.k8s.io/yaml -> yaml.v2 Unmarshal), so the branch's literal
+// text is judged the same way: the first document must contain a line that is neither blank nor a
+// `#` comment. A leading `---` opens document one; a second `---` right after it closes it empty,
+// and everything after is never seen. A branch made only of actions (no literal text) is left to
+// the render fallback, since an action can legitimately print nothing.
 func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 	if list == nil {
 		return true, false
 	}
+	var text []byte
 	actions := false
 	for _, n := range list.Nodes {
 		if t, isText := n.(*parse.TextNode); isText {
-			if textHasYAMLContent(t.Text) {
-				return true, true
-			}
+			text = append(text, t.Text...)
 			continue
 		}
 		actions = true
+	}
+	if firstDocumentHasContent(text) {
+		return true, true
 	}
 	if actions {
 		return false, false
@@ -284,11 +288,19 @@ func listHasContent(list *parse.ListNode) (decided bool, content bool) {
 	return true, false
 }
 
-// textHasYAMLContent is true when at least one line would contribute to a YAML document.
-func textHasYAMLContent(text []byte) bool {
+// firstDocumentHasContent mirrors what the renderer will parse: the first YAML document only.
+func firstDocumentHasContent(text []byte) bool {
+	opened := false
 	for _, line := range bytes.Split(text, []byte("\n")) {
 		line = bytes.TrimSpace(line)
-		if len(line) == 0 || line[0] == '#' || bytes.Equal(line, []byte("---")) {
+		if bytes.Equal(line, []byte("---")) {
+			if opened {
+				return false // the first document ended without content
+			}
+			opened = true
+			continue
+		}
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
 		return true

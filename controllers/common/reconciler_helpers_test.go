@@ -95,11 +95,15 @@ func TestManageSuccessWithRetry_SkipsAStaleGeneration(t *testing.T) {
 	nc := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc", Generation: 5}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build()
 	r := &recordingReconciler{c: c}
-	if _, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig", 4,
-		func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} }); err != nil {
+	res, err := ManageSuccessWithRetry(r, context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "nc"}}, logr.Discard(), "namespaceconfig", 4,
+		func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
+	if err != nil {
 		t.Fatal(err)
 	}
 	if r.seen != nil {
 		t.Errorf("success must not be written for generation 4 when the object is at 5, but ManageSuccess was called")
+	}
+	if !res.Requeue {
+		t.Errorf("a generation that moved during the reconcile must requeue, or a spec that changes every cycle never gets a status")
 	}
 }
