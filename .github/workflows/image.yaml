@@ -1,0 +1,156 @@
+# Builds THIS FORK's operator image and pushes it to our quay organisation.
+#
+# WHY A SEPARATE FILE. pr.yaml / push.yaml call the shared redhat-cop operator workflow, which only
+# runs on master and tags, needs COMMUNITY_OPERATOR_PAT, builds the OLM bundle and catalog, and
+# defaults its registry to quay.io/<GitHub owner> — ephico2real2, which is not our quay organisation
+# (ephico2real). They stay exactly as upstream ships them. This workflow is the fork's own image
+# path: a feature branch push, or a manual run, produces the same image hack/push-quay.sh produces
+# on a laptop, so a cluster can pull a branch build without anyone's machine in the loop.
+#
+# CREDENTIALS. The same two repository secrets the group-sync-operator fork's push.yml names —
+# REGISTRY_USERNAME and REGISTRY_PASSWORD — a quay robot account with write access to the
+# repository below. One pair serves both forks. Set them with:
+#   gh secret set REGISTRY_USERNAME -R ephico2real2/namespace-configuration-operator
+#   gh secret set REGISTRY_PASSWORD -R ephico2real2/namespace-configuration-operator
+#
+# TAGS. Every build pushes an immutable tag from `git describe` (e.g. v1.2.6-84-gbc60603) and a
+# sha-<short> alias. `:latest` — which every cluster on the chart's default values pulls on its next
+# pod restart — moves ONLY when a manual run asks for it, never on a plain push. Same rule as
+# hack/push-quay.sh.
+name: image
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'examples/**'
+      - 'charts/**'
+  workflow_dispatch:
+    inputs:
+      push_latest:
+        description: "Also move :latest to this build (clusters pull it on their next pod restart)"
+        type: boolean
+        default: false
+      platforms:
+        description: "Comma-separated build platforms"
+        type: string
+        default: linux/amd64
+
+env:
+  IMAGE_REPO: quay.io/ephico2real/namespace-configuration-operator
+
+permissions:
+  contents: read
+
+# One build per ref at a time, queued not cancelled: two pushes racing would otherwise both move
+# the sha- and describe tags and the later finisher, not the later commit, would win.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # The same checks hack/local-ci.sh runs on a laptop, on the Go version the Dockerfile builds with.
+    name: local-ci gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: hack/local-ci.sh
+
+  image:
+    name: build and push
+    needs: gate
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # git describe needs the tags, and the version stamp in the binary comes from it.
+          fetch-depth: 0
+
+      - name: Refuse to run without registry credentials
+        env:
+          U: ${{ secrets.REGISTRY_USERNAME }}
+          P: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          if [ -z "$U" ] || [ -z "$P" ]; then
+            echo "::error::REGISTRY_USERNAME / REGISTRY_PASSWORD are not set on this repository; see the header of this workflow"
+            exit 1
+          fi
+
+      - name: Version stamps
+        id: meta
+        run: |
+          version=$(git describe --tags --always)
+          # Without the release tags on this remote, describe degrades to the bare sha and the image is
+          # named unlike a laptop build (v1.2.6-N-g<sha>). Push them once: git push origin --tags
+          case "$version" in *-g*) ;; *) echo "::warning::no release tag reachable from HEAD on this remote; image will be tagged '$version'. Run: git push origin --tags" ;; esac
+          commit=$(git rev-parse --short HEAD)
+          build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "build_date=$build_date"
+            echo "tag=$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "building $IMAGE_REPO:$version ($commit, $build_date)"
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        if: ${{ inputs.platforms != '' && inputs.platforms != 'linux/amd64' }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to quay
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: ${{ inputs.platforms || 'linux/amd64' }}
+          push: true
+          # No provenance attestation: with it the tag becomes an OCI index holding the image plus an
+          # attestation manifest, and every tool that reports "the digest" reports a different one.
+          # A single manifest per tag keeps `podman pull` + RepoDigests equal to the registry digest.
+          provenance: false
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ steps.meta.outputs.commit }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+          tags: |
+            ${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE_REPO }}:sha-${{ steps.meta.outputs.commit }}
+            ${{ inputs.push_latest == true && format('{0}:latest', env.IMAGE_REPO) || '' }}
+          # OCI labels so a pulled image says what it is: hack/ci-image.sh pull reads these.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.build_date }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+
+      - name: Summary
+        run: |
+          {
+            echo "### image"
+            echo
+            echo '```'
+            echo "$IMAGE_REPO:${{ steps.meta.outputs.tag }}"
+            echo "$IMAGE_REPO:sha-${{ steps.meta.outputs.commit }}"
+            [ "${{ inputs.push_latest }}" = "true" ] && echo "$IMAGE_REPO:latest  (moved)"
+            echo '```'
+            echo
+            echo "pull it locally: \`hack/ci-image.sh pull ${{ steps.meta.outputs.tag }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

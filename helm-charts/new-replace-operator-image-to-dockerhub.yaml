@@ -1,0 +1,75 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: Image Registry
+    policies.kyverno.io/last-validated: "2025-12-07T09:27:55Z"
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Deployment,Pod
+    policies.kyverno.io/title: Replace operator manager image to Docker Hub latest
+  name: replace-operator-image-to-dockerhub
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  rules:
+  - match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          namespaces:
+          - namespace-configuration-operator
+          operations:
+          - CREATE
+          - UPDATE
+    mutate:
+      foreach:
+      - list: request.object.spec.containers[]
+        patchStrategicMerge:
+          spec:
+            containers:
+            - image: docker.io/ephico2real/namespace-configuration-operator:latest
+              imagePullPolicy: Always
+              name: manager
+        preconditions:
+          all:
+          - key: '{{ element.name }}'
+            operator: Equals
+            value: manager
+    name: rewrite-operator-pod-manager-to-dockerhub
+    skipBackgroundRequests: true
+  - match:
+      any:
+      - resources:
+          kinds:
+          - Deployment
+          names:
+          - namespace-configuration-operator-controller-manager
+          namespaces:
+          - namespace-configuration-operator
+          operations:
+          - CREATE
+          - UPDATE
+    mutate:
+      foreach:
+      - list: request.object.spec.template.spec.containers[]
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                - image: docker.io/ephico2real/namespace-configuration-operator:latest
+                  imagePullPolicy: Always
+                  name: manager
+                imagePullSecrets:
+                - name: dockerhub-secret
+        preconditions:
+          all:
+          - key: '{{ element.name }}'
+            operator: Equals
+            value: manager
+    name: rewrite-operator-deployment-manager-to-dockerhub
+    skipBackgroundRequests: true
+  validationFailureAction: Audit

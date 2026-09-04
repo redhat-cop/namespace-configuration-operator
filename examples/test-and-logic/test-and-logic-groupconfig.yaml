@@ -1,0 +1,106 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: test-and-logic-groupconfig
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: test
+    rbac.ocp.io/scope: test
+    rbac.ocp.io/kind: GroupConfig
+  annotations:
+    description: "Test GroupConfig to verify AND logic fix - requires both prefix and suffix patterns"
+spec:
+  labelSelector:
+    matchExpressions:
+    - key: group-sync-operator.redhat-cop.io/sync-provider
+      operator: Exists  # Only match synced groups
+  templates:
+    # Test Case 1: AND logic - requires BOTH conditions
+    # This template should ONLY apply to groups that:
+    #   1. Have suffix "-cluster-admin" AND
+    #   2. Contain "app-ocp-rbac" in the name
+    # Example matching groups: "app-ocp-rbac-alpha-cluster-admin"
+    # Example non-matching: "custom-cluster-admin" (missing "app-ocp-rbac")
+    - objectTemplate: |
+        {{- if and (hasSuffix "-cluster-admin" .Name) (contains "app-ocp-rbac" .Name) }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-and-logic-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-and-logic
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-and-logic
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-and-logic-groupconfig
+            rbac.ocp.io/test-scenario: "AND logic - both conditions required"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        {{- end }}
+    # Test Case 2: OR logic (for comparison) - requires ANY condition
+    # This template should apply to groups that:
+    #   EITHER have suffix "-cluster-developer" OR contain "monitoring"
+    - objectTemplate: |
+        {{- if hasSuffix "-cluster-developer" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-and-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - any condition matches"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if contains "monitoring" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-and-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - any condition matches"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+

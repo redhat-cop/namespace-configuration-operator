@@ -18,11 +18,14 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
@@ -45,6 +48,9 @@ type GroupConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
 	Log            logr.Logger
 	controllerName string
+	// templateFilter is built lazily by getTemplateFilter; see there.
+	templateFilter     *common.TemplateFilter
+	templateFilterOnce sync.Once
 }
 
 // +kubebuilder:rbac:groups=redhatcop.redhat.io,resources=groupconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -61,15 +67,17 @@ type GroupConfigReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
-func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("groupconfig", req.NamespacedName)
+	common.LogReconcilingStarted(log, "groupconfig", req.NamespacedName)
 
 	// Fetch the GroupConfig instance
 	instance := &redhatcopv1alpha1.GroupConfig{}
-	err := r.GetClient().Get(context, req.NamespacedName, instance)
+	err := r.GetClient().Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
+			log.Info("resource deletion detected - resource not found, skipping reconciliation", "groupconfig", req.NamespacedName)
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			return reconcile.Result{}, nil
@@ -79,61 +87,108 @@ func (r *GroupConfigReconciler) Reconcile(context context.Context, req ctrl.Requ
 	}
 
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(context, instance)
+		err := r.GetClient().Update(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
 
 	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, r.controllerName) {
+		log.Info("resource deletion detected - processing deletion cleanup", "groupconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
+		// Support all old finalizer variants for backward compatibility
+		oldFinalizerVariants := []string{
+			"groupconfig-controller",
+			"groupconfig-controller.redhat.com",
+			"groupconfig-controller.redhatcop.redhat.io",
+		}
+
+		hasAnyFinalizer := false
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				hasAnyFinalizer = true
+				break
+			}
+		}
+		if !hasAnyFinalizer && !util.HasFinalizer(instance, r.controllerName) {
 			return reconcile.Result{}, nil
 		}
-		err := r.manageCleanUpLogic(instance)
+
+		err := r.manageCleanUpLogic(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
-		util.RemoveFinalizer(instance, r.controllerName)
-		err = r.GetClient().Update(context, instance)
+
+		// Remove all old finalizer variants and new finalizer if present
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				util.RemoveFinalizer(instance, oldFinalizer)
+			}
+		}
+		if util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+		}
+
+		err = r.GetClient().Update(ctx, instance)
 		if err != nil {
+			// If the resource is already deleted (NotFound), that's fine - just return success
+			if errors.IsNotFound(err) {
+				log.Info("resource deletion completed - resource already deleted during finalizer removal", "groupconfig", instance.Name)
+				return reconcile.Result{}, nil
+			}
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
+		log.Info("resource deletion completed successfully", "groupconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
 	//get selected users
-	selectedGroups, err := r.getSelectedGroups(context, instance)
+	selectedGroups, err := r.getSelectedGroups(ctx, instance)
 	if err != nil {
 		log.Error(err, "unable to get groups selected by", "GroupConfig", instance)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(instance, selectedGroups)
+	lockedResources, err := r.getResourceList(ctx, instance, selectedGroups)
 	if err != nil {
 		log.Error(err, "unable to process resources", "GroupConfig", instance, "groups", selectedGroups)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	err = r.UpdateLockedResources(context, instance, lockedResources, []lockedpatch.LockedPatch{})
+	err = r.UpdateLockedResources(ctx, instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	return r.ManageSuccess(context, instance)
+	common.LogResourcesProcessedSuccessfully(log, "groupconfig", instance.Name, len(selectedGroups), len(lockedResources), "groups")
+
+	// Use retry mechanism to handle optimistic concurrency conflicts
+	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
+	return common.ManageSuccessWithRetry(r, ctx, req, log, "groupconfig", instance.GetGeneration(), func() *redhatcopv1alpha1.GroupConfig { return &redhatcopv1alpha1.GroupConfig{} })
 }
 
-func (r *GroupConfigReconciler) getResourceList(instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
+// getResourceList renders every applicable template for every selected group. A render failure is
+// returned, not swallowed: the caller ends the reconcile in ManageError and the enforcer never sees a
+// partial desired state (see common.TemplateFilter.Render).
+func (r *GroupConfigReconciler) getResourceList(ctx context.Context, instance *redhatcopv1alpha1.GroupConfig, groups []userv1.Group) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
+	filter := r.getTemplateFilter()
+	for i := range groups {
+		group := &groups[i]
+		lrs, err := filter.Render(ctx, instance.Spec.Templates, group)
 		if err != nil {
-			r.Log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
-			return []lockedresource.LockedResource{}, err
+			return nil, fmt.Errorf("groupconfig %s: %w", instance.Name, err)
+		}
+		if len(lrs) == 0 {
+			// No template in this GroupConfig applies to this group; visible at V(1), not an error.
+			r.Log.V(1).Info("skipping group - no GroupConfig templates match the group pattern",
+				"group", group.Name,
+				"groupconfig", instance.Name)
+			continue
 		}
 		lockedresources = append(lockedresources, lrs...)
 	}
@@ -184,16 +239,18 @@ func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.
 	applicableGroupConfigs := []redhatcopv1alpha1.GroupConfig{}
 
 	for _, groupConfig := range groupConfigList.Items {
+		// A malformed selector is that CR's problem alone (its own reconcile reports it); it must
+		// not stop every other GroupConfig from being enqueued on group events.
 		labelSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.LabelSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", groupConfig.Spec.LabelSelector)
-			return []redhatcopv1alpha1.GroupConfig{}, err
+			r.Log.Error(err, "skipping GroupConfig with a malformed labelSelector", "groupconfig", groupConfig.Name)
+			continue
 		}
 
 		annotationSelector, err := metav1.LabelSelectorAsSelector(&groupConfig.Spec.AnnotationSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", groupConfig.Spec.AnnotationSelector)
-			return []redhatcopv1alpha1.GroupConfig{}, err
+			r.Log.Error(err, "skipping GroupConfig with a malformed annotationSelector", "groupconfig", groupConfig.Name)
+			continue
 		}
 
 		labelsAslabels := labels.Set(group.GetLabels())
@@ -208,41 +265,116 @@ func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.
 
 // IsInitialized none
 func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupConfig) bool {
-	needsUpdate := true
+	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	initialized := true
+	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
+	// Update in the middle of the deletion for no benefit.
+	if util.IsBeingDeleted(instance) {
+		return true
+	}
 	for i := range instance.Spec.Templates {
 		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
 		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
 			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			needsUpdate = false
+			initialized = false
 		}
 	}
-	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+
+	// Migrate old finalizer to new finalizer (only if not being deleted)
+	oldFinalizerName := "groupconfig-controller"
+	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
+		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
-		needsUpdate = false
-	}
-	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
-		util.RemoveFinalizer(instance, r.controllerName)
-		needsUpdate = false
+		initialized = false
 	}
 
-	return needsUpdate
+	// Only add/remove finalizers if not being deleted
+	if !util.IsBeingDeleted(instance) {
+		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+			util.AddFinalizer(instance, r.controllerName)
+			initialized = false
+		}
+		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+			initialized = false
+		}
+	}
+
+	return initialized
 }
 
-func (r *GroupConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.GroupConfig) error {
-	err := r.Terminate(instance, true)
-	if err != nil {
+// manageCleanUpLogic removes everything this GroupConfig owns before its finalizer goes.
+//
+// Terminate alone is not enough: it deletes only what the in-memory enforcer was started with, which
+// is nothing after an operator restart and nothing after a failed attempt (the entry is dropped), so a
+// CR deleted in either state used to finalize with every managed object orphaned. The owned set is
+// therefore recomputed from the spec and deleted explicitly (NotFound is ignored). Terminate runs
+// first so a started enforcer cannot recreate what is deleted next.
+//
+// A group whose templates no longer render cannot have its objects recomputed; that is reported as
+// a Warning event and an error-level log line naming the group, and deletion proceeds, because a
+// finalizer that can never clear is worse than a documented orphan. A failed DELETE keeps the finalizer.
+func (r *GroupConfigReconciler) manageCleanUpLogic(ctx context.Context, instance *redhatcopv1alpha1.GroupConfig) error {
+	if err := r.Terminate(instance, true); err != nil {
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	// A selector that does not compile means the owned set cannot be computed from this spec at all
+	// (and such a CR never created anything under it, since selection fails before enforcement).
+	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
+	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+		r.Log.Error(err, "cannot recompute the objects owned by a GroupConfig whose selector does not compile; nothing is deleted", "groupconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
+		return nil
+	}
+	selected, err := r.getSelectedGroups(ctx, instance)
+	if err != nil {
+		return fmt.Errorf("unable to list the groups selected by GroupConfig %s during deletion: %w", instance.Name, err)
+	}
+	objs := make([]metav1.Object, 0, len(selected))
+	for i := range selected {
+		objs = append(objs, &selected[i])
+	}
+	owned, failures := r.getTemplateFilter().OwnedResources(ctx, instance.Spec.Templates, objs)
+	for _, f := range failures {
+		r.Log.Error(f, "could not recompute the objects owned for one group; anything created from that template there is NOT deleted", "groupconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", f.Error())
+	}
+	if err := r.DeleteUnstructuredResources(ctx, owned); err != nil {
+		return fmt.Errorf("unable to delete the objects owned by GroupConfig %s: %w", instance.Name, err)
+	}
+	r.Log.Info("deleted the objects owned by the GroupConfig", "groupconfig", instance.Name, "objects", len(owned), "groups", len(selected))
 	return nil
+}
+
+// filterApplicableTemplates keeps the templates that would render something for this group, so a
+// guarded template is never handed to the renderer for a group its guard rejects. The decision
+// logic, and why an empty render must be avoided, lives in common.TemplateFilter.
+func (r *GroupConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, group userv1.Group) []apis.LockedResourceTemplate {
+	return r.getTemplateFilter().FilterApplicable(templates, &group)
+}
+
+// isTemplateApplicableToGroup reports whether one template would render something for the group.
+func (r *GroupConfigReconciler) isTemplateApplicableToGroup(template apis.LockedResourceTemplate, group userv1.Group) bool {
+	return r.getTemplateFilter().IsApplicable(template, &group)
+}
+
+// getTemplateFilter builds the filter on first use. The rest config its render fallback may need is
+// only set once the reconciler is wired to a manager; unit tests construct the reconciler bare, and
+// there a nil config is fine because their templates never reach an API lookup.
+func (r *GroupConfigReconciler) getTemplateFilter() *common.TemplateFilter {
+	r.templateFilterOnce.Do(func() {
+		r.templateFilter = common.NewTemplateFilter(r.Log.WithName("templatefilter"), r.GetRestConfig())
+	})
+	return r.templateFilter
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.controllerName = "groupconfig-controller"
+	r.controllerName = "redhatcop.redhat.io/groupconfig-controller"
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&redhatcopv1alpha1.GroupConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
+		For(&redhatcopv1alpha1.GroupConfig{}, builder.WithPredicates(common.ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate)).
 		Watches(&userv1.Group{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Group",
@@ -264,7 +396,7 @@ func (r *GroupConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return reconcileRequests
-		})).
+		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
 		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

@@ -27,3 +27,5 @@ testbin/*
 bundle/
 bundle.Dockerfile
 charts/
+issues-193.md
+WARP.md

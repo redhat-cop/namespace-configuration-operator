@@ -1,0 +1,45 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: NamespaceConfig
+metadata:
+  name: test-issue-194-field-removal
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: test
+    rbac.ocp.io/scope: test
+    rbac.ocp.io/kind: NamespaceConfig
+  annotations:
+    description: "Test NamespaceConfig to reproduce GitHub issue #194 - Field removal with value 0 in conditionals"
+spec:
+  labelSelector:
+    matchLabels:
+      test-issue-194: "true"
+  templates:
+  # Test Case: ResourceQuota with conditional field that should be removed
+  # When annotation "allow-pvc" is set to "true", the persistentvolumeclaims field should be removed
+  # Bug: Field with value "0" is not removed when condition becomes false
+  - objectTemplate: |
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: test-issue-194-quota
+        namespace: {{ .Name }}
+        labels:
+          app.kubernetes.io/managed-by: namespace-configuration-operator
+          app.kubernetes.io/version: 0.1.0
+          rbac.ocp.io/policy-version: 0.1.0
+          rbac.ocp.io/test-scenario: issue-194-field-removal
+        annotations:
+          rbac.ocp.io/created-by: namespace-configuration-operator
+          rbac.ocp.io/source-namespaceconfig: test-issue-194-field-removal
+          rbac.ocp.io/test-issue: "194"
+          rbac.ocp.io/test-description: "Field removal with value 0 in conditionals"
+      spec:
+        hard:
+          pods: "4"
+          requests.cpu: "1"
+          requests.memory: 1Gi
+          {{- if ne (index .Annotations "allow-pvc") "true" }}
+          persistentvolumeclaims: "0"
+          {{- end }}
+          limits.cpu: "2"
+          limits.memory: 2Gi

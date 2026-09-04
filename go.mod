@@ -2,8 +2,6 @@ module github.com/redhat-cop/namespace-configuration-operator
 
 go 1.21
 
-toolchain go1.21.4
-
 require (
 	github.com/go-logr/logr v1.2.4
 	github.com/onsi/ginkgo/v2 v2.11.0
@@ -12,10 +10,12 @@ require (
 	github.com/redhat-cop/operator-utils v1.3.8
 	github.com/redhat-cop/vault-config-operator v0.8.24
 	github.com/scylladb/go-set v1.0.2
+	go.uber.org/zap v1.24.0
 	k8s.io/api v0.28.2
 	k8s.io/apimachinery v0.28.2
 	k8s.io/client-go v0.28.2
 	sigs.k8s.io/controller-runtime v0.15.2
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -91,7 +91,6 @@ require (
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.11.0 // indirect
 	golang.org/x/net v0.13.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
@@ -118,5 +117,12 @@ require (
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.14.3-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+// Temporary replace directive to use fork with fix for issue #194
+// Issue: Fields with value "0" are not removed when conditionals change from true to false
+// PR: https://github.com/redhat-cop/operator-utils/pull/103
+// This replace will be removed once the PR is merged and a new version of operator-utils is released
+// Fork: github.com/ephico2real2/operator-utils@fix/template-cache-race-and-excluded-paths (on top of fix-issue-194-field-removal-zero-value)
+// Commit: 9569465257c18041b4a4483c90aebfc278882387
+replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260904220010-84aa264c34f5

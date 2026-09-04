@@ -18,11 +18,14 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
@@ -44,8 +47,11 @@ import (
 // NamespaceConfigReconciler reconciles a NamespaceConfig object
 type NamespaceConfigReconciler struct {
 	lockedresourcecontroller.EnforcingReconciler
-	Log                   logr.Logger
-	controllerName        string
+	Log            logr.Logger
+	controllerName string
+	// templateFilter is built lazily by getTemplateFilter; see there.
+	templateFilter        *common.TemplateFilter
+	templateFilterOnce    sync.Once
 	AllowSystemNamespaces bool
 }
 
@@ -63,15 +69,16 @@ type NamespaceConfigReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
-func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *NamespaceConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("namespaceconfig", req.NamespacedName)
-	log.Info("reconciling started")
+	common.LogReconcilingStarted(log, "namespaceconfig", req.NamespacedName)
 	// Fetch the NamespaceConfig instance
 	instance := &redhatcopv1alpha1.NamespaceConfig{}
-	err := r.GetClient().Get(context, req.NamespacedName, instance)
+	err := r.GetClient().Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
+			log.Info("resource deletion detected - resource not found, skipping reconciliation", "namespaceconfig", req.NamespacedName)
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			return reconcile.Result{}, nil
@@ -80,95 +87,217 @@ func (r *NamespaceConfigReconciler) Reconcile(context context.Context, req ctrl.
 		return reconcile.Result{}, err
 	}
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(context, instance)
+		err := r.GetClient().Update(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
 
 	if util.IsBeingDeleted(instance) {
-		if !util.HasFinalizer(instance, r.controllerName) {
+		log.Info("resource deletion detected - processing deletion cleanup", "namespaceconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
+		// Support all old finalizer variants for backward compatibility
+		oldFinalizerVariants := []string{
+			"namespaceconfig-controller",
+			"namespaceconfig-controller.redhat.com",
+			"namespaceconfig-controller.redhatcop.redhat.io",
+		}
+
+		hasAnyFinalizer := false
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				hasAnyFinalizer = true
+				break
+			}
+		}
+		if !hasAnyFinalizer && !util.HasFinalizer(instance, r.controllerName) {
 			return reconcile.Result{}, nil
 		}
-		err := r.manageCleanUpLogic(instance)
+
+		err := r.manageCleanUpLogic(ctx, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
-		util.RemoveFinalizer(instance, r.controllerName)
-		err = r.GetClient().Update(context, instance)
+
+		// Remove all old finalizer variants and new finalizer if present
+		for _, oldFinalizer := range oldFinalizerVariants {
+			if util.HasFinalizer(instance, oldFinalizer) {
+				util.RemoveFinalizer(instance, oldFinalizer)
+			}
+		}
+		if util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+		}
+
+		err = r.GetClient().Update(ctx, instance)
 		if err != nil {
+			// If the resource is already deleted (NotFound), that's fine - just return success
+			if apierrors.IsNotFound(err) {
+				log.Info("resource deletion completed - resource already deleted during finalizer removal", "namespaceconfig", instance.Name)
+				return reconcile.Result{}, nil
+			}
 			log.Error(err, "unable to update instance", "instance", instance)
-			return r.ManageError(context, instance, err)
+			return r.ManageError(ctx, instance, err)
 		}
+		log.Info("resource deletion completed successfully", "namespaceconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
 	//get selected namespaces
-	selectedNamespaces, err := r.getSelectedNamespaces(context, instance)
+	selectedNamespaces, err := r.getSelectedNamespaces(ctx, instance)
 	if err != nil {
 		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	lockedResources, err := r.getResourceList(instance, selectedNamespaces)
+	lockedResources, err := r.getResourceList(ctx, instance, selectedNamespaces)
 	if err != nil {
 		log.Error(err, "unable to process resources", "NamespaceConfig", instance, "namespaces", selectedNamespaces)
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	err = r.UpdateLockedResources(context, instance, lockedResources, []lockedpatch.LockedPatch{})
+	err = r.UpdateLockedResources(ctx, instance, lockedResources, []lockedpatch.LockedPatch{})
 	if err != nil {
 		log.Error(err, "unable to update locked resources")
-		return r.ManageError(context, instance, err)
+		return r.ManageError(ctx, instance, err)
 	}
 
-	return r.ManageSuccess(context, instance)
+	common.LogResourcesProcessedSuccessfully(log, "namespaceconfig", instance.Name, len(selectedNamespaces), len(lockedResources), "namespaces")
+
+	// Use retry mechanism to handle optimistic concurrency conflicts
+	// This re-fetches the instance before each retry to ensure we have the latest resourceVersion
+	return common.ManageSuccessWithRetry(r, ctx, req, log, "namespaceconfig", instance.GetGeneration(), func() *redhatcopv1alpha1.NamespaceConfig { return &redhatcopv1alpha1.NamespaceConfig{} })
 }
 
-func (r *NamespaceConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.NamespaceConfig) error {
-	err := r.Terminate(instance, true)
-	if err != nil {
+// manageCleanUpLogic removes everything this NamespaceConfig owns before its finalizer goes.
+//
+// Terminate alone is not enough: it deletes only what the in-memory enforcer was started with, which
+// is nothing after an operator restart and nothing after a failed attempt (the entry is dropped), so a
+// CR deleted in either state used to finalize with every managed object orphaned. The owned set is
+// therefore recomputed from the spec and deleted explicitly (NotFound is ignored). Terminate runs
+// first so a started enforcer cannot recreate what is deleted next.
+//
+// A namespace whose templates no longer render cannot have its objects recomputed; that is reported as
+// a Warning event and an error-level log line naming the namespace, and deletion proceeds, because a
+// finalizer that can never clear is worse than a documented orphan. A failed DELETE keeps the finalizer.
+func (r *NamespaceConfigReconciler) manageCleanUpLogic(ctx context.Context, instance *redhatcopv1alpha1.NamespaceConfig) error {
+	if err := r.Terminate(instance, true); err != nil {
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	// A selector that does not compile means the owned set cannot be computed from this spec at all
+	// (and such a CR never created anything under it, since selection fails before enforcement).
+	// Say so and let the deletion finish; only a real API failure below keeps the finalizer.
+	if err := common.ValidateSelectors(instance.Spec.LabelSelector, instance.Spec.AnnotationSelector); err != nil {
+		r.Log.Error(err, "cannot recompute the objects owned by a NamespaceConfig whose selector does not compile; nothing is deleted", "namespaceconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", err.Error())
+		return nil
+	}
+	selected, err := r.getSelectedNamespaces(ctx, instance)
+	if err != nil {
+		return fmt.Errorf("unable to list the namespaces selected by NamespaceConfig %s during deletion: %w", instance.Name, err)
+	}
+	objs := make([]metav1.Object, 0, len(selected))
+	for i := range selected {
+		objs = append(objs, &selected[i])
+	}
+	owned, failures := r.getTemplateFilter().OwnedResources(ctx, instance.Spec.Templates, objs)
+	for _, f := range failures {
+		r.Log.Error(f, "could not recompute the objects owned for one namespace; anything created from that template there is NOT deleted", "namespaceconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", f.Error())
+	}
+	if err := r.DeleteUnstructuredResources(ctx, owned); err != nil {
+		return fmt.Errorf("unable to delete the objects owned by NamespaceConfig %s: %w", instance.Name, err)
+	}
+	r.Log.Info("deleted the objects owned by the NamespaceConfig", "namespaceconfig", instance.Name, "objects", len(owned), "namespaces", len(selected))
 	return nil
 }
 
 // IsInitialized none
 func (r *NamespaceConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.NamespaceConfig) bool {
-	needsUpdate := true
+	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	initialized := true
+	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
+	// Update in the middle of the deletion for no benefit.
+	if util.IsBeingDeleted(instance) {
+		return true
+	}
 	for i := range instance.Spec.Templates {
 		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
 		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
 			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			needsUpdate = false
+			initialized = false
 		}
 	}
-	if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+
+	// Migrate old finalizer to new finalizer (only if not being deleted)
+	oldFinalizerName := "namespaceconfig-controller"
+	if !util.IsBeingDeleted(instance) && util.HasFinalizer(instance, oldFinalizerName) {
+		util.RemoveFinalizer(instance, oldFinalizerName)
 		util.AddFinalizer(instance, r.controllerName)
-		needsUpdate = false
-	}
-	if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
-		util.RemoveFinalizer(instance, r.controllerName)
-		needsUpdate = false
+		initialized = false
 	}
 
-	return needsUpdate
+	// Only add/remove finalizers if not being deleted
+	if !util.IsBeingDeleted(instance) {
+		if len(instance.Spec.Templates) > 0 && !util.HasFinalizer(instance, r.controllerName) {
+			util.AddFinalizer(instance, r.controllerName)
+			initialized = false
+		}
+		if len(instance.Spec.Templates) == 0 && util.HasFinalizer(instance, r.controllerName) {
+			util.RemoveFinalizer(instance, r.controllerName)
+			initialized = false
+		}
+	}
+
+	return initialized
 }
 
-func (r *NamespaceConfigReconciler) getResourceList(instance *redhatcopv1alpha1.NamespaceConfig, groups []corev1.Namespace) ([]lockedresource.LockedResource, error) {
+// getResourceList renders every applicable template for every selected namespace. A render failure is
+// returned, not swallowed: the caller ends the reconcile in ManageError and the enforcer never sees a
+// partial desired state (see common.TemplateFilter.Render).
+func (r *NamespaceConfigReconciler) getResourceList(ctx context.Context, instance *redhatcopv1alpha1.NamespaceConfig, namespaces []corev1.Namespace) ([]lockedresource.LockedResource, error) {
 	lockedresources := []lockedresource.LockedResource{}
-	for _, group := range groups {
-		lrs, err := lockedresource.GetLockedResourcesFromTemplatesWithRestConfig(instance.Spec.Templates, r.GetRestConfig(), group)
+	filter := r.getTemplateFilter()
+	for i := range namespaces {
+		namespace := &namespaces[i]
+		lrs, err := filter.Render(ctx, instance.Spec.Templates, namespace)
 		if err != nil {
-			r.Log.Error(err, "unable to process", "templates", instance.Spec.Templates, "with param", group)
-			return []lockedresource.LockedResource{}, err
+			return nil, fmt.Errorf("namespaceconfig %s: %w", instance.Name, err)
+		}
+		if len(lrs) == 0 {
+			// No template in this NamespaceConfig applies to this namespace; visible at V(1), not an error.
+			r.Log.V(1).Info("skipping namespace - no NamespaceConfig templates match the namespace pattern",
+				"namespace", namespace.Name,
+				"namespaceconfig", instance.Name)
+			continue
 		}
 		lockedresources = append(lockedresources, lrs...)
 	}
 	return lockedresources, nil
+}
+
+// filterApplicableTemplates keeps the templates that would render something for this namespace, so a
+// guarded template is never handed to the renderer for a namespace its guard rejects. The decision
+// logic, and why an empty render must be avoided, lives in common.TemplateFilter.
+func (r *NamespaceConfigReconciler) filterApplicableTemplates(templates []apis.LockedResourceTemplate, namespace corev1.Namespace) []apis.LockedResourceTemplate {
+	return r.getTemplateFilter().FilterApplicable(templates, &namespace)
+}
+
+// isTemplateApplicableToNamespace reports whether one template would render something for the namespace.
+func (r *NamespaceConfigReconciler) isTemplateApplicableToNamespace(template apis.LockedResourceTemplate, namespace corev1.Namespace) bool {
+	return r.getTemplateFilter().IsApplicable(template, &namespace)
+}
+
+// getTemplateFilter builds the filter on first use. The rest config its render fallback may need is
+// only set once the reconciler is wired to a manager; unit tests construct the reconciler bare, and
+// there a nil config is fine because their templates never reach an API lookup.
+func (r *NamespaceConfigReconciler) getTemplateFilter() *common.TemplateFilter {
+	r.templateFilterOnce.Do(func() {
+		r.templateFilter = common.NewTemplateFilter(r.Log.WithName("templatefilter"), r.GetRestConfig())
+	})
+	return r.templateFilter
 }
 
 func (r *NamespaceConfigReconciler) getSelectedNamespaces(context context.Context, namespaceconfig *redhatcopv1alpha1.NamespaceConfig) ([]corev1.Namespace, error) {
@@ -217,15 +346,18 @@ func (r *NamespaceConfigReconciler) findApplicableNameSpaceConfigs(ctx context.C
 	}
 	//for each namespaceconfig see if it selects the namespace
 	for _, nc := range ncl.Items {
+		// A malformed selector is that CR's problem alone: its own reconcile reports it as
+		// ReconcileError. Returning here would enqueue NOTHING for any other CR on every namespace
+		// event, and that outage outlives the bad CR until some unrelated event arrives.
 		labelSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.LabelSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create selector from label selector", "selector", &nc.Spec.LabelSelector)
-			return []redhatcopv1alpha1.NamespaceConfig{}, err
+			r.Log.Error(err, "skipping NamespaceConfig with a malformed labelSelector", "namespaceconfig", nc.Name)
+			continue
 		}
 		annotationSelector, err := metav1.LabelSelectorAsSelector(&nc.Spec.AnnotationSelector)
 		if err != nil {
-			r.Log.Error(err, "unable to create ", "selector from", nc.Spec.AnnotationSelector)
-			return []redhatcopv1alpha1.NamespaceConfig{}, err
+			r.Log.Error(err, "skipping NamespaceConfig with a malformed annotationSelector", "namespaceconfig", nc.Name)
+			continue
 		}
 
 		labelsAslabels := labels.Set(namespace.GetLabels())
@@ -243,9 +375,9 @@ func isProhibitedNamespaceName(name string) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.controllerName = "namespaceconfig-controller"
+	r.controllerName = "redhatcop.redhat.io/namespaceconfig-controller"
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&redhatcopv1alpha1.NamespaceConfig{}, builder.WithPredicates(util.ResourceGenerationOrFinalizerChangedPredicate{})).
+		For(&redhatcopv1alpha1.NamespaceConfig{}, builder.WithPredicates(common.ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate)).
 		Watches(&corev1.Namespace{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Namespace",
@@ -267,7 +399,7 @@ func (r *NamespaceConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 			return res
-		})).
+		}), builder.WithPredicates(common.SelectedObjectChangedPredicate)).
 		WatchesRawSource(&source.Channel{Source: r.GetStatusChangeChannel()}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

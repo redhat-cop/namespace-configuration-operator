@@ -2,3 +2,12 @@
 # Ignore all files which are not go type
 bin/
 testbin/
+# Not part of the image; keeps the build context small (the .git directory alone is ~30 MB).
+.git/
+cover.out
+helm-charts/
+media/
+docs/
+examples/
+hack/
+.github/

@@ -1,0 +1,285 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: test-or-logic-groupconfig
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: test
+    rbac.ocp.io/scope: test
+    rbac.ocp.io/kind: GroupConfig
+  annotations:
+    description: "Test GroupConfig to verify OR logic - requires ANY condition to match"
+spec:
+  labelSelector:
+    matchExpressions:
+    - key: group-sync-operator.redhat-cop.io/sync-provider
+      operator: Exists  # Only match synced groups
+  templates:
+    # Test Case 1: OR logic with hasSuffix patterns
+    # This template applies to groups that match ANY of these conditions:
+    #   - Has suffix "-cluster-developer" OR
+    #   - Has suffix "-cluster-audit" OR
+    #   - Has suffix "-ns-developer"
+    # Example matching groups:
+    #   - "app-ocp-rbac-alpha-cluster-developer" (matches first condition)
+    #   - "app-ocp-rbac-alpha-cluster-audit" (matches second condition)
+    #   - "app-ocp-rbac-alpha-ns-developer" (matches third condition)
+    - objectTemplate: |
+        {{- if hasSuffix "-cluster-developer" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-suffix-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-suffix
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-suffix
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - hasSuffix pattern match"
+            rbac.ocp.io/matched-condition: "hasSuffix -cluster-developer"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if hasSuffix "-cluster-audit" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-suffix-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-suffix
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-suffix
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - hasSuffix pattern match"
+            rbac.ocp.io/matched-condition: "hasSuffix -cluster-audit"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if hasSuffix "-ns-developer" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-suffix-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-suffix
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-suffix
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - hasSuffix pattern match"
+            rbac.ocp.io/matched-condition: "hasSuffix -ns-developer"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+    # Test Case 2: OR logic with contains patterns
+    # This template applies to groups that match ANY of these conditions:
+    #   - Contains "monitoring" OR
+    #   - Contains "platform" OR
+    #   - Contains "devops"
+    # Example matching groups:
+    #   - "user-workload-monitoring-admin" (contains "monitoring")
+    #   - "app-ocp-rbac-platform-cluster-admin" (contains "platform")
+    #   - "app-ocp-rbac-devops-cluster-admin" (contains "devops")
+    - objectTemplate: |
+        {{- if contains "monitoring" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-contains-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-contains
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-contains
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - contains pattern match"
+            rbac.ocp.io/matched-condition: "contains monitoring"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if contains "platform" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-contains-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-contains
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-contains
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - contains pattern match"
+            rbac.ocp.io/matched-condition: "contains platform"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if contains "devops" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-contains-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-contains
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-contains
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - contains pattern match"
+            rbac.ocp.io/matched-condition: "contains devops"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+    # Test Case 3: OR logic mixing hasSuffix and contains
+    # This template applies to groups that match ANY of these conditions:
+    #   - Has suffix "-cluster-admin" OR
+    #   - Contains "finance" OR
+    #   - Contains "test"
+    # Example matching groups:
+    #   - "app-ocp-rbac-alpha-cluster-admin" (hasSuffix matches)
+    #   - "app-ocp-rbac-finance-cluster-developer" (contains "finance")
+    #   - "app-ocp-rbac-test-cluster-admin" (contains "test")
+    - objectTemplate: |
+        {{- if hasSuffix "-cluster-admin" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-mixed-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-mixed
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-mixed
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - mixed pattern match"
+            rbac.ocp.io/matched-condition: "hasSuffix -cluster-admin"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        {{- else if contains "finance" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-mixed-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-mixed
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-mixed
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - mixed pattern match"
+            rbac.ocp.io/matched-condition: "contains finance"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- else if contains "test" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-or-logic-mixed-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-or-logic-mixed
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-or-logic-mixed
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-or-logic-groupconfig
+            rbac.ocp.io/test-scenario: "OR logic - mixed pattern match"
+            rbac.ocp.io/matched-condition: "contains test"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+

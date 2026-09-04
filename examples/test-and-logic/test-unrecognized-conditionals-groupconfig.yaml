@@ -1,0 +1,181 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: test-unrecognized-conditionals-groupconfig
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: test
+    rbac.ocp.io/scope: test
+    rbac.ocp.io/kind: GroupConfig
+  annotations:
+    description: "Test GroupConfig to verify unrecognized conditional logic detection - uses eq, hasPrefix, and other functions not recognized by pattern extraction"
+spec:
+  labelSelector:
+    matchExpressions:
+    - key: group-sync-operator.redhat-cop.io/sync-provider
+      operator: Exists  # Only match synced groups
+  templates:
+    # Test Case 1: Using 'eq' function (equality check)
+    # This template uses 'eq' which is NOT recognized by the pattern extraction regex
+    # The operator should detect this as "unrecognized conditional logic" and log appropriately
+    # Example matching groups:
+    #   - "app-ocp-rbac-alpha-cluster-admin" (if .Name == "app-ocp-rbac-alpha-cluster-admin")
+    #   - "app-ocp-rbac-demo-cluster-admin" (if .Name == "app-ocp-rbac-demo-cluster-admin")
+    - objectTemplate: |
+        {{- if eq .Name "app-ocp-rbac-alpha-cluster-admin" }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-unrecognized-eq-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-unrecognized-eq
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-unrecognized-eq
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-unrecognized-conditionals-groupconfig
+            rbac.ocp.io/test-scenario: "Unrecognized conditional - eq function"
+            rbac.ocp.io/matched-condition: "eq app-ocp-rbac-alpha-cluster-admin"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        {{- end }}
+    # Test Case 2: Using 'hasPrefix' function (prefix check)
+    # This template uses 'hasPrefix' which is NOT recognized by the pattern extraction regex
+    # The operator should detect this as "unrecognized conditional logic" and log appropriately
+    # Example matching groups:
+    #   - "app-ocp-rbac-alpha-cluster-admin" (hasPrefix "app-ocp-rbac-alpha")
+    #   - "app-ocp-rbac-alpha-cluster-developer" (hasPrefix "app-ocp-rbac-alpha")
+    #   - "app-ocp-rbac-alpha-ns-developer" (hasPrefix "app-ocp-rbac-alpha")
+    - objectTemplate: |
+        {{- if hasPrefix "app-ocp-rbac-alpha" .Name }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-unrecognized-hasprefix-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-unrecognized-hasprefix
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-unrecognized-hasprefix
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-unrecognized-conditionals-groupconfig
+            rbac.ocp.io/test-scenario: "Unrecognized conditional - hasPrefix function"
+            rbac.ocp.io/matched-condition: "hasPrefix app-ocp-rbac-alpha"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+    # Test Case 3: Using 'ne' function (not equal check)
+    # This template uses 'ne' which is NOT recognized by the pattern extraction regex
+    # The operator should detect this as "unrecognized conditional logic" and log appropriately
+    # Example matching groups:
+    #   - Any group EXCEPT "app-ocp-rbac-alpha-cluster-admin"
+    - objectTemplate: |
+        {{- if ne .Name "app-ocp-rbac-alpha-cluster-admin" }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-unrecognized-ne-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-unrecognized-ne
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-unrecognized-ne
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-unrecognized-conditionals-groupconfig
+            rbac.ocp.io/test-scenario: "Unrecognized conditional - ne function"
+            rbac.ocp.io/matched-condition: "ne app-ocp-rbac-alpha-cluster-admin"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}
+    # Test Case 4: Using 'and' with unrecognized functions
+    # This template uses 'and' with 'eq' which is NOT recognized by the pattern extraction regex
+    # The operator should detect this as "unrecognized conditional logic" and log appropriately
+    # Example matching groups:
+    #   - "app-ocp-rbac-demo-cluster-admin" (matches both: eq "app-ocp-rbac-demo-cluster-admin" AND hasPrefix "app-ocp-rbac-demo")
+    - objectTemplate: |
+        {{- if and (eq .Name "app-ocp-rbac-demo-cluster-admin") (hasPrefix "app-ocp-rbac-demo" .Name) }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-unrecognized-and-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-unrecognized-and
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-unrecognized-and
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-unrecognized-conditionals-groupconfig
+            rbac.ocp.io/test-scenario: "Unrecognized conditional - and with eq/hasPrefix"
+            rbac.ocp.io/matched-condition: "and (eq app-ocp-rbac-demo-cluster-admin) (hasPrefix app-ocp-rbac-demo)"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        {{- end }}
+    # Test Case 5: Template with NO conditionals (truly universal)
+    # This template has NO conditionals at all - it should apply to ALL groups
+    # The operator should log "template has no patterns, applying to all groups"
+    - objectTemplate: |
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-unrecognized-universal-test-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: 0.1.0
+            rbac.ocp.io/policy-version: 0.1.0
+            rbac.ocp.io/role-type: test-unrecognized-universal
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/access-level: test
+            rbac.ocp.io/config-source: test-unrecognized-universal
+          annotations:
+            rbac.ocp.io/created-by: namespace-configuration-operator
+            rbac.ocp.io/source-groupconfig: test-unrecognized-conditionals-groupconfig
+            rbac.ocp.io/test-scenario: "No conditionals - universal template"
+            rbac.ocp.io/matched-condition: "none (universal)"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view

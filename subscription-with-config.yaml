@@ -1,0 +1,27 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: namespace-configuration-operator
+  namespace: namespace-configuration-operator
+spec:
+  channel: alpha
+  installPlanApproval: Automatic
+  name: namespace-configuration-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: namespace-configuration-operator.v1.2.6
+  config:
+    env:
+    - name: ZAP_LOG_LEVEL
+      value: "info"
+    - name: ZAP_DEVEL
+      value: "false"
+    - name: RELATED_IMAGE_MANAGER
+      value: "quay.io/ephico2real/namespace-configuration-operator:latest"
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 250m
+        memory: 500Mi

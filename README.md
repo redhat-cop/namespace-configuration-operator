@@ -16,7 +16,7 @@ With the namespace-configuration-operator one can create rules that will react t
 Here are some examples of the type of onboarding processes that one could support:
 
 1. [developer sandbox](./examples/user-sandbox/readme.md)
-2. [team onboarding](./examples/team-onboarding/readme.md) with support of the entire SDLC in a multitentant environment.
+2. [team onboarding](./examples/team-onboarding/readme.md) with support of the entire SDLC in a multitenant environment.
 
 Policies can be expressed with the following CRDs:
 
@@ -55,6 +55,42 @@ spec:
 This creates a rule in which every time a user from the `corp-ldap` provider is created, a namespace called `<username>-sandbox` is also created.
 
 More advanced templating functions found in the popular k8s management tool [Helm](https://helm.sh/) is also available. These functions are further described in the Helm [templating](https://helm.sh/docs/chart_template_guide/function_list/#kubernetes-and-chart-functions) documentation.
+
+#### Conditional templates
+
+An `objectTemplate` may be wrapped in a guard so that it produces an object only for some of the selected
+objects — for example, only for namespaces whose label value belongs to one team family:
+
+```yaml
+  templates:
+  - objectTemplate: |
+      {{- if hasPrefix "team-a-" (index .Labels "example.com/team") }}
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: team-a-edit
+        namespace: {{ .Name }}
+      ...
+      {{- end }}
+```
+
+Where the guard rejects the object the template renders nothing, and the operator skips it for that object
+(logged once per reconcile at `--zap-log-level=1` as "skipping ..."). Guards built from `hasPrefix`, `hasSuffix`,
+`contains`, `eq`, `ne`, `and`, `or`, `not`, and the truthiness of `.Name` or of `(index .Labels "key")` /
+`(index .Annotations "key")` are evaluated without rendering; any other guard is decided by rendering the
+template and checking for empty output, which costs one extra render for that template. Either way the answer
+is what the renderer would produce. See `controllers/common/templatefilter.go`.
+
+Two details of that contract: the object is passed BY VALUE, so pointer-receiver methods such as `{{ .GetName }}`
+are not available (use `.Name`, `.Labels`, `.Annotations`, `index`); and a guard whose taken branch contains only
+YAML comments or a bare `---` counts as rendering nothing, so it is skipped rather than failed.
+
+A template that the guard accepts but that then FAILS to render (a parse error, a `required` value that is
+missing, invalid YAML, an output with no `kind`) fails the whole reconcile: the CR gets a `ReconcileError`
+condition and a Warning event carrying the object name and the error, and nothing is created, changed or
+deleted for that CR until the template is fixed. This is deliberate. The library function the operator used
+to call returned an empty list with no error on such failures, and the enforcer then deleted everything it had
+previously created for that object while the CR still reported success.
 
 Additionally, there are functions not listed within the Helm documentation that are also available outlined in the table below.
 
@@ -309,7 +345,7 @@ Define an image and tag. For example...
 
 ```shell
 export imageRepository="quay.io/redhat-cop/namespace-configuration-operator"
-export imageTag="$(git -c 'versionsort.suffix=-' ls-remote --exit-code --refs --sort='version:refname' --tags https://github.com/redhat-cop/namespace-configuration-operator.git '*.*.*' | tail --lines=1 | cut --delimiter='/' --fields=3)"
+export imageTag="$(git -c 'versionsort.suffix=-' ls-remote --exit-code --refs --sort='version:refname' --tags https://github.com/redhat-cop/namespace-configuration-operator.git '*.*.*' | tail -n 1 | cut -d '/' -f 3)"
 ```
 
 Deploy chart...
@@ -333,6 +369,28 @@ export repo=raffaelespazzoli #replace with yours
 docker login quay.io/$repo/namespace-configuration-operator
 make docker-build IMG=quay.io/$repo/namespace-configuration-operator:latest
 make docker-push IMG=quay.io/$repo/namespace-configuration-operator:latest
+```
+
+This fork also carries two scripts that keep the local flow out of `.github/workflows/`:
+
+```shell
+hack/local-ci.sh                 # gofmt, go vet, go build, go test -race; LOCAL_CI_IMAGE=1 adds a container build
+hack/push-quay.sh                # builds linux/amd64 with podman, pushes an immutable tag (git describe)
+PUSH_LATEST=1 hack/push-quay.sh  # ...and moves :latest, which is what running clusters pull
+```
+
+Both explain their choices in their headers; `local-ci.sh` in particular says why it does not run `make test`.
+
+The same image is also built by CI: `.github/workflows/image.yaml` runs on every push to a `feature/**` or
+`fix/**` branch and on manual dispatch, runs `hack/local-ci.sh` as its gate, and pushes
+`quay.io/ephico2real/namespace-configuration-operator:<git describe>` (plus `sha-<short>`); a manual run can also
+move `:latest`. It needs the `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` repository secrets (a quay robot). From a
+laptop:
+
+```shell
+hack/ci-image.sh run [--latest]   # dispatch the workflow for the pushed current branch and follow it
+hack/ci-image.sh status           # recent runs
+hack/ci-image.sh pull [tag]       # pull what CI built for HEAD (or a tag) and print its labels and version stamp
 ```
 
 ### Deploy to OLM via bundle

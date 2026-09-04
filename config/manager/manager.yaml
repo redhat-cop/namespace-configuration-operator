@@ -26,10 +26,24 @@ spec:
       containers:
       - command:
         - /manager
+        # NOTE: config/default/manager_auth_proxy_patch.yaml replaces this whole list (Args has no
+        # merge key). Keep the two in step; the patch is what the rendered Deployment carries.
         args:
         - --leader-elect
+        # Log level configuration via command-line flags (recommended by Operator SDK)
+        # See: https://sdk.operatorframework.io/docs/building-operators/golang/references/logging/
+        # Alternative: Use environment variables (ZAP_LOG_LEVEL, ZAP_DEVEL) for ConfigMap-based config
+        - --zap-log-level=info
+        - --zap-devel=false
         image: controller:latest
         name: manager
+        env:
+        # Optional: Override via environment variables (lower priority than args)
+        # Uncomment to use ConfigMap-based configuration instead of args
+        # - name: ZAP_LOG_LEVEL
+        #   value: "info"
+        # - name: ZAP_DEVEL
+        #   value: "false"
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:

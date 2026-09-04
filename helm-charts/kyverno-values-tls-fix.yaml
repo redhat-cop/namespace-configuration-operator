@@ -1,0 +1,39 @@
+# Kyverno Values - TLS Certificate Fix
+#
+# This values file fixes the TLS certificate generation issue
+# Use this when installing Kyverno to ensure certificates are created
+
+# Enable self-signed certificate generation
+admissionController:
+  createSelfSignedCert: true
+
+backgroundController:
+  createSelfSignedCert: true
+
+cleanupController:
+  createSelfSignedCert: true
+
+reportsController:
+  createSelfSignedCert: true
+
+# Alternative: Use cert-manager if available
+# Uncomment below if you have cert-manager installed
+# admissionController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+
+# backgroundController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+
+# cleanupController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
+
+# reportsController:
+#   createSelfSignedCert: false
+#   certManager:
+#     enabled: true
