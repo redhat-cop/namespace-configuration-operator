@@ -38,6 +38,18 @@ step "unit tests with the race detector"
 go test -race -count=1 ./... 2>&1 | grep -v 'malformed LC_DYSYMTAB'
 [ "${PIPESTATUS[0]}" -eq 0 ] || fail "unit tests"
 
+step "rendered manifests carry the log flags"
+# Container.Args has no strategic-merge key, so a patch that touches args replaces the whole list;
+# this is how the zap flags once vanished from the rendered Deployment. kubectl ships kustomize.
+if command -v kubectl >/dev/null; then
+  rendered=$(kubectl kustomize config/default 2>/dev/null)
+  echo "$rendered" | grep -q -- '--zap-log-level=info' || fail "config/default lost --zap-log-level"
+  echo "$rendered" | grep -q -- '--zap-devel=false' || fail "config/default lost --zap-devel"
+  echo "config/default: manager args intact"
+else
+  echo "kubectl not found; skipping the kustomize render checks"
+fi
+
 if [ -n "${LOCAL_CI_GENERATORS:-}" ]; then
   step "generated files are current (make manifests generate)"
   make manifests generate
