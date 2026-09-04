@@ -1,5 +1,7 @@
 # Build the manager binary
-FROM golang:1.21 as builder
+# Supported Go line, pinned by the multi-arch index digest (golang:1.21 was EOL and last published
+# 2024-08-13). Renovate keeps the digest current.
+FROM docker.io/library/golang:1.26@sha256:9d2f36f06329b2a141b9db99ffa32765cf695ee57b813ca29e245e8670bcbfff AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -35,7 +37,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a \
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM registry.access.redhat.com/ubi9/ubi-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.6@sha256:34880b64c07f28f64d95737f82f891516de9a3b43583f39970f7bf8e4cfa48b7
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

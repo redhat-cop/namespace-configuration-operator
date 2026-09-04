@@ -2,7 +2,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -15,57 +14,7 @@ rules:
   - redhatcop.redhat.io
   resources:
   - groupconfigs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
-  - groupconfigs/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
-  - groupconfigs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
   - namespaceconfigs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
-  - namespaceconfigs/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
-  - namespaceconfigs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - redhatcop.redhat.io
-  resources:
   - userconfigs
   verbs:
   - create
@@ -78,12 +27,16 @@ rules:
 - apiGroups:
   - redhatcop.redhat.io
   resources:
+  - groupconfigs/finalizers
+  - namespaceconfigs/finalizers
   - userconfigs/finalizers
   verbs:
   - update
 - apiGroups:
   - redhatcop.redhat.io
   resources:
+  - groupconfigs/status
+  - namespaceconfigs/status
   - userconfigs/status
   verbs:
   - get
