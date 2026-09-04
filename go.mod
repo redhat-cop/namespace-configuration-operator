@@ -15,6 +15,7 @@ require (
 	k8s.io/apimachinery v0.28.2
 	k8s.io/client-go v0.28.2
 	sigs.k8s.io/controller-runtime v0.15.2
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -116,13 +117,12 @@ require (
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.14.3-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
 // Temporary replace directive to use fork with fix for issue #194
 // Issue: Fields with value "0" are not removed when conditionals change from true to false
 // PR: https://github.com/redhat-cop/operator-utils/pull/103
 // This replace will be removed once the PR is merged and a new version of operator-utils is released
-// Fork: github.com/ephico2real2/operator-utils@fix-issue-194-field-removal-zero-value
+// Fork: github.com/ephico2real2/operator-utils@fix/template-cache-race-and-excluded-paths (on top of fix-issue-194-field-removal-zero-value)
 // Commit: 9569465257c18041b4a4483c90aebfc278882387
-replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20251208075852-9569465257c1
+replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260904220010-84aa264c34f5
