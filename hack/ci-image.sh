@@ -21,7 +21,7 @@ cd "$(dirname "$0")/.."
 IMAGE_REPO=${IMAGE_REPO:-quay.io/ephico2real/namespace-configuration-operator}
 WORKFLOW=image.yaml
 tool=${CONTAINER_TOOL:-$(command -v podman >/dev/null && echo podman || echo docker)}
-repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || echo ephico2real2/namespace-configuration-operator)
+repo=$(origin_repo || echo ephico2real2/namespace-configuration-operator)
 
 fail() { printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 
