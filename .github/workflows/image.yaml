@@ -85,6 +85,9 @@ jobs:
         id: meta
         run: |
           version=$(git describe --tags --always)
+          # Without the release tags on this remote, describe degrades to the bare sha and the image is
+          # named unlike a laptop build (v1.2.6-N-g<sha>). Push them once: git push origin --tags
+          case "$version" in *-g*) ;; *) echo "::warning::no release tag reachable from HEAD on this remote; image will be tagged '$version'. Run: git push origin --tags" ;; esac
           commit=$(git rev-parse --short HEAD)
           build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           {
