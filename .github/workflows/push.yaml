@@ -10,6 +10,11 @@ on:
 jobs:
   shared-operator-workflow:
     name: shared-operator-workflow
+    # The shared release workflow publishes under upstream's identity and defaults its registry to
+    # quay.io/<GitHub owner>; on a fork that is the wrong org and the wrong actor. Skip it on any fork
+    # (github.event.repository.fork is set by GitHub, so no owner name is hard-coded). Forks build and
+    # publish their images through image.yaml instead.
+    if: github.event.repository.fork != true
     uses: redhat-cop/github-workflows-operators/.github/workflows/release-operator.yml@ce4bb7157ddfc909d0d4d1d4458a58fe40b2e122 # v1.1.1
     secrets:
       COMMUNITY_OPERATOR_PAT: ${{ secrets.COMMUNITY_OPERATOR_PAT }}
