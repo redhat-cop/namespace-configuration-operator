@@ -81,6 +81,10 @@ Where the guard rejects the object the template renders nothing, and the operato
 template and checking for empty output, which costs one extra render for that template. Either way the answer
 is what the renderer would produce. See `controllers/common/templatefilter.go`.
 
+Two details of that contract: the object is passed BY VALUE, so pointer-receiver methods such as `{{ .GetName }}`
+are not available (use `.Name`, `.Labels`, `.Annotations`, `index`); and a guard whose taken branch contains only
+YAML comments or a bare `---` counts as rendering nothing, so it is skipped rather than failed.
+
 A template that the guard accepts but that then FAILS to render (a parse error, a `required` value that is
 missing, invalid YAML, an output with no `kind`) fails the whole reconcile: the CR gets a `ReconcileError`
 condition and a Warning event carrying the object name and the error, and nothing is created, changed or

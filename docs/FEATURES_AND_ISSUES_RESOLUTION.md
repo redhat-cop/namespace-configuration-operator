@@ -1040,6 +1040,27 @@ did.
 
 ---
 
+### Template Filter Agrees With the Renderer on Values and on What Counts as an Object
+
+**Status:** ✅ COMPLETED (issue #4)
+
+**Problem:**
+The filter's render fallback executed against a pointer while the renderer receives the value, so a template
+using a pointer-receiver method (`{{ .GetName }}`) passed the filter and then failed in the renderer. The filter
+also equated "non-blank output" with "renders an object", so a taken branch containing only a `#` comment or a
+bare `---` reached the renderer, whose YAML-to-JSON step turns it into `null` and fails.
+
+**Solution:**
+The fallback executes against the same value the renderer receives; applicability is decided by whether the
+output parses to something other than `null`; the static evaluator ignores comment and `---` lines when judging a
+branch's content. The property test's oracle is now operator-utils' own `ProcessTemplateArray` on the value.
+
+**Files Modified:**
+- `controllers/common/templatefilter.go` - `rendersAnObject`, `textHasYAMLContent`, value-based fallback
+- `controllers/common/templatefilter_test.go` - renderer oracle; pointer-method, comment-only, `---`-only, template-comment shapes
+
+---
+
 ### Deletion Tracking and Logging
 
 **Status:** ✅ COMPLETED
