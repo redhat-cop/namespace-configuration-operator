@@ -73,16 +73,19 @@ images:
 After applying, verify the image change:
 
 ```bash
-# Check the deployment
+# Check the deployment. Address the container by NAME: containers[0] is kube-rbac-proxy.
 oc get deployment namespace-configuration-operator-controller-manager \
   -n namespace-configuration-operator \
-  -o jsonpath='{.spec.template.spec.containers[0].image}'
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}{" "}{.spec.template.spec.containers[?(@.name=="manager")].imagePullPolicy}'
 
-# Should output: quay.io/ephico2real/namespace-configuration-operator:latest
+# Should output: quay.io/ephico2real/namespace-configuration-operator:latest Always
 
 # Check pods are using the new image
 oc get pods -n namespace-configuration-operator \
-  -o jsonpath='{.items[*].spec.containers[0].image}'
+  -o jsonpath='{.items[*].spec.containers[?(@.name=="manager")].image}'
+
+# Or, without a cluster, render the overlay:
+kubectl kustomize config/overlays/image-override | grep -B1 -A2 'name: manager'
 ```
 
 ## Rollback

@@ -46,6 +46,19 @@ if command -v kubectl >/dev/null; then
   echo "$rendered" | grep -q -- '--zap-log-level=info' || fail "config/default lost --zap-log-level"
   echo "$rendered" | grep -q -- '--zap-devel=false' || fail "config/default lost --zap-devel"
   echo "config/default: manager args intact"
+  # The image-override overlay must retag the MANAGER container, not the proxy at containers[0].
+  # Parsed rather than grepped: kustomize prints keys alphabetically, so `image:` precedes `name:`.
+  kubectl kustomize config/overlays/image-override 2>/dev/null | python3 -c '
+import sys, yaml
+for d in yaml.safe_load_all(sys.stdin):
+    if d and d.get("kind") == "Deployment":
+        by = {c["name"]: c for c in d["spec"]["template"]["spec"]["containers"]}
+        m, p = by["manager"], by["kube-rbac-proxy"]
+        assert m["image"].startswith("quay.io/ephico2real/namespace-configuration-operator:"), m["image"]
+        assert m.get("imagePullPolicy") == "Always", m.get("imagePullPolicy")
+        assert p.get("imagePullPolicy") != "Always", "overlay touched the proxy"
+        print("config/overlays/image-override: manager retagged, proxy untouched")
+' || fail "config/overlays/image-override does not retag the manager container (see assertion above)"
 else
   echo "kubectl not found; skipping the kustomize render checks"
 fi
