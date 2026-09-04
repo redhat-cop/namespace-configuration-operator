@@ -1010,11 +1010,33 @@ managed object orphaned; the chart's orphan-sweeper Job was papering over it.
 (`TemplateFilter.OwnedResources` over the selected namespaces/groups/users) and deletes it explicitly. A selected
 object whose templates no longer render is reported as a `CleanupIncomplete` Warning event and an error-level log
 line, and deletion proceeds; a failed DELETE keeps the finalizer.
+A CR whose selector does not compile cannot have its owned set computed at all (and never created anything under
+that spec); its deletion completes with a `CleanupIncomplete` warning instead of hanging on the finalizer.
 
 **Files Modified:**
 - `controllers/common/templatefilter.go` - `OwnedResources`
 - `controllers/{namespaceconfig,groupconfig,userconfig}_controller.go` - `manageCleanUpLogic(ctx, ...)`
 - `controllers/cleanup_test.go` - **NEW** - owned objects deleted without a started enforcer; list failure keeps the finalizer
+
+---
+
+### A Malformed Selector Only Affects Its Own CR
+
+**Status:** ✅ COMPLETED (issue #3)
+
+**Problem:**
+The Namespace and Group watch map funcs returned on the first CR whose selector failed to compile (the API
+server accepts an unknown operator; the CRD has no enum), so no CR was enqueued for any namespace/group event
+while such a CR existed, and the outage persisted after its deletion until an unrelated event arrived.
+
+**Solution:**
+`findApplicableNameSpaceConfigs` and `findApplicableGroupConfigsFromGroup` log and skip the offending CR (whose own
+reconcile already reports `ReconcileError`) and keep evaluating the rest, as `UserConfigReconciler.matches` always
+did.
+
+**Files Modified:**
+- `controllers/namespaceconfig_controller.go`, `controllers/groupconfig_controller.go`
+- `controllers/malformed_selector_test.go` - **NEW**
 
 ---
 
