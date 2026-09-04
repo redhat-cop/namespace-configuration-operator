@@ -15,6 +15,7 @@ import (
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
 	utilstemplates "github.com/redhat-cop/operator-utils/pkg/util/templates"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -425,4 +426,27 @@ func isMetaField(f *parse.FieldNode, name string) bool {
 		return true
 	}
 	return len(f.Ident) == 2 && f.Ident[0] == "ObjectMeta" && f.Ident[1] == name
+}
+
+// OwnedResources renders what a CR owns for each selected object, for deletion. It is best effort by
+// design: an object whose templates no longer render (a label removed since the object was created,
+// a template edited into a parse error) must not leave a CR stuck in Terminating forever, so its
+// failure is returned alongside whatever did render and the caller decides how loudly to say so.
+//
+// WHY THE CALLER CANNOT RELY ON THE ENFORCER FOR THIS. The enforcer only deletes what its in-memory
+// manager was started with. That map is empty after an operator restart, and a failed Terminate
+// removes the entry, so a CR being deleted in either state would finalize with every managed object
+// left behind. Recomputing the owned set from the spec is the only source that survives both.
+func (f *TemplateFilter) OwnedResources(ctx context.Context, templates []apis.LockedResourceTemplate, objs []metav1.Object) (owned []unstructured.Unstructured, failures []error) {
+	for _, obj := range objs {
+		lrs, err := f.Render(ctx, templates, obj)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		for _, lr := range lrs {
+			owned = append(owned, lr.Unstructured)
+		}
+	}
+	return owned, failures
 }

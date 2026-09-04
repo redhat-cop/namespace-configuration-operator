@@ -116,7 +116,7 @@ func (r *UserConfigReconciler) Reconcile(context context.Context, req ctrl.Reque
 			return reconcile.Result{}, nil
 		}
 
-		err := r.manageCleanUpLogic(instance)
+		err := r.manageCleanUpLogic(context, instance)
 		if err != nil {
 			log.Error(err, "unable to delete instance", "instance", instance)
 			return r.ManageError(context, instance, err)
@@ -341,12 +341,39 @@ func (r *UserConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.UserCon
 	return needsUpdate
 }
 
-func (r *UserConfigReconciler) manageCleanUpLogic(instance *redhatcopv1alpha1.UserConfig) error {
-	err := r.Terminate(instance, true)
-	if err != nil {
+// manageCleanUpLogic removes everything this UserConfig owns before its finalizer goes.
+//
+// Terminate alone is not enough: it deletes only what the in-memory enforcer was started with, which
+// is nothing after an operator restart and nothing after a failed attempt (the entry is dropped), so a
+// CR deleted in either state used to finalize with every managed object orphaned. The owned set is
+// therefore recomputed from the spec and deleted explicitly (NotFound is ignored). Terminate runs
+// first so a started enforcer cannot recreate what is deleted next.
+//
+// A user whose templates no longer render cannot have its objects recomputed; that is reported as
+// a Warning event and an error-level log line naming the user, and deletion proceeds, because a
+// finalizer that can never clear is worse than a documented orphan. A failed DELETE keeps the finalizer.
+func (r *UserConfigReconciler) manageCleanUpLogic(ctx context.Context, instance *redhatcopv1alpha1.UserConfig) error {
+	if err := r.Terminate(instance, true); err != nil {
 		r.Log.Error(err, "unable to terminate enforcing reconciler for", "instance", instance)
 		return err
 	}
+	selected, err := r.getSelectedUsers(ctx, instance)
+	if err != nil {
+		return fmt.Errorf("unable to list the users selected by UserConfig %s during deletion: %w", instance.Name, err)
+	}
+	objs := make([]metav1.Object, 0, len(selected))
+	for i := range selected {
+		objs = append(objs, &selected[i])
+	}
+	owned, failures := r.getTemplateFilter().OwnedResources(ctx, instance.Spec.Templates, objs)
+	for _, f := range failures {
+		r.Log.Error(f, "could not recompute the objects owned for one user; anything created from that template there is NOT deleted", "userconfig", instance.Name)
+		r.GetRecorder().Event(instance, "Warning", "CleanupIncomplete", f.Error())
+	}
+	if err := r.DeleteUnstructuredResources(ctx, owned); err != nil {
+		return fmt.Errorf("unable to delete the objects owned by UserConfig %s: %w", instance.Name, err)
+	}
+	r.Log.Info("deleted the objects owned by the UserConfig", "userconfig", instance.Name, "objects", len(owned), "users", len(selected))
 	return nil
 }
 
