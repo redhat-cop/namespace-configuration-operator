@@ -1085,7 +1085,7 @@ The Namespace watch had no predicate, so every status or resourceVersion bump on
 
 **Status:** ✅ COMPLETED (issue #17)
 
-- `IsInitialized` no longer rewrites `excludedPaths` on a CR that is being deleted (one fewer spec Update mid-deletion); its return value is named for what it means.
+- `IsInitialized` no longer rewrites `excludedPaths` on a CR that is being deleted (one fewer spec Update mid-deletion); its return value is named for what it means. (Superseded by #16: it now writes finalizers only, on any CR.)
 - `main.go` logs when the User or Group controller is not started because the cluster does not serve that kind; `SYNC_PERIOD_SECONDS` must be a positive integer (clear error otherwise); an invalid `ALLOW_SYSTEM_NAMESPACES` is logged instead of silently read as false. Both parsers are unit-tested.
 - `ManageSuccessWithRetry` takes the reconciled generation and writes no success for an object whose spec moved on in the meantime (its reconcile is already queued), so `observedGeneration` never claims an unprocessed generation.
 - `LogReconcilingStarted` names the resource; the identity watch logs an identity without a user at V(1) instead of error level; `findApplicableUserConfigsFromIdentities` takes the caller context; the `Reconcile` parameter no longer shadows the `context` package; the dead `common.GetResources` (which aliased the range variable) is gone.
@@ -1593,6 +1593,18 @@ spec:
 
 The operator-utils enforcer applied a merge patch, which can add and replace but never remove, so a field a template stopped rendering survived and, because a foreign label was a permanent difference, `.metadata` had to be excluded wholesale: labels and annotations were set at creation and never enforced. The fork's `LockedResourceReconciler` now applies server-side under one field manager with force. Measured on a cluster with this build: every object's legacy `manager`/Update entry folded on the first pass (the operator names it explicitly in `main.go`, the library folds nothing by default), labels and annotations kept, a hand-added subject removed within one reconcile, a hand-added label kept, a forced reconcile changing no resourceVersion. With `.metadata` removed from a NamespaceConfig's excludedPaths, the reconciler took ownership of the rendered labels and annotations, a tampered rendered label was restored and a foreign label left alone.
 
-`DefaultExcludedPaths` is now `.status` and `.spec.replicas`. A CR that still lists `.metadata` keeps the old behaviour for its objects (set once, left alone); the chart declares `.metadata` explicitly and changes in its own release. An excluded path is honoured at the granularity the server tracks ownership: an exclusion inside an atomic list (RBAC rules) or atomic map excludes the whole unit.
+`DefaultExcludedPaths` no longer carries `.metadata` (see the later entry for the current set and where it is applied). A CR that still lists `.metadata` keeps the old behaviour for its objects (set once, left alone) and is named by a `MetadataExcluded` Warning event; the chart migrates its CRs by declaring the list itself (chart 0.22.0). An excluded path is honoured at the granularity the server tracks ownership: an exclusion inside an atomic list (RBAC rules) or atomic map excludes the whole unit.
 
 **Files Modified:** `controllers/common/common.go`, `controllers/isinitialized_test.go`, `main.go`, `go.mod`
+
+---
+
+### Default excludedPaths Applied in Memory; the CR Spec Is the Author's
+
+**Status:** ✅ COMPLETED (issue #16, design review 2026-09-05; docs/DESIGN_excludedPaths.md)
+
+Since upstream, `IsInitialized` unioned the default excludedPaths into `spec.templates[].excludedPaths` and wrote the CR on first reconcile. Every CR therefore differed from what its author or their Git declared, a GitOps controller with self-heal fought the operator over the spec (recorded in the chart that deploys this operator, 0.21.1), and the chart had started mirroring the operator's defaults to keep Git equal to the cluster. The defaults are now applied when the locked resources are built (`common.EffectiveExcludedPaths`, sorted union of the defaults and the author's list); `IsInitialized` writes finalizers only. Measured on a cluster with this build: a fresh CR declaring nothing keeps `excludedPaths` absent, its generation moves once for the finalizer, the operator owns and enforces its ConfigMap's rendered label and leaves a hand-added label alone; existing CRs' generations do not move.
+
+Finalizers are written as a merge patch from the pre-mutation copy, so only `metadata.finalizers` crosses the wire (a whole-object Update serialised `annotationSelector: {}` into the spec; measured). A template that still excludes `.metadata` raises a `MetadataExcluded` Warning event on its CR. `.metadata.finalizers` joins the defaults (review of PR #40): a finalizer names the controller that owns that lifecycle step, and a template that renders one must not make this operator re-add it after that controller removed it. README, the CSV description and WARP now state the current defaults, and a test fails when the code and the documents disagree.
+
+**Files Modified:** `controllers/common/common.go`, `controllers/common/templatefilter.go`, `controllers/{namespaceconfig,groupconfig,userconfig}_controller.go`, `controllers/isinitialized_test.go`, `controllers/common/templatefilter_test.go`, `README.md`, `config/manifests/bases/*.clusterserviceversion.yaml`, `WARP.md`, `go.mod` (comment), `main.go` (comment)

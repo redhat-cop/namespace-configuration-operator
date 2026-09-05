@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 )
 
 const oudGroupLabel = "example.com/oud-group"
@@ -477,8 +480,9 @@ func TestRender_HappyPathCarriesExcludedPathsAndSkipsRejected(t *testing.T) {
 	if len(out) != 4 {
 		t.Fatalf("expected Role + RoleBinding + two ConfigMaps, got %d", len(out))
 	}
-	if out[0].GetKind() != "Role" || len(out[0].ExcludedPaths) != 2 {
-		t.Errorf("first resource should be the Role with its two excludedPaths, got %s %v", out[0].GetKind(), out[0].ExcludedPaths)
+	// the template's two paths plus the defaults, as the enforcer receives them (sorted)
+	if out[0].GetKind() != "Role" || !reflect.DeepEqual(out[0].ExcludedPaths, []string{".metadata", ".metadata.finalizers", ".spec.replicas", ".status"}) {
+		t.Errorf("first resource should be the Role with its excludedPaths plus the defaults, got %s %v", out[0].GetKind(), out[0].ExcludedPaths)
 	}
 	if got := out[0].GetNamespace(); got != "bdp-spark-alpha" {
 		t.Errorf("the render must see the object's fields, namespace = %q", got)
@@ -580,5 +584,86 @@ func TestIsApplicable_UnconditionalLiteralUsesYAMLOracle(t *testing.T) {
 	}
 	if !f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: "# header\n{{- if hasPrefix \"team-\" .Name }}\nkind: Role\n{{- end }}"}, subject) {
 		t.Error("a header comment above a true guard renders the object: applicable")
+	}
+}
+
+// The enforcer is handed the author's paths plus the defaults, sorted; the template's own list is
+// not touched (the CR spec is the author's, issue #16).
+func TestRender_CarriesEffectiveExcludedPaths(t *testing.T) {
+	f := newTestFilter()
+	subject := ns("team-a", nil, nil)
+	tmpl := apis.LockedResourceTemplate{ObjectTemplate: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n  namespace: {{ .Name }}\n", ExcludedPaths: []string{".data.b", ".status"}}
+	out, err := f.Render(context.Background(), []apis.LockedResourceTemplate{tmpl}, subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".data.b", ".metadata.finalizers", ".spec.replicas", ".status"}
+	if len(out) != 1 || !reflect.DeepEqual(out[0].ExcludedPaths, want) {
+		t.Fatalf("effective excluded paths = %v, want %v", out[0].ExcludedPaths, want)
+	}
+	if !reflect.DeepEqual(tmpl.ExcludedPaths, []string{".data.b", ".status"}) {
+		t.Fatalf("the template's own list must be untouched, got %v", tmpl.ExcludedPaths)
+	}
+	if reflect.DeepEqual(EffectiveExcludedPaths([]string{".status", ".data.b"}), EffectiveExcludedPaths([]string{".data.b"})) == false {
+		t.Fatal("the effective list is a set: order and duplicates in the author's list must not matter")
+	}
+}
+
+// The documentation states the defaults the code applies; a change to one without the other fails
+// here (review of PR #40: README and CSV still promised .metadata after the code dropped it).
+func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
+	var lines []string
+	for i, p := range DefaultExcludedPaths {
+		lines = append(lines, fmt.Sprintf("%d. `%s`", i+1, p))
+	}
+	want := "The following paths are always included:\n\n" + strings.Join(lines, "\n")
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// exact parity: the numbered block ends where the prose resumes, so a fourth documented item fails too
+	if !strings.Contains(string(readme), want+"\n\nThey are applied") {
+		t.Fatalf("README.md does not document exactly the current defaults:\n%s", want)
+	}
+	raw, err := os.ReadFile("../../config/manifests/bases/namespace-configuration-operator.clusterserviceversion.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var csv struct {
+		Spec struct {
+			Description string `json:"description"`
+		} `json:"spec"`
+	}
+	if err := yaml.Unmarshal(raw, &csv); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range DefaultExcludedPaths {
+		if !strings.Contains(csv.Spec.Description, "`"+p+"`") {
+			t.Fatalf("the CSV description does not mention default excluded path %s", p)
+		}
+	}
+	if strings.Contains(csv.Spec.Description, "1. `.metadata`") {
+		t.Fatal("the CSV description still lists .metadata as always included")
+	}
+	features, err := os.ReadFile("../../docs/FEATURES_AND_ISSUES_RESOLUTION.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(features), "`DefaultExcludedPaths` is now `.status` and `.spec.replicas`") {
+		t.Fatal("FEATURES_AND_ISSUES_RESOLUTION.md still states a previous default set")
+	}
+	design, err := os.ReadFile("../../docs/DESIGN_excludedPaths.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(design), "count grows per\nreconcile)") {
+		t.Fatal("DESIGN_excludedPaths.md still describes the MetadataExcluded event as emitted every reconcile")
+	}
+	if strings.Contains(string(design), "once per process per CR and message set") {
+		t.Fatal("DESIGN_excludedPaths.md still describes the historical-set cache; a return to an earlier set emits again")
+	}
+	const lastSetContract = "once per\nprocess per CR while that set is unchanged; a transition of the set, including a return to an earlier set, emits\nagain"
+	if !strings.Contains(string(design), lastSetContract) {
+		t.Fatal("DESIGN_excludedPaths.md must state the complete last-set event contract")
 	}
 }

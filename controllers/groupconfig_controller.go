@@ -30,7 +30,6 @@ import (
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
-	"github.com/scylladb/go-set/strset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -86,16 +85,25 @@ func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return reconcile.Result{}, err
 	}
 
+	// Finalizers are the only thing this reconciler writes to the CR, and they go as a merge patch
+	// computed against the copy taken here, so only metadata.finalizers crosses the wire. A
+	// whole-object Update also serialised the empty, non-pointer selector structs (`annotationSelector:
+	// {}`) into the spec and dropped an author's empty lists (measured in review): the spec is the
+	// author's, not this operator's. The patch carries the resourceVersion (optimistic lock), so a
+	// finalizer another actor added between the read and this write conflicts and is retried instead
+	// of being overwritten, as the Update it replaces did (review).
+	original := instance.DeepCopy()
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(ctx, instance)
+		err := r.GetClient().Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 		if err != nil {
-			log.Error(err, "unable to update instance", "instance", instance)
+			log.Error(err, "unable to update finalizers", "instance", instance)
 			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
 
 	if util.IsBeingDeleted(instance) {
+		common.ForgetMetadataExcluded(instance)
 		log.Info("resource deletion detected - processing deletion cleanup", "groupconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
 		// Support all old finalizer variants for backward compatibility
 		oldFinalizerVariants := []string{
@@ -131,7 +139,7 @@ func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Update(ctx, instance)
+		err = r.GetClient().Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if errors.IsNotFound(err) {
@@ -144,6 +152,9 @@ func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Info("resource deletion completed successfully", "groupconfig", instance.Name)
 		return reconcile.Result{}, nil
 	}
+
+	// Not on the deletion path: a deleting CR must keep its event budget for CleanupIncomplete.
+	common.WarnMetadataExcluded(r.GetRecorder(), instance, instance.Spec.Templates)
 
 	//get selected users
 	selectedGroups, err := r.getSelectedGroups(ctx, instance)
@@ -266,18 +277,14 @@ func (r *GroupConfigReconciler) findApplicableGroupConfigsFromGroup(ctx context.
 // IsInitialized none
 func (r *GroupConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.GroupConfig) bool {
 	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	// Only finalizers are written here. The spec is the author's: the default excludedPaths are
+	// applied in memory when the locked resources are built (common.EffectiveExcludedPaths), not
+	// written into spec.templates[].excludedPaths as before, so the CR stays equal to what its author
+	// or their Git declared (issue #16; the chart's 0.21.1 entry records the rewrite loop the old
+	// behaviour caused against a GitOps controller).
 	initialized := true
-	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
-	// Update in the middle of the deletion for no benefit.
 	if util.IsBeingDeleted(instance) {
 		return true
-	}
-	for i := range instance.Spec.Templates {
-		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
-		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
-			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			initialized = false
-		}
 	}
 
 	// Migrate old finalizer to new finalizer (only if not being deleted)
