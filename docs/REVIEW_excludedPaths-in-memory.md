@@ -80,3 +80,13 @@ the prose resumes, so a fourth documented item fails the test (measured with an 
 
 **Volunteered by Codex, accepted:** the design-record assertion checked only "return to an earlier set"; it now
 requires the complete last-set sentence.
+
+## Fifth pass, confirmation (head 74d5e83: the indexed summary)
+
+Both reviewers confirmed every claim and reported nothing meeting the fix-plus-test bar. Codex cited kubernetes
+v1.28.2 `events.go` lines 143-157 and 184-186 for the `eventTime` branch; Cursor confirmed from client-go v0.28.2
+`makeEvent` (no `EventTime`) and controller-runtime v0.15.2's recorder provider (legacy `record` broadcaster). Both
+measured the indexed summary's exact ceiling at 192 consecutive templates and the count-only fallback at under 200
+bytes, and both showed each of the three message tiers is locked by a test that fails when that tier is removed.
+Cursor's advice on the message function's signature, accepted: keep it; the only production caller derives both
+arguments from the same templates. Gate green on 74d5e83. Clean.
