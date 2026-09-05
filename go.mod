@@ -76,7 +76,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/nsf/jsondiff v0.0.0-20230430225905-43f6cf3098c1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.16.0 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
@@ -125,4 +124,4 @@ require (
 // This replace will be removed once the PR is merged and a new version of operator-utils is released
 // Fork: github.com/ephico2real2/operator-utils@fix/template-cache-race-and-excluded-paths (on top of fix-issue-194-field-removal-zero-value)
 // Commit: 9569465257c18041b4a4483c90aebfc278882387
-replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260905001020-bcf5ba51f621
+replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260905004335-1bab849dc0af
