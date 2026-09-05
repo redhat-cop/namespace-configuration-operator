@@ -167,7 +167,7 @@ func (f *TemplateFilter) Render(ctx context.Context, templates []apis.LockedReso
 			return nil, fmt.Errorf("template %d failed to render for %s: %w (template starts %q)", i, obj.GetName(), err, preview(t.ObjectTemplate))
 		}
 		for _, o := range objs {
-			out = append(out, lockedresource.LockedResource{Unstructured: o, ExcludedPaths: t.ExcludedPaths})
+			out = append(out, lockedresource.LockedResource{Unstructured: o, ExcludedPaths: EffectiveExcludedPaths(t.ExcludedPaths)})
 		}
 	}
 	return out, nil

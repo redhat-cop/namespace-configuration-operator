@@ -118,10 +118,8 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
-// Temporary replace directive to use fork with fix for issue #194
-// Issue: Fields with value "0" are not removed when conditionals change from true to false
-// PR: https://github.com/redhat-cop/operator-utils/pull/103
-// This replace will be removed once the PR is merged and a new version of operator-utils is released
-// Fork: github.com/ephico2real2/operator-utils master (server-side-apply enforcer, from upstream master without #194)
-// Commit: 9569465257c18041b4a4483c90aebfc278882387
+// The operator-utils fork's master: the server-side-apply enforcer, built on upstream master.
+// Proposed upstream as https://github.com/redhat-cop/operator-utils/pull/104; this replace goes
+// when that merges and a release carries it.
+// Fork: github.com/ephico2real2/operator-utils master, commit ab28e2bd2e5eae679ecd6f49cec3a6b489a13ee9
 replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260905071230-ab28e2bd2e5e

@@ -1596,3 +1596,15 @@ The operator-utils enforcer applied a merge patch, which can add and replace but
 `DefaultExcludedPaths` is now `.status` and `.spec.replicas`. A CR that still lists `.metadata` keeps the old behaviour for its objects (set once, left alone); the chart declares `.metadata` explicitly and changes in its own release. An excluded path is honoured at the granularity the server tracks ownership: an exclusion inside an atomic list (RBAC rules) or atomic map excludes the whole unit.
 
 **Files Modified:** `controllers/common/common.go`, `controllers/isinitialized_test.go`, `main.go`, `go.mod`
+
+---
+
+### Default excludedPaths Applied in Memory; the CR Spec Is the Author's
+
+**Status:** ✅ COMPLETED (issue #16, design review 2026-09-05; docs/DESIGN_excludedPaths.md)
+
+Since upstream, `IsInitialized` unioned the default excludedPaths into `spec.templates[].excludedPaths` and wrote the CR on first reconcile. Every CR therefore differed from what its author or their Git declared, a GitOps controller with self-heal fought the operator over the spec (recorded in the chart that deploys this operator, 0.21.1), and the chart had started mirroring the operator's defaults to keep Git equal to the cluster. The defaults are now applied when the locked resources are built (`common.EffectiveExcludedPaths`, sorted union of the defaults and the author's list); `IsInitialized` writes finalizers only. Measured on a cluster with this build: a fresh CR declaring nothing keeps `excludedPaths` absent, its generation moves once for the finalizer, the operator owns and enforces its ConfigMap's rendered label and leaves a hand-added label alone; existing CRs' generations do not move.
+
+`.metadata.finalizers` joins the defaults (review of PR #40): a finalizer names the controller that owns that lifecycle step, and a template that renders one must not make this operator re-add it after that controller removed it. README, the CSV description and WARP now state the current defaults, and a test fails when the code and the documents disagree.
+
+**Files Modified:** `controllers/common/common.go`, `controllers/common/templatefilter.go`, `controllers/{namespaceconfig,groupconfig,userconfig}_controller.go`, `controllers/isinitialized_test.go`, `controllers/common/templatefilter_test.go`, `README.md`, `config/manifests/bases/*.clusterserviceversion.yaml`, `WARP.md`, `go.mod` (comment), `main.go` (comment)

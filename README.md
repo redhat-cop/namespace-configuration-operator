@@ -128,11 +128,15 @@ But there are situations in which at least part of a resource is allowed to chan
 
 To handle special use case, one can also specify additional *jsonpaths* that should be ignored when comparing the desired resource and the current resource and making a decision on whether that resource should be reset.
 
+Rendered labels and annotations are enforced: the operator applies server-side and owns exactly the fields the template renders, so a rendered label changed by hand is restored and a label or annotation added by another actor is left alone. Add a more specific excluded path when another controller must be allowed to change a rendered field.
+
 The following paths are always included:
 
-1. `.metadata`
+1. `.metadata.finalizers`
 2. `.status`
 3. `.spec.replicas`
+
+They are applied when the objects are built, not written into the CR: `spec.templates[].excludedPaths` stays exactly what its author declared. A CR that still lists `.metadata` (older builds wrote it there) keeps the set-once behaviour for labels and annotations on its objects until that entry is removed.
 
 ## NamespaceConfig
 

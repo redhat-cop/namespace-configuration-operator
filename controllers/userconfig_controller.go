@@ -31,7 +31,6 @@ import (
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedpatch"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller/lockedresource"
-	"github.com/scylladb/go-set/strset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -317,18 +316,14 @@ func (r *UserConfigReconciler) findApplicableUserConfigsFromUser(ctx context.Con
 // IsInitialized none
 func (r *UserConfigReconciler) IsInitialized(instance *redhatcopv1alpha1.UserConfig) bool {
 	// True means "nothing to write"; a false return makes the caller Update the object and return.
+	// Only finalizers are written here. The spec is the author's: the default excludedPaths are
+	// applied in memory when the locked resources are built (common.EffectiveExcludedPaths), not
+	// written into spec.templates[].excludedPaths as before, so the CR stays equal to what its author
+	// or their Git declared (issue #16; the chart's 0.21.1 entry records the rewrite loop the old
+	// behaviour caused against a GitOps controller).
 	initialized := true
-	// Nothing is normalised on a CR that is being deleted: the union below would issue a spec
-	// Update in the middle of the deletion for no benefit.
 	if util.IsBeingDeleted(instance) {
 		return true
-	}
-	for i := range instance.Spec.Templates {
-		currentSet := strset.New(instance.Spec.Templates[i].ExcludedPaths...)
-		if !currentSet.IsEqual(strset.Union(common.DefaultExcludedPathsSet, currentSet)) {
-			instance.Spec.Templates[i].ExcludedPaths = strset.Union(common.DefaultExcludedPathsSet, currentSet).List()
-			initialized = false
-		}
 	}
 
 	// Migrate old finalizer to new finalizer (only if not being deleted)

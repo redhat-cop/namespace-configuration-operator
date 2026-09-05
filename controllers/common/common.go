@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/scylladb/go-set/strset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,11 +20,30 @@ import (
 // only what the template renders, so a rendered label or annotation is enforced (drift on it is
 // corrected, issue #16) while a label added by anyone else is left alone. The server-populated
 // metadata (uid, resourceVersion, creationTimestamp, managedFields) is never in a template, so it
-// needs no exclusion. A CR that still lists `.metadata` keeps the old behaviour for its objects.
-var DefaultExcludedPaths = []string{".status", ".spec.replicas"}
+// needs no exclusion. `.metadata.finalizers` is: a finalizer names the controller that owns that
+// piece of lifecycle protocol, and a template that renders one (a copied `oc get -o yaml`) must not
+// make this operator re-add it after that controller removed it (review of PR #40). A CR that still
+// lists `.metadata` keeps the old behaviour for its objects.
+//
+// These are applied IN MEMORY when the locked resources are built (EffectiveExcludedPaths); the CR's
+// spec is never rewritten to include them. It used to be: IsInitialized unioned them into
+// spec.templates[].excludedPaths and wrote the CR, which made every CR differ from what its author
+// or their Git declared, and with a GitOps controller healing the spec back, a rewrite loop
+// (recorded in the chart that deploys this operator, 0.21.1). The author's list is the author's.
+var DefaultExcludedPaths = []string{".metadata.finalizers", ".status", ".spec.replicas"}
 
 // DefaultExcludedPathsSet represents paths that are excluded by default in all resources
 var DefaultExcludedPathsSet = strset.New(DefaultExcludedPaths...)
+
+// EffectiveExcludedPaths is what the enforcer is handed for a template: the author's excluded paths
+// unioned with the defaults, sorted so the same input always gives the same list (a locked
+// resource's identity includes its excluded paths; an unstable order would look like a change and
+// restart its reconciler for nothing).
+func EffectiveExcludedPaths(declared []string) []string {
+	paths := strset.Union(DefaultExcludedPathsSet, strset.New(declared...)).List()
+	sort.Strings(paths)
+	return paths
+}
 
 // ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate is a predicate that triggers reconciliation when:
 // 1. Resource generation changes (spec updates)

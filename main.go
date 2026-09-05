@@ -137,8 +137,9 @@ func main() {
 	// Objects this operator created before the enforcer applied server-side carry one managedFields
 	// entry, manager "manager" (this binary's name, taken from the user agent), operation Update; the
 	// library folds that entry into its apply manager on first contact so fields a template no longer
-	// renders are removed. Named explicitly: a build under another name (a local run, a renamed image)
-	// must still recognise the objects a production binary wrote.
+	// renders are removed. Named explicitly: a build under another name (`make run` records "main", a
+	// renamed image its own name) must still recognise the objects a production binary wrote; objects
+	// written by such a build are not folded, and keep their stale fields (review of PR #40).
 	lockedresourcecontroller.LegacyFieldManagers = []string{"manager"}
 
 	syncPeriod, err := parseSyncPeriod(os.Getenv("SYNC_PERIOD_SECONDS"))

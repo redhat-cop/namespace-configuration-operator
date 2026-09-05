@@ -80,8 +80,11 @@ spec:
     the `spec.replicas` field should also be allowed to change.\n\nTo handle special
     use case, one can also specify additional *jsonpaths* that should be ignored when
     comparing the desired resource and the current resource and making a decision
-    on whether that resource should be reset.\n\nThe following paths are always included:\n\n1.
-    `.metadata`\n2. `.status`\n3. `.spec.replicas`\n\n## NamespaceConfig\n\nThe `NamespaceConfig`
+    on whether that resource should be reset.\n\nRendered labels and annotations are enforced; the operator owns
+    exactly the fields the template renders and leaves other actors' fields alone.\n\nThe
+    following paths are always included:\n\n1. `.metadata.finalizers`\n2. `.status`\n3.
+    `.spec.replicas`\n\nThey are applied when the objects are built, not written into the
+    CR: spec.templates[].excludedPaths stays what its author declared.\n\n## NamespaceConfig\n\nThe `NamespaceConfig`
     CR allows specifying one or more objects that will be created in the selected
     namespaces.\n\nNamespaces can be selected by labels or annotations via a label
     selector for example:\n\n```yaml\napiVersion: redhatcop.redhat.io/v1alpha1\nkind:
