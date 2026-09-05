@@ -7,9 +7,25 @@ on:
     tags:
       - v*
 
+# Permissions the nested reusable workflow's jobs request (id-token for signing, packages for
+# attestations, actions to detect the environment). Without this block GitHub refuses to START the
+# run on a repository whose default token is read-only, which is every fork: measured as
+# conclusion=startup_failure with zero jobs, with and without the fork guard below. The same block
+# is in redhat-cop/group-sync-operator's push.yml ("Permissions required by nested workflow").
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+  actions: read
+
 jobs:
   shared-operator-workflow:
     name: shared-operator-workflow
+    # The shared release workflow publishes under upstream's identity and defaults its registry to
+    # quay.io/<GitHub owner>; on a fork that is the wrong org and the wrong actor. Skip it on any fork
+    # (github.event.repository.fork is set by GitHub, so no owner name is hard-coded). Forks build and
+    # publish their images through image.yaml instead.
+    if: github.event.repository.fork != true
     uses: redhat-cop/github-workflows-operators/.github/workflows/release-operator.yml@ce4bb7157ddfc909d0d4d1d4458a58fe40b2e122 # v1.1.1
     secrets:
       COMMUNITY_OPERATOR_PAT: ${{ secrets.COMMUNITY_OPERATOR_PAT }}
