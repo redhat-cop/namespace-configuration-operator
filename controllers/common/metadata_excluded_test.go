@@ -4,6 +4,7 @@
 package common
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -34,7 +35,11 @@ func TestMetadataExcludedCacheRetainsOnlyCurrentSet(t *testing.T) {
 	<-rec.Events
 	WarnMetadataExcluded(rec, cr, two)
 	<-rec.Events
-	<-rec.Events
+	select {
+	case extra := <-rec.Events:
+		t.Fatalf("one warning set must be one event, got a second: %q", extra)
+	default:
+	}
 	if got := cacheEntries(); got != 1 {
 		t.Fatalf("cache entries for one CR after two different sets = %d, want 1", got)
 	}
@@ -77,5 +82,53 @@ func TestWarnMetadataExcludedToleratesNilObject(t *testing.T) {
 	case ev := <-rec.Events:
 		t.Fatalf("nil object emitted event %q", ev)
 	default:
+	}
+}
+
+// A typed nil pointer is a non-nil interface; both helpers must treat it as absent rather than panic.
+func TestMetadataExcludedHelpersTolerateTypedNilObject(t *testing.T) {
+	rec := record.NewFakeRecorder(1)
+	var cr *corev1.ConfigMap
+	WarnMetadataExcluded(rec, cr, []apis.LockedResourceTemplate{{ExcludedPaths: []string{".metadata"}}})
+	ForgetMetadataExcluded(cr)
+	select {
+	case ev := <-rec.Events:
+		t.Fatalf("typed nil object emitted %q", ev)
+	default:
+	}
+}
+
+// One set is one event however many templates it names, and a set too large for an event message is
+// summarised with its size, so a CR with many such templates cannot spend the per-object event burst.
+func TestWarnMetadataExcludedEmitsOneEventPerSet(t *testing.T) {
+	metadataExcludedWarned = sync.Map{}
+	t.Cleanup(func() { metadataExcludedWarned = sync.Map{} })
+
+	rec := record.NewFakeRecorder(32)
+	cr := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cr", UID: "warning-event-count-test"}}
+	templates := make([]apis.LockedResourceTemplate, 26)
+	for i := range templates {
+		templates[i].ExcludedPaths = []string{".metadata"}
+	}
+	WarnMetadataExcluded(rec, cr, templates)
+	ev := <-rec.Events
+	select {
+	case extra := <-rec.Events:
+		t.Fatalf("one warning set emitted more than one event; second was %q", extra)
+	default:
+	}
+	if !strings.Contains(ev, "26 templates exclude .metadata") {
+		t.Fatalf("a large set must be summarised with its size, got %q", ev)
+	}
+	if len(ev) > 1024+len("Warning MetadataExcluded ") {
+		t.Fatalf("event message longer than the API server accepts: %d bytes", len(ev))
+	}
+
+	// a small set carries every template's message in the one event
+	small := []apis.LockedResourceTemplate{{ExcludedPaths: []string{".metadata"}}, {}, {ExcludedPaths: []string{".metadata"}}}
+	WarnMetadataExcluded(rec, cr, small)
+	ev = <-rec.Events
+	if !strings.Contains(ev, "template 0 excludes .metadata") || !strings.Contains(ev, "template 2 excludes .metadata") {
+		t.Fatalf("a small set must name each template, got %q", ev)
 	}
 }

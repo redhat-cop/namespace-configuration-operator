@@ -621,8 +621,9 @@ func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(readme), want) {
-		t.Fatalf("README.md does not document the current defaults:\n%s", want)
+	// exact parity: the numbered block ends where the prose resumes, so a fourth documented item fails too
+	if !strings.Contains(string(readme), want+"\n\nThey are applied") {
+		t.Fatalf("README.md does not document exactly the current defaults:\n%s", want)
 	}
 	raw, err := os.ReadFile("../../config/manifests/bases/namespace-configuration-operator.clusterserviceversion.yaml")
 	if err != nil {
@@ -657,5 +658,11 @@ func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
 	}
 	if strings.Contains(string(design), "count grows per\nreconcile)") {
 		t.Fatal("DESIGN_excludedPaths.md still describes the MetadataExcluded event as emitted every reconcile")
+	}
+	if strings.Contains(string(design), "once per process per CR and message set") {
+		t.Fatal("DESIGN_excludedPaths.md still describes the historical-set cache; a return to an earlier set emits again")
+	}
+	if !strings.Contains(string(design), "return to an earlier set") {
+		t.Fatal("DESIGN_excludedPaths.md must state that returning to an earlier set emits again")
 	}
 }

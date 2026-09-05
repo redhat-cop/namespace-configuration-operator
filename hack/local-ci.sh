@@ -54,15 +54,15 @@ step "rendered manifests carry the log flags"
 # this is how the zap flags once vanished from the rendered Deployment. kubectl ships kustomize.
 if command -v kubectl >/dev/null; then
   kustomize_err=$(mktemp)
+  trap 'rm -f "$kustomize_err"' EXIT
   rendered=$(kubectl kustomize config/default 2>"$kustomize_err") \
     || fail "kubectl kustomize config/default failed:"$'\n'"$(cat "$kustomize_err")"
-  rm -f "$kustomize_err"
   echo "$rendered" | grep -q -- '--zap-log-level=info' || fail "config/default lost --zap-log-level"
   echo "$rendered" | grep -q -- '--zap-devel=false' || fail "config/default lost --zap-devel"
   echo "config/default: manager args intact"
   # The image-override overlay must retag the MANAGER container, not the proxy at containers[0].
   # Parsed rather than grepped: kustomize prints keys alphabetically, so `image:` precedes `name:`.
-  kubectl kustomize config/overlays/image-override 2>/dev/null | python3 -c '
+  kubectl kustomize config/overlays/image-override 2>"$kustomize_err" | python3 -c '
 import sys, yaml
 for d in yaml.safe_load_all(sys.stdin):
     if d and d.get("kind") == "Deployment":
@@ -72,7 +72,8 @@ for d in yaml.safe_load_all(sys.stdin):
         assert m.get("imagePullPolicy") == "Always", m.get("imagePullPolicy")
         assert p.get("imagePullPolicy") != "Always", "overlay touched the proxy"
         print("config/overlays/image-override: manager retagged, proxy untouched")
-' || fail "config/overlays/image-override does not retag the manager container (see assertion above)"
+' || fail "config/overlays/image-override: render or assertion failed (kustomize stderr, if any, follows)"$'\n'"$(cat "$kustomize_err")"
+  rm -f "$kustomize_err"; trap - EXIT
 else
   echo "kubectl not found; skipping the kustomize render checks"
 fi

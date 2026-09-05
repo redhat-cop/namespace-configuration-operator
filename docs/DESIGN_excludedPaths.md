@@ -90,7 +90,9 @@ stays 1, `excludedPaths` and `annotationSelector` absent, the operator's manager
 `metadata.finalizers` (status through the subresource), its ConfigMap owned for `data.a` and the rendered label, a
 tampered rendered label restored and a foreign label kept. A CR declaring `.metadata`: one `MetadataExcluded`
 Warning event on the CR (in the default namespace, where cluster-scoped objects' events land; measured before the
-once-per-process dedup, when its count grew per reconcile; now once per process per CR and message set), its
+once-per-process dedup, when its count grew per reconcile; now one event naming every such template, once per
+process per CR while that set is unchanged; a transition of the set, including a return to an earlier set, emits
+again), its
 rendered label set once. The chart's CRs: generations unchanged by the image alone. No errors.
 (An earlier attempt at the same measurement read a written spec and generation 2: the in-cluster operator, still
 the previous build, had reconciled the probe in the second before the snapshot; recorded so nobody repeats it.)

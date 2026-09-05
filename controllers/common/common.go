@@ -1,7 +1,9 @@
 package common
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -168,12 +170,15 @@ func MetadataExcludedWarnings(templates []apis.LockedResourceTemplate) []string 
 // CRs that exclude .metadata right now.
 var metadataExcludedWarned sync.Map // map[types.UID]string
 
-// WarnMetadataExcluded emits MetadataExcludedWarnings as Warning events on the CR (reason
-// MetadataExcluded) when the set of warnings for that CR differs from the last set emitted in this
-// process. A nil recorder (tests without a manager) or a nil object emits nothing. Callers do not
-// invoke it on the deletion path; they call ForgetMetadataExcluded there.
+// WarnMetadataExcluded emits ONE Warning event on the CR (reason MetadataExcluded) naming every
+// template that excludes .metadata, when that set differs from the last set emitted in this process:
+// once on the first observation of a CR in a process, and again on every change of the set, a return
+// to an earlier set included. One event per set, not one per template: a CR with 25 such templates
+// would otherwise spend the whole per-object event burst by itself (third review pass). A nil
+// recorder (tests without a manager) or a nil object emits nothing. Callers do not invoke it on the
+// deletion path; they call ForgetMetadataExcluded there.
 func WarnMetadataExcluded(recorder record.EventRecorder, object client.Object, templates []apis.LockedResourceTemplate) {
-	if recorder == nil || object == nil {
+	if recorder == nil || isNilObject(object) {
 		return
 	}
 	uid := object.GetUID()
@@ -187,15 +192,36 @@ func WarnMetadataExcluded(recorder record.EventRecorder, object client.Object, t
 	if loaded && previous == signature {
 		return
 	}
-	for _, msg := range msgs {
-		recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", msg)
+	recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", metadataExcludedEventMessage(msgs, signature))
+}
+
+// metadataExcludedEventMessage joins the per-template messages into one event message, or, past the
+// API server's 1024-byte limit on an event message, summarises them with a count and a short digest
+// of the set so two different large sets stay distinguishable in the event list.
+func metadataExcludedEventMessage(msgs []string, signature string) string {
+	const limit = 1024
+	joined := strings.Join(msgs, "; ")
+	if len(joined) <= limit {
+		return joined
 	}
+	sum := sha256.Sum256([]byte(signature))
+	return fmt.Sprintf("%d templates exclude .metadata: their labels and annotations are set once and never enforced; remove .metadata from spec.templates[].excludedPaths to enforce them (set %x)", len(msgs), sum[:6])
 }
 
 // ForgetMetadataExcluded drops the CR's entry so a deleted CR leaves nothing behind in the process.
 // A CR re-created under the same name has a new UID and is warned afresh regardless.
 func ForgetMetadataExcluded(object client.Object) {
-	if object != nil {
+	if !isNilObject(object) {
 		metadataExcludedWarned.Delete(object.GetUID())
 	}
+}
+
+// isNilObject is true for a nil interface and for a typed nil pointer inside a non-nil interface,
+// which `object == nil` misses and whose GetUID would panic.
+func isNilObject(object client.Object) bool {
+	if object == nil {
+		return true
+	}
+	v := reflect.ValueOf(object)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
