@@ -124,4 +124,4 @@ require (
 // This replace will be removed once the PR is merged and a new version of operator-utils is released
 // Fork: github.com/ephico2real2/operator-utils@fix/template-cache-race-and-excluded-paths (on top of fix-issue-194-field-removal-zero-value)
 // Commit: 9569465257c18041b4a4483c90aebfc278882387
-replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260905010558-f86b9a817d14
+replace github.com/redhat-cop/operator-utils => github.com/ephico2real2/operator-utils v0.0.0-20260905012751-0a6d81b324e8
