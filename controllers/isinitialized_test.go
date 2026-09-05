@@ -12,6 +12,7 @@ import (
 	"github.com/redhat-cop/namespace-configuration-operator/controllers/common"
 	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -91,7 +92,8 @@ func TestMetadataExcludedWarnings(t *testing.T) {
 		t.Fatalf("expected one warning for template 1, got %v", msgs)
 	}
 	rec := record.NewFakeRecorder(8)
-	cr := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc", UID: "uid-warn-test"}}
+	// a fresh UID each run: the cache is process-wide and `go test -count=2` reuses the process (review)
+	cr := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc", UID: uuid.NewUUID()}}
 	tmpls := []apis.LockedResourceTemplate{{ExcludedPaths: []string{".metadata"}}}
 	common.WarnMetadataExcluded(rec, cr, tmpls)
 	select {

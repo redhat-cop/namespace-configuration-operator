@@ -103,6 +103,7 @@ func (r *GroupConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if util.IsBeingDeleted(instance) {
+		common.ForgetMetadataExcluded(instance)
 		log.Info("resource deletion detected - processing deletion cleanup", "groupconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
 		// Support all old finalizer variants for backward compatibility
 		oldFinalizerVariants := []string{

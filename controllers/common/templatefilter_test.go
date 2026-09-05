@@ -651,4 +651,11 @@ func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
 	if strings.Contains(string(features), "`DefaultExcludedPaths` is now `.status` and `.spec.replicas`") {
 		t.Fatal("FEATURES_AND_ISSUES_RESOLUTION.md still states a previous default set")
 	}
+	design, err := os.ReadFile("../../docs/DESIGN_excludedPaths.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(design), "count grows per\nreconcile)") {
+		t.Fatal("DESIGN_excludedPaths.md still describes the MetadataExcluded event as emitted every reconcile")
+	}
 }

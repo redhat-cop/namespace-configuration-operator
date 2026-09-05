@@ -53,7 +53,10 @@ step "rendered manifests carry the log flags"
 # Container.Args has no strategic-merge key, so a patch that touches args replaces the whole list;
 # this is how the zap flags once vanished from the rendered Deployment. kubectl ships kustomize.
 if command -v kubectl >/dev/null; then
-  rendered=$(kubectl kustomize config/default 2>/dev/null)
+  kustomize_err=$(mktemp)
+  rendered=$(kubectl kustomize config/default 2>"$kustomize_err") \
+    || fail "kubectl kustomize config/default failed:"$'\n'"$(cat "$kustomize_err")"
+  rm -f "$kustomize_err"
   echo "$rendered" | grep -q -- '--zap-log-level=info' || fail "config/default lost --zap-log-level"
   echo "$rendered" | grep -q -- '--zap-devel=false' || fail "config/default lost --zap-devel"
   echo "config/default: manager args intact"

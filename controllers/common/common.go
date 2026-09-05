@@ -10,8 +10,8 @@ import (
 	"github.com/scylladb/go-set/strset"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -157,30 +157,45 @@ func MetadataExcludedWarnings(templates []apis.LockedResourceTemplate) []string 
 	return out
 }
 
-// metadataExcludedWarned remembers, per process, which CR (by UID) has been warned with which set of
-// messages, so a CR is warned once, and again only when its templates change. client-go's event
-// spam filter allows a source 25 events per OBJECT (all reasons together) and then one per five
-// minutes; a warning on every reconcile would spend that budget and silence CleanupIncomplete on
-// the very CRs this warning flags (review). The recorder's count was never a reliable signal
-// past 25 either.
-var metadataExcludedWarned sync.Map
+// metadataExcludedWarned remembers, per process, the set of messages each CR (by UID) was last warned
+// with, so a CR is warned once and again only when that set changes. client-go's event spam filter
+// allows a source 25 events per OBJECT (all reasons together) and then one per five minutes; a
+// warning on every reconcile would spend that budget and silence CleanupIncomplete on the very CRs
+// this warning flags (review). The recorder's count was never a reliable signal past 25 either.
+// One entry per UID, holding only the current set: an earlier shape keyed on UID plus message set
+// kept every historical set forever (second review pass). The entry is dropped when the CR stops
+// excluding .metadata and when it is deleted (ForgetMetadataExcluded), so the map is bounded by the
+// CRs that exclude .metadata right now.
+var metadataExcludedWarned sync.Map // map[types.UID]string
 
 // WarnMetadataExcluded emits MetadataExcludedWarnings as Warning events on the CR (reason
-// MetadataExcluded), once per process per CR and message set. Callers do not invoke it on the
-// deletion path.
-func WarnMetadataExcluded(recorder record.EventRecorder, object runtime.Object, templates []apis.LockedResourceTemplate) {
-	if recorder == nil {
+// MetadataExcluded) when the set of warnings for that CR differs from the last set emitted in this
+// process. A nil recorder (tests without a manager) or a nil object emits nothing. Callers do not
+// invoke it on the deletion path; they call ForgetMetadataExcluded there.
+func WarnMetadataExcluded(recorder record.EventRecorder, object client.Object, templates []apis.LockedResourceTemplate) {
+	if recorder == nil || object == nil {
 		return
 	}
+	uid := object.GetUID()
 	msgs := MetadataExcludedWarnings(templates)
 	if len(msgs) == 0 {
+		metadataExcludedWarned.Delete(uid)
 		return
 	}
-	key := string(object.(metav1.Object).GetUID()) + "\x00" + strings.Join(msgs, "\x00")
-	if _, seen := metadataExcludedWarned.LoadOrStore(key, struct{}{}); seen {
+	signature := strings.Join(msgs, "\x00")
+	previous, loaded := metadataExcludedWarned.Swap(uid, signature)
+	if loaded && previous == signature {
 		return
 	}
 	for _, msg := range msgs {
 		recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", msg)
+	}
+}
+
+// ForgetMetadataExcluded drops the CR's entry so a deleted CR leaves nothing behind in the process.
+// A CR re-created under the same name has a new UID and is warned afresh regardless.
+func ForgetMetadataExcluded(object client.Object) {
+	if object != nil {
+		metadataExcludedWarned.Delete(object.GetUID())
 	}
 }
