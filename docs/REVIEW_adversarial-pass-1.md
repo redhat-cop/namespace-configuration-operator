@@ -151,6 +151,25 @@ header comment above a guard, so it was not affected.
 **Volunteered by Cursor:** the stale FEATURES paragraph, accepted; a test that greps controller sources for the
 predicate name rejected (it tests no behaviour).
 
+## Second pass, library (fixes at 05cfe9e)
+
+Cursor measured in a `/tmp` copy; Codex's CLI sandbox was read-only (traced). Fixes: commit bcf5ba5.
+
+| Claim | Cursor | Codex | Decision |
+|---|---|---|---|
+| C1 `validatePath` rejects exactly the malformed spellings | REFUTED | REFUTED | **Accepted**: a bracket glued to text (`.data[0]foo` became `/data/0foo`, a silent no-op), `$.`, a lone `.`/`$`, and pointer inputs with dots or brackets in a segment (rejected by the dotted-syntax checks) are now handled; a pointer input passes through untouched. Escaped same-kind quotes (`.data['it\'s']`) rejected as malformed, on purpose: write the key with the other quote kind. Codex's `strconv.UnquoteChar` escape decoder rejected as grammar nobody asked for |
+| C2 removing the trailing-dot trim changed no well-formed path | REFUTED | REFUTED | **Accepted, in the good direction**: `.data['']` (the empty key) was retargeted to the parent by the trim; it is now `/data/`. Test added |
+| C3 the config fingerprint covers what `lookup` sees | REFUTED | REFUTED | **Accepted; design replaced**: `lookup` builds clients from the whole config (Password, TLS, impersonation groups, exec/auth providers, proxy, timeout, Transport), several of them functions. Cursor's 30-field fingerprint (pointers of function fields included) rejected: incomplete by construction. Codex's clone-and-rebind accepted: one parsed base per text, never executed; each call gets a clone bound to its own FuncMap. `restConfigCacheKey` deleted |
+| C4 concurrent first use stores one parse, no cross-config FuncMap | REFUTED | PLAUSIBLE | **Accepted**: same root cause as C3; measured after the fix with 32 concurrent callers whose transports differ, each renders its own identity, one cached base |
+| C5 documented spellings unchanged | CONFIRMED | PLAUSIBLE | Cursor's ten-form corpus equal at both heads |
+
+**Volunteered by Cursor, accepted:** `.['root']` became `//root` and matched nothing; one trim, tested.
+**Volunteered by Codex, accepted:** the RFC 6901 pointer input `/data/a.b` was being converted to `/data/a/b`
+(true since upstream); pointer inputs now pass through.
+
+Re-validated: `go test -race ./...` for the whole library module, its envtest controllers suite included (with
+setup-envtest binaries), and the operator suite and gate on the bumped head.
+
 ## Outcome
 
 Operator, first pass: 6 claims refuted or partly refuted, 4 fixes applied (predicate scope, requeue, first-document
@@ -159,4 +178,5 @@ requeue reversed, the first-document rule replaced by the renderer's oracle (gua
 guard), the predicate test made to assert something, `git://` accepted, a stale paragraph fixed. Library: three
 fix commits; four findings recorded without change because the server-side-apply branch replaces that code.
 Re-validated after each pass: `go test -race ./...`, `hack/lib_test.sh`, the gate, a cluster run of the fixed head.
-Library second pass: see the companion section once its reviewers report.
+Library, second pass: the config fingerprint replaced by clone-and-rebind, six path spellings corrected, every
+change with a failing-then-passing test.
