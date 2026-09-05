@@ -51,8 +51,41 @@ and WARP corrected, with a test that fails when code and documents disagree.
 absent, its generation moves once (the finalizer), the operator owns and enforces its ConfigMap's rendered label
 and leaves a hand-added label alone; existing CRs' generations do not move; no errors.
 
-## Migration of the stale `.metadata`
+## Two corrections from the first-principles reviewer, adopted
 
-Open at the time of writing; decided below once the first-principles reviewer's measurement of the CRs' own field
-managers (who wrote `spec.templates[].excludedPaths`: the operator or Helm) is in, because that is the one
-provenance signal that could make an automatic prune safe.
+1. **The finalizer write also wrote the spec.** `Update(ctx, instance)` on the whole typed object serialised the
+   non-pointer selector structs as `annotationSelector: {}` and dropped an author's empty lists (measured on the
+   sandbox: `manager/Update` owned `f:spec.f:annotationSelector` on the fresh CR). Finalizers now go as a merge
+   patch computed against the pre-mutation copy, so only `metadata.finalizers` crosses the wire; a test asserts the
+   patch body has no `spec`.
+2. **Observability instead of a status field.** A status field would need a CRD change that OLM owns and the chart
+   duplicates; instead the operator emits a Warning event (`MetadataExcluded`) naming each template that still
+   excludes `.metadata`, so the CRs that keep set-once labels are visible in `oc get events`.
+
+## Migration of the stale `.metadata`: decided
+
+**No automatic prune.** All three reviewers, for the same measured reason: `spec.templates` is one atomic value to
+every writer (the API server records `f:templates` whole, Helm replaces the whole list, ArgoCD compares it index by
+index), so no field manager, annotation or history can tell the entry the old operator wrote from one the author
+declared; a prune would strip an author's `.metadata` and, against a Git that still declares it, reopen the loop.
+
+**For chart-managed CRs: chart 0.22.0 as drafted, reframed.** The chart declares `excludedPaths: [.status,
+.spec.replicas]` on every template as its own declared policy, not as a mirror of the operator's defaults (those
+changed twice in one day; the mirror was stale as written). Under Option A that declaration cannot loop or diverge
+harmfully: the operator never writes the list, and it unions its own defaults in memory whatever the chart says, so
+a stale chart list only means a default the chart does not mention is still applied. The declaration is what makes
+the migration deterministic: every cluster that installs any release from 0.22.0 on gets its lists rewritten once by
+Helm (measured on the sandbox, revision 8 to 10: every CR `[.status, .spec.replicas]`, 40 objects single-owner,
+every CR ReconcileSuccess), reconcilers restart without deleting anything, and the enforcer takes ownership of the
+rendered labels and annotations. Ordering: the Option A operator image first on every cluster; with the old operator,
+a two-path declaration is the 0.21.1 loop under GitOps self-heal.
+
+**For CRs outside the chart:** the Warning event names them; their authors remove `.metadata` from
+`excludedPaths` (Git or `oc patch`).
+
+## Measured before merging (this branch, sandbox)
+
+A fresh NamespaceConfig declaring nothing: spec stored exactly as applied (no `annotationSelector: {}`), generation
+stays at 1 (a metadata-only patch does not bump it), its ConfigMap's rendered label owned and enforced, a foreign
+label kept. A CR declaring `.metadata`: one `MetadataExcluded` Warning event, its rendered label set once. The
+chart's CRs: generations unchanged by the image alone. The measurements are in the pull request.

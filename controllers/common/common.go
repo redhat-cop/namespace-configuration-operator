@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"sort"
 
+	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/scylladb/go-set/strset"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -136,3 +140,29 @@ type NamedSelector struct {
 // KNOWN LIMIT for namespaces, on purpose: a template that reads `.Spec` or `.Status` of the
 // namespace through the render fallback is not re-rendered when only those change.
 var SelectedObjectChangedPredicate = predicate.Or(predicate.LabelChangedPredicate{}, predicate.AnnotationChangedPredicate{})
+
+// MetadataExcludedWarnings returns one message per template whose excludedPaths still carry `.metadata`.
+// Such a template's labels and annotations are set once and never enforced; older builds wrote that
+// entry into every CR, and nothing removes it but its author (spec.templates is one value to every
+// writer, so no field manager can tell the author's entry from the old default; design record).
+func MetadataExcludedWarnings(templates []apis.LockedResourceTemplate) []string {
+	var out []string
+	for i, t := range templates {
+		if strset.New(t.ExcludedPaths...).Has(".metadata") {
+			out = append(out, fmt.Sprintf("template %d excludes .metadata: its labels and annotations are set once and never enforced; remove .metadata from excludedPaths to enforce them", i))
+		}
+	}
+	return out
+}
+
+// WarnMetadataExcluded emits MetadataExcludedWarnings as Warning events on the CR (reason
+// MetadataExcluded). The recorder aggregates repeats, so a CR carries one event per template with a
+// count, not one per reconcile.
+func WarnMetadataExcluded(recorder record.EventRecorder, object runtime.Object, templates []apis.LockedResourceTemplate) {
+	if recorder == nil {
+		return
+	}
+	for _, msg := range MetadataExcludedWarnings(templates) {
+		recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", msg)
+	}
+}

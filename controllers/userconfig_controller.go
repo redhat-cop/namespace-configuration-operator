@@ -86,14 +86,21 @@ func (r *UserConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, err
 	}
 
+	// Finalizers are the only thing this reconciler writes to the CR, and they go as a merge patch
+	// computed against the copy taken here, so only metadata.finalizers crosses the wire. A
+	// whole-object Update also serialised the empty, non-pointer selector structs (`annotationSelector:
+	// {}`) into the spec and dropped an author's empty lists (measured in review): the spec is the
+	// author's, not this operator's.
+	original := instance.DeepCopy()
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Update(ctx, instance)
+		err := r.GetClient().Patch(ctx, instance, client.MergeFrom(original))
 		if err != nil {
-			log.Error(err, "unable to update instance", "instance", instance)
+			log.Error(err, "unable to update finalizers", "instance", instance)
 			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
+	common.WarnMetadataExcluded(r.GetRecorder(), instance, instance.Spec.Templates)
 
 	if util.IsBeingDeleted(instance) {
 		log.Info("resource deletion detected - processing deletion cleanup", "userconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
@@ -131,7 +138,7 @@ func (r *UserConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Update(ctx, instance)
+		err = r.GetClient().Patch(ctx, instance, client.MergeFrom(original))
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if errors.IsNotFound(err) {
