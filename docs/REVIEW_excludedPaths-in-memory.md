@@ -90,3 +90,10 @@ measured the indexed summary's exact ceiling at 192 consecutive templates and th
 bytes, and both showed each of the three message tiers is locked by a test that fails when that tier is removed.
 Cursor's advice on the message function's signature, accepted: keep it; the only production caller derives both
 arguments from the same templates. Gate green on 74d5e83. Clean.
+
+## Note on commit identifiers
+
+On 2026-09-05, after the merge, the five commits from the second-review commit to the #41 merge were rewritten to
+remove an attribution trailer from their messages (trees unchanged, verified byte-identical). Heads cited above by
+their old identifiers map as follows: aa08842 → c421233, c42ecbf → 7d0bfe4, 74d5e83 → 80fdb33, 22c3797 → d221313, 9615e47 → be6b5ab. The image built from the merge before the rewrite reports
+`v1.2.6-140-g9615e47`; its content equals `be6b5ab`.
