@@ -85,7 +85,11 @@ a two-path declaration is the 0.21.1 loop under GitOps self-heal.
 
 ## Measured before merging (this branch, sandbox)
 
-A fresh NamespaceConfig declaring nothing: spec stored exactly as applied (no `annotationSelector: {}`), generation
-stays at 1 (a metadata-only patch does not bump it), its ConfigMap's rendered label owned and enforced, a foreign
-label kept. A CR declaring `.metadata`: one `MetadataExcluded` Warning event, its rendered label set once. The
-chart's CRs: generations unchanged by the image alone. The measurements are in the pull request.
+A fresh NamespaceConfig declaring nothing, created while no operator ran, then reconciled by this build: generation
+stays 1, `excludedPaths` and `annotationSelector` absent, the operator's manager entry owns only
+`metadata.finalizers` (status through the subresource), its ConfigMap owned for `data.a` and the rendered label, a
+tampered rendered label restored and a foreign label kept. A CR declaring `.metadata`: one `MetadataExcluded`
+Warning event on the CR (in the default namespace, where cluster-scoped objects' events land; count grows per
+reconcile), its rendered label set once. The chart's CRs: generations unchanged by the image alone. No errors.
+(An earlier attempt at the same measurement read a written spec and generation 2: the in-cluster operator, still
+the previous build, had reconciled the probe in the second before the snapshot; recorded so nobody repeats it.)
