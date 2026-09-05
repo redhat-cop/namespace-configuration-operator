@@ -662,7 +662,8 @@ func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
 	if strings.Contains(string(design), "once per process per CR and message set") {
 		t.Fatal("DESIGN_excludedPaths.md still describes the historical-set cache; a return to an earlier set emits again")
 	}
-	if !strings.Contains(string(design), "return to an earlier set") {
-		t.Fatal("DESIGN_excludedPaths.md must state that returning to an earlier set emits again")
+	const lastSetContract = "once per\nprocess per CR while that set is unchanged; a transition of the set, including a return to an earlier set, emits\nagain"
+	if !strings.Contains(string(design), lastSetContract) {
+		t.Fatal("DESIGN_excludedPaths.md must state the complete last-set event contract")
 	}
 }

@@ -66,3 +66,17 @@ to one temp file that the trap removes on any exit.
 
 **Deferred from the first pass, done now:** the README default-paths check requires the numbered block to end where
 the prose resumes, so a fourth documented item fails the test (measured with an appended `4. .foo`).
+
+## Fourth pass (head c42ecbf: one event per set, typed nil, the trap)
+
+| Claim | Codex | Cursor | Decision |
+|---|---|---|---|
+| C1 the API server limits a core/v1 event message to 1024 bytes and the recorder does not truncate | REFUTED: the limit applies only to events with `eventTime` set; the legacy recorder leaves it zero | PLAUSIBLE: no limit in apimachinery or the core/v1 type; the 1 kB figure belongs to `events.k8s.io` `note`; kubernetes validation not in the module cache | **Refuted here from the source** (kubernetes v1.28.2 `pkg/apis/core/validation/events.go`: `NoteLengthLimit` is checked in `legacyValidateEvent`'s `else` branch, entered only when `eventTime` is set). The code comment that claimed a server limit is retracted; 1024 bytes is now stated as this package's display budget. |
+| C2 no path emits over 1024 bytes; the summary starts at the eighth template | CONFIRMED (7 templates: 1006 bytes; 8: 1150; indices with four digits can tip seven over) | CONFIRMED (threshold 8; the chart's largest default CR has 3 templates, not 4) | — (boundary test added) |
+| C3 the digest is a human fingerprint, not a boundary; indices would serve the reader better | CONFIRMED, indices first, digest as a last fallback | CONFIRMED, indices first, count-only fallback, drop the digest | **Accepted:** indices when they fit (up to about 190 templates), the count alone beyond that; sha256 dropped. Tests: 26 templates name indices 0..25; 8 templates end with "(templates 0, ..., 7)"; 400 fall back to the count. |
+| C4 `isNilObject` covers every pointer-backed `client.Object`; non-pointer implementations proceed | CONFIRMED | CONFIRMED | — |
+| C5 tests order-independent under `-shuffle=on` | CONFIRMED | CONFIRMED | — (measured: `go test -shuffle=on ./controllers/common/` passes) |
+| C6 the single EXIT trap runs on every `fail` path and is cleared after success | CONFIRMED | CONFIRMED | — |
+
+**Volunteered by Codex, accepted:** the design-record assertion checked only "return to an earlier set"; it now
+requires the complete last-set sentence.

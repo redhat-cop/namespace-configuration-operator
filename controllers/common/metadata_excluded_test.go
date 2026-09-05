@@ -117,11 +117,11 @@ func TestWarnMetadataExcludedEmitsOneEventPerSet(t *testing.T) {
 		t.Fatalf("one warning set emitted more than one event; second was %q", extra)
 	default:
 	}
-	if !strings.Contains(ev, "26 templates exclude .metadata") {
-		t.Fatalf("a large set must be summarised with its size, got %q", ev)
+	if !strings.Contains(ev, "26 templates exclude .metadata") || !strings.Contains(ev, "(templates 0, 1, 2,") || !strings.Contains(ev, "24, 25)") {
+		t.Fatalf("a large set must be summarised with its size and its template indices, got %q", ev)
 	}
 	if len(ev) > 1024+len("Warning MetadataExcluded ") {
-		t.Fatalf("event message longer than the API server accepts: %d bytes", len(ev))
+		t.Fatalf("event message over the display budget: %d bytes", len(ev))
 	}
 
 	// a small set carries every template's message in the one event
@@ -130,5 +130,30 @@ func TestWarnMetadataExcludedEmitsOneEventPerSet(t *testing.T) {
 	ev = <-rec.Events
 	if !strings.Contains(ev, "template 0 excludes .metadata") || !strings.Contains(ev, "template 2 excludes .metadata") {
 		t.Fatalf("a small set must name each template, got %q", ev)
+	}
+}
+
+// The boundary of the display budget: seven templates at small indices still name each template in
+// full; the eighth switches to the indexed summary; a set whose indices do not fit falls back to the count.
+func TestMetadataExcludedEventMessageBoundary(t *testing.T) {
+	tmpl := func(n int) []apis.LockedResourceTemplate {
+		out := make([]apis.LockedResourceTemplate, n)
+		for i := range out {
+			out[i].ExcludedPaths = []string{".metadata"}
+		}
+		return out
+	}
+	seven := tmpl(7)
+	if got := metadataExcludedEventMessage(seven, MetadataExcludedWarnings(seven)); !strings.Contains(got, "template 6 excludes .metadata") || strings.Contains(got, "7 templates") {
+		t.Fatalf("seven templates must still be the joined form, got %q", got)
+	}
+	eight := tmpl(8)
+	if got := metadataExcludedEventMessage(eight, MetadataExcludedWarnings(eight)); !strings.Contains(got, "8 templates exclude .metadata") || !strings.HasSuffix(got, "(templates 0, 1, 2, 3, 4, 5, 6, 7)") {
+		t.Fatalf("eight templates must be the indexed summary, got %q", got)
+	}
+	huge := tmpl(400)
+	got := metadataExcludedEventMessage(huge, MetadataExcludedWarnings(huge))
+	if !strings.HasPrefix(got, "400 templates exclude .metadata") || strings.Contains(got, "(templates") || len(got) > 1024 {
+		t.Fatalf("a set whose indices do not fit must fall back to the count, got %d bytes: %q", len(got), got[:60])
 	}
 }

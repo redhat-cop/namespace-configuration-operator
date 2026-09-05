@@ -1,10 +1,10 @@
 package common
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -192,20 +192,32 @@ func WarnMetadataExcluded(recorder record.EventRecorder, object client.Object, t
 	if loaded && previous == signature {
 		return
 	}
-	recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", metadataExcludedEventMessage(msgs, signature))
+	recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", metadataExcludedEventMessage(templates, msgs))
 }
 
-// metadataExcludedEventMessage joins the per-template messages into one event message, or, past the
-// API server's 1024-byte limit on an event message, summarises them with a count and a short digest
-// of the set so two different large sets stay distinguishable in the event list.
-func metadataExcludedEventMessage(msgs []string, signature string) string {
-	const limit = 1024
+// metadataExcludedEventMessage keeps the one event readable: the per-template messages joined while
+// they fit a 1024-byte display budget (seven templates at small indices), else a count and the
+// template indices, else the count alone. The budget is this package's choice, not the API server's:
+// core/v1 events written by the legacy recorder carry no eventTime, and Kubernetes validates message
+// length (NoteLengthLimit, 1024) only for events that do (pkg/apis/core/validation/events.go,
+// legacyValidateEvent; an earlier comment here claimed a server limit and was wrong, fourth review pass).
+func metadataExcludedEventMessage(templates []apis.LockedResourceTemplate, msgs []string) string {
+	const displayLimit = 1024
 	joined := strings.Join(msgs, "; ")
-	if len(joined) <= limit {
+	if len(joined) <= displayLimit {
 		return joined
 	}
-	sum := sha256.Sum256([]byte(signature))
-	return fmt.Sprintf("%d templates exclude .metadata: their labels and annotations are set once and never enforced; remove .metadata from spec.templates[].excludedPaths to enforce them (set %x)", len(msgs), sum[:6])
+	indices := make([]string, 0, len(msgs))
+	for i, t := range templates {
+		if strset.New(t.ExcludedPaths...).Has(".metadata") {
+			indices = append(indices, strconv.Itoa(i))
+		}
+	}
+	summary := fmt.Sprintf("%d templates exclude .metadata: their labels and annotations are set once and never enforced; remove .metadata from spec.templates[].excludedPaths to enforce them", len(msgs))
+	if withIndices := summary + " (templates " + strings.Join(indices, ", ") + ")"; len(withIndices) <= displayLimit {
+		return withIndices
+	}
+	return summary
 }
 
 // ForgetMetadataExcluded drops the CR's entry so a deleted CR leaves nothing behind in the process.
