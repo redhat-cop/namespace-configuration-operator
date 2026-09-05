@@ -23,8 +23,9 @@ func TestIsInitialized(t *testing.T) {
 	if r.IsInitialized(nc) {
 		t.Fatal("a fresh CR needs its excludedPaths union and finalizer, so it is not initialized")
 	}
-	if len(nc.Spec.Templates[0].ExcludedPaths) != 3 || len(nc.Finalizers) != 1 {
-		t.Errorf("expected the three default excludedPaths and the finalizer, got %v %v", nc.Spec.Templates[0].ExcludedPaths, nc.Finalizers)
+	// the CR's own path plus the two defaults; `.metadata` is no longer added (issue #16)
+	if len(nc.Spec.Templates[0].ExcludedPaths) != 2 || len(nc.Finalizers) != 1 {
+		t.Errorf("expected the CR's path unioned with the default excludedPaths, and the finalizer, got %v %v", nc.Spec.Templates[0].ExcludedPaths, nc.Finalizers)
 	}
 	if !r.IsInitialized(nc) {
 		t.Error("the second pass must find nothing to change")

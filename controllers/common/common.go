@@ -9,8 +9,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// DefaultExcludedPaths represents paths that are excluded by default in all resources
-var DefaultExcludedPaths = []string{".metadata", ".status", ".spec.replicas"}
+// DefaultExcludedPaths are unioned into every template's excludedPaths (see IsInitialized in each
+// controller): the enforcer sets an excluded path when it creates the object and never enforces it
+// again. `.status` is the server's; `.spec.replicas` belongs to an autoscaler once set.
+//
+// `.metadata` is no longer here. It was excluded wholesale because the merge-patch enforcer could
+// not tell a label the template rendered from one another actor added: every foreign label was a
+// permanent difference and a patch on every sync. The enforcer now applies server-side and owns
+// only what the template renders, so a rendered label or annotation is enforced (drift on it is
+// corrected, issue #16) while a label added by anyone else is left alone. The server-populated
+// metadata (uid, resourceVersion, creationTimestamp, managedFields) is never in a template, so it
+// needs no exclusion. A CR that still lists `.metadata` keeps the old behaviour for its objects.
+var DefaultExcludedPaths = []string{".status", ".spec.replicas"}
 
 // DefaultExcludedPathsSet represents paths that are excluded by default in all resources
 var DefaultExcludedPathsSet = strset.New(DefaultExcludedPaths...)

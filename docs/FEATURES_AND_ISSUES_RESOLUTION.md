@@ -1584,3 +1584,15 @@ spec:
 ---
 
 **Note**: This document provides a high-level overview. For detailed technical information, see the specific documentation files referenced in each section.
+
+---
+
+### Enforcement by Server-Side Apply; `.metadata` No Longer Excluded by Default
+
+**Status:** ✅ COMPLETED (issue #16; library branch feat/ssa-enforcer of the operator-utils fork)
+
+The operator-utils enforcer applied a merge patch, which can add and replace but never remove, so a field a template stopped rendering survived and, because a foreign label was a permanent difference, `.metadata` had to be excluded wholesale: labels and annotations were set at creation and never enforced. The fork's `LockedResourceReconciler` now applies server-side under one field manager with force. Measured on a cluster with this build: every object's legacy `manager`/Update entry folded on the first pass (the operator names it explicitly in `main.go`, the library folds nothing by default), labels and annotations kept, a hand-added subject removed within one reconcile, a hand-added label kept, a forced reconcile changing no resourceVersion. With `.metadata` removed from a NamespaceConfig's excludedPaths, the reconciler took ownership of the rendered labels and annotations, a tampered rendered label was restored and a foreign label left alone.
+
+`DefaultExcludedPaths` is now `.status` and `.spec.replicas`. A CR that still lists `.metadata` keeps the old behaviour for its objects (set once, left alone); the chart declares `.metadata` explicitly and changes in its own release. An excluded path is honoured at the granularity the server tracks ownership: an exclusion inside an atomic list (RBAC rules) or atomic map excludes the whole unit.
+
+**Files Modified:** `controllers/common/common.go`, `controllers/isinitialized_test.go`, `main.go`, `go.mod`
