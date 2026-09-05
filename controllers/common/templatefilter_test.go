@@ -86,6 +86,25 @@ var propertyTemplates = []string{
 	"   \n\t\n",
 	"kind: Role\nmetadata:\n  name: unconditional\n",
 	"- kind: Role\n  metadata:\n    name: a\n- kind: Role\n  metadata:\n    name: b\n",
+	// literal shapes the renderer sees as null, or not, measured in review (second pass), guarded,
+	// unguarded, and outside a guard
+	"# comment only\n",
+	"---\n",
+	"--- # note\n",
+	"null\n",
+	"~\n",
+	"# header comment\n{{- if hasPrefix \"team-\" .Name }}\nkind: Role\n{{- end }}",
+	"# header comment\n{{- if hasPrefix \"nomatch-\" .Name }}\nkind: Role\n{{- end }}",
+	"---\n{{- if hasPrefix \"nomatch-\" .Name }}\nkind: Role\n{{- end }}",
+	"kind: Role\n{{- if hasPrefix \"nomatch-\" .Name }}\n---\n{{- end }}",
+	"{{- if .Name }}\n--- # note\n{{- end }}",
+	"{{- if .Name }}\nnull\n{{- end }}",
+	"{{- if .Name }}\n~\n{{- end }}",
+	"{{- if .Name }}\n&anchor\n{{- end }}",
+	"{{- if .Name }}\n# comment\n---\nkind: Role\n{{- end }}",
+	"{{- if .Name }}\n%YAML 1.1\n---\nkind: Role\n{{- end }}",
+	"{{- if .Name }}\nkind: Role\r\n{{- end }}",
+	"{{- if .Name }}\n...\nkind: Role\n{{- end }}",
 	// name-based guards, the pre-existing grammar
 	`{{- if hasSuffix "-prod" .Name }}
 kind: RoleBinding
@@ -215,6 +234,48 @@ kind: Role
 	`{{- if (index .Labels "example.com/oud-group") }}
 {{/* a template comment renders nothing */}}
 {{- end }}`,
+	// review shapes: the renderer parses only the FIRST YAML document
+	`{{- if .Name }}
+---
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: never-seen
+{{- end }}`,
+	`{{- if .Name }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: first-doc
+{{- end }}`,
+	"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n",
+	// review shapes: outside the grammar, decided by rendering
+	`{{- range .Labels }}
+kind: Role
+{{- end }}`,
+	`{{- define "cm" }}apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: x
+{{- end }}{{ template "cm" . }}`,
+	`{{ define "r" }}kind: Role{{ end }}`,
+	`{{- with (index .Annotations "missing") }}
+kind: Role
+{{- end }}`,
+	`{{- if .Name }}
+data:
+{{- end }}`,
+	`{{- if eq .Name 5 }}
+kind: Role
+{{- end }}`,
+	`{{- if eq (index .Annotations "k") "v" }}
+kind: Role
+{{- end }}`,
+	`{{ if index .Annotations "enabled" }}
+kind: ConfigMap
+{{ end }}`,
 }
 
 var propertySubjects = []*corev1.Namespace{
@@ -228,9 +289,12 @@ var propertySubjects = []*corev1.Namespace{
 }
 
 // renderNonBlank is the oracle: exactly what operator-utils' renderer does with the template for
-// this object, by value, reduced to "would it produce an object or an error". A parse or render
-// error maps to true because the filter must leave such a template to the renderer so the error is
-// reported there (and, since Render returns errors, fails the reconcile visibly).
+// this object, by value. The contract it encodes, precisely: the filter says "applicable" iff the
+// renderer would produce at least one object, OR would fail with anything other than the
+// null-output failure. A render whose only failure is "Object 'Kind' is missing in 'null'" (blank,
+// comment-only, `---`-only, an empty first document) is NOT applicable: preventing exactly that
+// failure is why the filter exists. Any other parse or execution error maps to true so the renderer
+// reports it and the reconcile fails visibly.
 func renderNonBlank(t *testing.T, funcs template.FuncMap, text string, obj *corev1.Namespace) bool {
 	t.Helper()
 	tmpl, err := template.New("oracle").Funcs(funcs).Parse(text)
@@ -461,5 +525,60 @@ func TestOwnedResources_BestEffortAcrossObjects(t *testing.T) {
 	}
 	if len(failures) != 1 || !strings.Contains(failures[0].Error(), "for b") {
 		t.Errorf("expected exactly one failure naming b, got %v", failures)
+	}
+}
+
+// The static path judges a literal branch with the renderer's oracle. Every shape here was measured
+// against sigs.k8s.io/yaml in review: an empty first document (`---` then `---`), a bare `--- # note`,
+// a literal `null` or `~`, and an anchor with no node are `null` to the renderer; a comment before
+// the first `---`, a `---` with trailing spaces or a trailing comment, a `%YAML` directive and CRLF
+// line endings are not. A `...` document-end marker is a parse error, which is "applicable" so the
+// renderer reports it. Three of these were claimed the other way in review; the measurements won.
+func TestIsApplicable_FirstDocumentRule(t *testing.T) {
+	f := newTestFilter()
+	subject := ns("team-a", nil, nil)
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"{{- if .Name }}\n---\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n{{- end }}", false},
+		{"{{- if .Name }}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n{{- end }}", true},
+		{"{{- if .Name }}\n# comment\n---\nkind: Role\n{{- end }}", true},
+		{"{{- if .Name }}\n# only a comment\n{{- end }}", false},
+		{"{{- if .Name }}\n--- # note\n{{- end }}", false},
+		{"{{- if .Name }}\n--- # note\nkind: Role\n{{- end }}", true},
+		{"{{- if .Name }}\n---   \nkind: Role\n{{- end }}", true},
+		{"{{- if .Name }}\nnull\n{{- end }}", false},
+		{"{{- if .Name }}\n~\n{{- end }}", false},
+		{"{{- if .Name }}\n&anchor\n{{- end }}", false},
+		{"{{- if .Name }}\n%YAML 1.1\n---\nkind: Role\n{{- end }}", true},
+		{"{{- if .Name }}\nkind: Role\r\n{{- end }}", true},
+		{"{{- if .Name }}\n...\nkind: Role\n{{- end }}", true},
+	}
+	for _, tc := range cases {
+		if got := f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: tc.text}, subject); got != tc.want {
+			t.Errorf("IsApplicable = %v, want %v for\n%s", got, tc.want, tc.text)
+		}
+	}
+}
+
+// An unguarded literal template, and literal text around a guard, are judged by the renderer's
+// oracle, never by "is there a non-blank line". Measured in review (second pass): a comment-only
+// template and a header comment above a guard that is false were "applicable", and the render then
+// failed the reconcile for that namespace with "Object 'Kind' is missing in 'null'".
+func TestIsApplicable_UnconditionalLiteralUsesYAMLOracle(t *testing.T) {
+	f := newTestFilter()
+	subject := ns("team-a", nil, nil)
+	for _, text := range []string{"", "   \n", "# comment only\n", "---\n", "--- # note\n", "null\n", "~\n", "kind: Role\n", "{not valid YAML"} {
+		if got, want := f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: text}, subject), rendersAnObject([]byte(text)); got != want {
+			t.Errorf("IsApplicable = %v, oracle = %v for %q", got, want, text)
+		}
+	}
+	// a header comment above a guard: the guard's truth decides, as the renderer would
+	if f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: "# header\n{{- if hasPrefix \"nomatch-\" .Name }}\nkind: Role\n{{- end }}"}, subject) {
+		t.Error("a header comment above a false guard renders only the comment: not applicable")
+	}
+	if !f.IsApplicable(apis.LockedResourceTemplate{ObjectTemplate: "# header\n{{- if hasPrefix \"team-\" .Name }}\nkind: Role\n{{- end }}"}, subject) {
+		t.Error("a header comment above a true guard renders the object: applicable")
 	}
 }

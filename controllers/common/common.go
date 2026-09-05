@@ -74,25 +74,35 @@ var ResourceGenerationOrFinalizerOrDeletionTimestampChangedPredicate = predicate
 	},
 }
 
-// ValidateSelectors compiles the two selectors every CR carries and returns the first error, so
-// callers can tell "this spec cannot select anything" from an API failure while listing.
-func ValidateSelectors(labelSelector, annotationSelector metav1.LabelSelector) error {
-	if _, err := metav1.LabelSelectorAsSelector(&labelSelector); err != nil {
-		return fmt.Errorf("labelSelector does not compile: %w", err)
-	}
-	if _, err := metav1.LabelSelectorAsSelector(&annotationSelector); err != nil {
-		return fmt.Errorf("annotationSelector does not compile: %w", err)
+// ValidateSelectors compiles every selector a CR carries (label, annotation and, for UserConfig,
+// the identity extra-field selector) and returns the first error, so callers can tell "this spec
+// cannot select anything" from an API failure while listing. Names are for the error message.
+func ValidateSelectors(selectors ...NamedSelector) error {
+	for _, s := range selectors {
+		if _, err := metav1.LabelSelectorAsSelector(&s.Selector); err != nil {
+			return fmt.Errorf("%s does not compile: %w", s.Name, err)
+		}
 	}
 	return nil
 }
 
-// SelectedObjectChangedPredicate gates the watches on the objects a CR SELECTS (Namespace, Group,
-// User). Selection reads only labels and annotations, and the templates receive the object as it
-// is at render time, so an update that changes neither cannot change what a CR renders. Without
-// this, every status or resourceVersion bump on any watched object listed every CR, re-rendered
-// every matching one and rewrote its status (one API write per event per CR). Create and Delete
-// events still pass, as does anything that changes labels or annotations.
+// NamedSelector pairs a selector with the spec field it came from.
+type NamedSelector struct {
+	Name     string
+	Selector metav1.LabelSelector
+}
+
+// SelectedObjectChangedPredicate gates the NAMESPACE watch only. A Namespace's contract with a
+// NamespaceConfig is its labels and annotations: selection reads nothing else, and the shipped
+// policies render from labels. Without the gate every status or resourceVersion bump on any
+// namespace listed every CR, re-rendered every matching one and rewrote its status (one API write
+// per event per CR). Create and Delete events still pass, as does any label or annotation change.
 //
-// KNOWN LIMIT, on purpose: a template that reads `.Spec` or `.Status` of the selected object via
-// the render fallback is not re-rendered when only those change. Selection is the contract.
+// It is deliberately NOT applied to the Group and User watches: Group.users and User.identities are
+// top-level fields, not labels, and a GroupConfig template can legitimately read `.Users`
+// (membership changes must re-render). Measured in review: with the gate on those watches a
+// membership change was dropped.
+//
+// KNOWN LIMIT for namespaces, on purpose: a template that reads `.Spec` or `.Status` of the
+// namespace through the render fallback is not re-rendered when only those change.
 var SelectedObjectChangedPredicate = predicate.Or(predicate.LabelChangedPredicate{}, predicate.AnnotationChangedPredicate{})

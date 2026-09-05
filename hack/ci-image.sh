@@ -34,7 +34,9 @@ cmd_run() {
   while [ $# -gt 0 ]; do
     case $1 in
       --latest) latest=true ;;
-      --platforms) platforms=$2; shift ;;
+      --platforms)
+        [ $# -ge 2 ] && [ -n "$2" ] || fail "--platforms requires a value"
+        platforms=$2; shift ;;
       *) fail "unknown option $1" ;;
     esac
     shift

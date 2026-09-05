@@ -98,6 +98,10 @@ func ManageSuccessWithRetry[T client.Object](
 		// between render and this write, writing success now would claim the NEW generation was
 		// processed. Its reconcile is already queued by the generation predicate; let it report.
 		if latestInstance.GetGeneration() != reconciledGeneration {
+			// No Requeue here. The update that moved the generation passed the generation predicate
+			// and is already in the workqueue (as a dirty mark if it arrived mid-reconcile, so Done
+			// re-adds it at once). A Requeue on top is an AddRateLimited that Forget does not cancel:
+			// measured in review, it turned two reconciles into three and wrote the same status twice.
 			log.V(1).Info("spec changed during reconcile; leaving status to the next cycle", resourceTypeName, latestInstance.GetName(), "reconciled", reconciledGeneration, "current", latestInstance.GetGeneration())
 			return reconcile.Result{}, nil
 		}

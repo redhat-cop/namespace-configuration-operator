@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	userv1 "github.com/openshift/api/user/v1"
 	redhatcopv1alpha1 "github.com/redhat-cop/namespace-configuration-operator/api/v1alpha1"
 	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/redhat-cop/operator-utils/pkg/util/lockedresourcecontroller"
@@ -120,6 +121,35 @@ func TestManageCleanUpLogic_MalformedSelectorFinalizesWithAWarning(t *testing.T)
 	case ev := <-recorder.Events:
 		if !strings.Contains(ev, "CleanupIncomplete") || !strings.Contains(ev, "labelSelector does not compile") {
 			t.Errorf("expected a CleanupIncomplete warning about the selector, got %q", ev)
+		}
+	default:
+		t.Error("expected a CleanupIncomplete warning event")
+	}
+}
+
+// A UserConfig's identityExtraFieldSelector is a selector like the other two; a malformed one must
+// be reported as the reason cleanup could not recompute, not silently produce an empty owned set.
+func TestUserConfigCleanup_MalformedExtraSelectorIsReported(t *testing.T) {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, userv1.AddToScheme, redhatcopv1alpha1.AddToScheme} {
+		if err := add(scheme); err != nil {
+			t.Fatal(err)
+		}
+	}
+	instance := &redhatcopv1alpha1.UserConfig{ObjectMeta: metav1.ObjectMeta{Name: "uc"}, Spec: redhatcopv1alpha1.UserConfigSpec{IdentityExtraFieldSelector: malformedSelector}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(instance).Build()
+	recorder := record.NewFakeRecorder(1)
+	r := &UserConfigReconciler{
+		EnforcingReconciler: lockedresourcecontroller.NewEnforcingReconciler(c, scheme, nil, c, recorder, true, true),
+		Log:                 logr.Discard(),
+	}
+	if err := r.manageCleanUpLogic(context.Background(), instance); err != nil {
+		t.Fatalf("a malformed selector must not block deletion: %v", err)
+	}
+	select {
+	case ev := <-recorder.Events:
+		if !strings.Contains(ev, "identityExtraFieldSelector does not compile") {
+			t.Errorf("the warning must name the identityExtraFieldSelector, got %q", ev)
 		}
 	default:
 		t.Error("expected a CleanupIncomplete warning event")
