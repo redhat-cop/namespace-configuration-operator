@@ -62,7 +62,8 @@ func TestFinalizerPatchTouchesOnlyMetadata(t *testing.T) {
 	if r.IsInitialized(nc) {
 		t.Fatal("a fresh CR needs its finalizer")
 	}
-	data, err := client.MergeFrom(original).Data(nc)
+	original.ResourceVersion, nc.ResourceVersion = "7", "7"
+	data, err := client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}).Data(nc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +73,11 @@ func TestFinalizerPatchTouchesOnlyMetadata(t *testing.T) {
 	}
 	if _, hasSpec := patch["spec"]; hasSpec || len(patch) != 1 || patch["metadata"] == nil {
 		t.Fatalf("the finalizer patch must touch metadata only, got %s", data)
+	}
+	// the optimistic lock: the patch names the resourceVersion it was computed against, so a
+	// concurrent finalizer write conflicts instead of being overwritten (review)
+	if rv := patch["metadata"].(map[string]interface{})["resourceVersion"]; rv != "7" {
+		t.Fatalf("the finalizer patch must carry the resourceVersion it was computed against, got %s", data)
 	}
 }
 
@@ -84,8 +90,10 @@ func TestMetadataExcludedWarnings(t *testing.T) {
 	if len(msgs) != 1 || !strings.Contains(msgs[0], "template 1 excludes .metadata") {
 		t.Fatalf("expected one warning for template 1, got %v", msgs)
 	}
-	rec := record.NewFakeRecorder(4)
-	common.WarnMetadataExcluded(rec, &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc"}}, []apis.LockedResourceTemplate{{ExcludedPaths: []string{".metadata"}}})
+	rec := record.NewFakeRecorder(8)
+	cr := &redhatcopv1alpha1.NamespaceConfig{ObjectMeta: metav1.ObjectMeta{Name: "nc", UID: "uid-warn-test"}}
+	tmpls := []apis.LockedResourceTemplate{{ExcludedPaths: []string{".metadata"}}}
+	common.WarnMetadataExcluded(rec, cr, tmpls)
 	select {
 	case ev := <-rec.Events:
 		if !strings.Contains(ev, "Warning MetadataExcluded") {
@@ -93,6 +101,20 @@ func TestMetadataExcludedWarnings(t *testing.T) {
 		}
 	default:
 		t.Fatal("expected a Warning event")
+	}
+	// the same CR and templates again: warned once per process, so the event budget stays for others
+	common.WarnMetadataExcluded(rec, cr, tmpls)
+	select {
+	case ev := <-rec.Events:
+		t.Fatalf("a repeat must not emit again, got %q", ev)
+	default:
+	}
+	// a changed template set on the same CR warns again
+	common.WarnMetadataExcluded(rec, cr, append(tmpls, apis.LockedResourceTemplate{ExcludedPaths: []string{".metadata"}}))
+	select {
+	case <-rec.Events:
+	default:
+		t.Fatal("a changed set of warnings must emit again")
 	}
 	common.WarnMetadataExcluded(nil, nil, nil) // a nil recorder is tolerated (tests without a manager)
 }

@@ -644,4 +644,11 @@ func TestDefaultExcludedPathsAreDocumented(t *testing.T) {
 	if strings.Contains(csv.Spec.Description, "1. `.metadata`") {
 		t.Fatal("the CSV description still lists .metadata as always included")
 	}
+	features, err := os.ReadFile("../../docs/FEATURES_AND_ISSUES_RESOLUTION.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(features), "`DefaultExcludedPaths` is now `.status` and `.spec.replicas`") {
+		t.Fatal("FEATURES_AND_ISSUES_RESOLUTION.md still states a previous default set")
+	}
 }

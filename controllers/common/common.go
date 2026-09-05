@@ -3,6 +3,8 @@ package common
 import (
 	"fmt"
 	"sort"
+	"strings"
+	"sync"
 
 	apis "github.com/redhat-cop/operator-utils/api/v1alpha1"
 	"github.com/scylladb/go-set/strset"
@@ -14,9 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// DefaultExcludedPaths are unioned into every template's excludedPaths (see IsInitialized in each
-// controller): the enforcer sets an excluded path when it creates the object and never enforces it
-// again. `.status` is the server's; `.spec.replicas` belongs to an autoscaler once set.
+// DefaultExcludedPaths are unioned, in memory, into every template's excludedPaths when the locked
+// resources are built (EffectiveExcludedPaths): the enforcer sets an excluded path when it creates
+// the object and never enforces it again. `.status` is the server's; `.spec.replicas` belongs to an autoscaler once set.
 //
 // `.metadata` is no longer here. It was excluded wholesale because the merge-patch enforcer could
 // not tell a label the template rendered from one another actor added: every foreign label was a
@@ -155,14 +157,30 @@ func MetadataExcludedWarnings(templates []apis.LockedResourceTemplate) []string 
 	return out
 }
 
+// metadataExcludedWarned remembers, per process, which CR (by UID) has been warned with which set of
+// messages, so a CR is warned once, and again only when its templates change. client-go's event
+// spam filter allows a source 25 events per OBJECT (all reasons together) and then one per five
+// minutes; a warning on every reconcile would spend that budget and silence CleanupIncomplete on
+// the very CRs this warning flags (review). The recorder's count was never a reliable signal
+// past 25 either.
+var metadataExcludedWarned sync.Map
+
 // WarnMetadataExcluded emits MetadataExcludedWarnings as Warning events on the CR (reason
-// MetadataExcluded). The recorder aggregates repeats, so a CR carries one event per template with a
-// count, not one per reconcile.
+// MetadataExcluded), once per process per CR and message set. Callers do not invoke it on the
+// deletion path.
 func WarnMetadataExcluded(recorder record.EventRecorder, object runtime.Object, templates []apis.LockedResourceTemplate) {
 	if recorder == nil {
 		return
 	}
-	for _, msg := range MetadataExcludedWarnings(templates) {
+	msgs := MetadataExcludedWarnings(templates)
+	if len(msgs) == 0 {
+		return
+	}
+	key := string(object.(metav1.Object).GetUID()) + "\x00" + strings.Join(msgs, "\x00")
+	if _, seen := metadataExcludedWarned.LoadOrStore(key, struct{}{}); seen {
+		return
+	}
+	for _, msg := range msgs {
 		recorder.Event(object, corev1.EventTypeWarning, "MetadataExcluded", msg)
 	}
 }

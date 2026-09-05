@@ -89,17 +89,18 @@ func (r *NamespaceConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// computed against the copy taken here, so only metadata.finalizers crosses the wire. A
 	// whole-object Update also serialised the empty, non-pointer selector structs (`annotationSelector:
 	// {}`) into the spec and dropped an author's empty lists (measured in review): the spec is the
-	// author's, not this operator's.
+	// author's, not this operator's. The patch carries the resourceVersion (optimistic lock), so a
+	// finalizer another actor added between the read and this write conflicts and is retried instead
+	// of being overwritten, as the Update it replaces did (review).
 	original := instance.DeepCopy()
 	if !r.IsInitialized(instance) {
-		err := r.GetClient().Patch(ctx, instance, client.MergeFrom(original))
+		err := r.GetClient().Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 		if err != nil {
 			log.Error(err, "unable to update finalizers", "instance", instance)
 			return r.ManageError(ctx, instance, err)
 		}
 		return reconcile.Result{}, nil
 	}
-	common.WarnMetadataExcluded(r.GetRecorder(), instance, instance.Spec.Templates)
 
 	if util.IsBeingDeleted(instance) {
 		log.Info("resource deletion detected - processing deletion cleanup", "namespaceconfig", instance.Name, "deletionTimestamp", instance.DeletionTimestamp)
@@ -137,7 +138,7 @@ func (r *NamespaceConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			util.RemoveFinalizer(instance, r.controllerName)
 		}
 
-		err = r.GetClient().Patch(ctx, instance, client.MergeFrom(original))
+		err = r.GetClient().Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 		if err != nil {
 			// If the resource is already deleted (NotFound), that's fine - just return success
 			if apierrors.IsNotFound(err) {
@@ -156,6 +157,9 @@ func (r *NamespaceConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Error(err, "unable to get namespaces selected by", "NamespaceConfig", instance)
 		return r.ManageError(ctx, instance, err)
 	}
+
+	// Not on the deletion path: a deleting CR must keep its event budget for CleanupIncomplete.
+	common.WarnMetadataExcluded(r.GetRecorder(), instance, instance.Spec.Templates)
 
 	lockedResources, err := r.getResourceList(ctx, instance, selectedNamespaces)
 	if err != nil {
